@@ -6,10 +6,24 @@ pub mod llvm_c;
 mod compiler_arguments;
 pub mod error;
 
+pub struct MainData {
+	do_link: bool,
+}
+
+impl MainData {
+	pub fn new() -> Self {
+		Self {
+			do_link: true,
+		}
+	}
+}
+
 fn main() {
+	let mut main_data = MainData::new();
+	// Get and process arguments
 	let arguments: Box<[String]> = args().skip(1).collect();
 	let arguments: Box<[&str]> = arguments.iter().map(|argument| argument.as_str()).collect();
-	let result = process_arguments(&arguments);
+	let result = process_arguments(&mut main_data, &arguments);
 	if let Err(error) = result {
 		println!("Error while processing compiler arguments: {error}.");
 		return;
