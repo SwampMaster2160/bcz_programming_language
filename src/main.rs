@@ -4,11 +4,16 @@ use compiler_arguments::process_arguments;
 
 pub mod llvm_c;
 mod compiler_arguments;
+pub mod error;
 
 fn main() {
 	let arguments: Box<[String]> = args().skip(1).collect();
 	let arguments: Box<[&str]> = arguments.iter().map(|argument| argument.as_str()).collect();
-	process_arguments(&arguments);
+	let result = process_arguments(&arguments);
+	if let Err(error) = result {
+		println!("Error while processing compiler arguments: {error}.");
+		return;
+	}
 }
 
 //fn main() {
