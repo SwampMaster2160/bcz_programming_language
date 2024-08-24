@@ -6,14 +6,16 @@ pub mod llvm_c;
 mod compiler_arguments;
 pub mod error;
 
-pub struct MainData {
+pub struct MainData<'a> {
 	do_link: bool,
+	primary_output_file: Option<&'a str>,
 }
 
-impl MainData {
+impl<'a> MainData<'a> {
 	pub fn new() -> Self {
 		Self {
 			do_link: true,
+			primary_output_file: None,
 		}
 	}
 }

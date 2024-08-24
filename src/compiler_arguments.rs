@@ -11,6 +11,7 @@ const BCZ_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 /// A program state that is used while processing compiler arguments that allows arguments to continue previous arguments.
 enum ArgumentProcessingState {
 	Normal,
+	SetPrimaryOutput,
 }
 
 #[derive(Clone, Copy, EnumIter)]
@@ -21,6 +22,7 @@ enum CompilerOptionToken {
 	/// If the argument is a filepath to a file to be compiled.
 	InputFilepath,
 	NoLink,
+	SetPrimaryOutput,
 }
 
 impl CompilerOptionToken {
@@ -31,6 +33,7 @@ impl CompilerOptionToken {
 			Self::Version => Some("v"),
 			Self::InputFilepath => None,
 			Self::NoLink => Some("c"),
+			Self::SetPrimaryOutput => Some("o"),
 		}
 	}
 
@@ -41,6 +44,7 @@ impl CompilerOptionToken {
 			Self::Version => Some("version"),
 			Self::InputFilepath => None,
 			Self::NoLink => Some("no-link"),
+			Self::SetPrimaryOutput => Some("primary-output"),
 		}
 	}
 
@@ -51,6 +55,7 @@ impl CompilerOptionToken {
 			Self::Version => Some("Print the version of the BCZ compiler"),
 			Self::InputFilepath => None,
 			Self::NoLink => Some("Do not link the resulting object files into an executable"),
+			Self::SetPrimaryOutput => Some("Set the path of the primary output (resulting executable)"),
 		}
 	}
 
@@ -73,7 +78,7 @@ impl CompilerOptionToken {
 	}
 }
 
-pub fn process_arguments(main_data: &mut MainData, arguments: &[&str]) -> Result<(), Error> {
+pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]) -> Result<(), Error> {
 	let mut argument_processing_state = ArgumentProcessingState::Normal;
 	// No arguments should result in the version being printed
 	if arguments.is_empty() {
@@ -131,8 +136,13 @@ pub fn process_arguments(main_data: &mut MainData, arguments: &[&str]) -> Result
 						}
 					}
 					CompilerOptionToken::NoLink => main_data.do_link = false,
+					CompilerOptionToken::SetPrimaryOutput => argument_processing_state = ArgumentProcessingState::SetPrimaryOutput,
 					_ => todo!(),
 				}
+			}
+			ArgumentProcessingState::SetPrimaryOutput => {
+				main_data.primary_output_file = Some(argument);
+				argument_processing_state = ArgumentProcessingState::Normal;
 			}
 		}
 	}
