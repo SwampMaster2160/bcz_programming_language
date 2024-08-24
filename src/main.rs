@@ -9,6 +9,7 @@ pub mod error;
 pub struct MainData<'a> {
 	do_link: bool,
 	primary_output_file: Option<&'a str>,
+	input_filepaths: Vec<&'a str>,
 }
 
 impl<'a> MainData<'a> {
@@ -16,6 +17,7 @@ impl<'a> MainData<'a> {
 		Self {
 			do_link: true,
 			primary_output_file: None,
+			input_filepaths: Vec::new(),
 		}
 	}
 }
@@ -23,8 +25,8 @@ impl<'a> MainData<'a> {
 fn main() {
 	let mut main_data = MainData::new();
 	// Get and process arguments
-	let arguments: Box<[String]> = args().skip(1).collect();
-	let arguments: Box<[&str]> = arguments.iter().map(|argument| argument.as_str()).collect();
+	let arguments: Box<[Box<str>]> = args().skip(1).map(|string| string.into_boxed_str()).collect();
+	let arguments: Box<[&str]> = arguments.iter().map(|argument| &**argument).collect();
 	let result = process_arguments(&mut main_data, &arguments);
 	if let Err(error) = result {
 		println!("Error while processing compiler arguments: {error}.");

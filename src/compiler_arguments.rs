@@ -137,7 +137,7 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 					}
 					CompilerOptionToken::NoLink => main_data.do_link = false,
 					CompilerOptionToken::SetPrimaryOutput => argument_processing_state = ArgumentProcessingState::SetPrimaryOutput,
-					_ => todo!(),
+					CompilerOptionToken::InputFilepath => main_data.input_filepaths.push(argument),
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {
