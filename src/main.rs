@@ -1,15 +1,21 @@
-use std::env::args;
+use std::{env::{args, current_dir}, mem::take, path::PathBuf};
 
+use compile::compile_file;
 use compiler_arguments::process_arguments;
 
-pub mod llvm_c;
+mod llvm_c;
 mod compiler_arguments;
-pub mod error;
+mod error;
+mod compile;
+mod token;
 
 pub struct MainData<'a> {
 	do_link: bool,
 	primary_output_file: Option<&'a str>,
-	input_filepaths: Vec<&'a str>,
+	filepaths_to_compile: Vec<&'a str>,
+	compiler_working_directory: PathBuf,
+	source_path: PathBuf,
+	binary_path: PathBuf,
 }
 
 impl<'a> MainData<'a> {
@@ -17,7 +23,10 @@ impl<'a> MainData<'a> {
 		Self {
 			do_link: true,
 			primary_output_file: None,
-			input_filepaths: Vec::new(),
+			filepaths_to_compile: Vec::new(),
+			compiler_working_directory: current_dir().unwrap(),
+			source_path: PathBuf::new(),
+			binary_path: PathBuf::new(),
 		}
 	}
 }
@@ -31,6 +40,11 @@ fn main() {
 	if let Err(error) = result {
 		println!("Error while processing compiler arguments: {error}.");
 		return;
+	}
+	// Compile
+	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
+		let absolute_filepath = main_data.source_path.join(filepath);
+		compile_file(&mut main_data, absolute_filepath);
 	}
 }
 

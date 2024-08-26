@@ -19,7 +19,7 @@
 					"kind": "bin"
 				}
 			},
-			"args": ["-h"],
+			"args": ["-h", "main.bcz"],
 			"cwd": "${workspaceFolder}"
 		},
 		{

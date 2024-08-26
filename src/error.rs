@@ -3,6 +3,7 @@ use std::fmt::Display;
 pub enum Error {
 	InvalidShortArgument(String),
 	InvalidLongArgument(String),
+	NoOptionContinuation,
 }
 
 impl Display for Error {
@@ -10,6 +11,7 @@ impl Display for Error {
 		match self {
 			Error::InvalidShortArgument(arg) => write!(f, "invalid short argument \"{}\"", arg),
 			Error::InvalidLongArgument(arg) => write!(f, "invalid long argument \"{}\"", arg),
+			Error::NoOptionContinuation => write!(f, "no option continuation"),
 		}
 	}
 }

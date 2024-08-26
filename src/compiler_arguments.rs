@@ -7,11 +7,13 @@ use crate::{error::Error, MainData};
 /// The version of the BCZ compiler taken from `Cargo.toml`.
 const BCZ_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 /// A program state that is used while processing compiler arguments that allows arguments to continue previous arguments.
 enum ArgumentProcessingState {
 	Normal,
 	SetPrimaryOutput,
+	SetSourceHomeFilepath,
+	SetBinaryHomeFilepath,
 }
 
 #[derive(Clone, Copy, EnumIter)]
@@ -23,6 +25,8 @@ enum CompilerOptionToken {
 	InputFilepath,
 	NoLink,
 	SetPrimaryOutput,
+	SetSourceHomeFilepath,
+	SetBinaryHomeFilepath,
 }
 
 impl CompilerOptionToken {
@@ -34,6 +38,8 @@ impl CompilerOptionToken {
 			Self::InputFilepath => None,
 			Self::NoLink => Some("c"),
 			Self::SetPrimaryOutput => Some("o"),
+			Self::SetSourceHomeFilepath => Some("s"),
+			Self::SetBinaryHomeFilepath => Some("b"),
 		}
 	}
 
@@ -45,6 +51,8 @@ impl CompilerOptionToken {
 			Self::InputFilepath => None,
 			Self::NoLink => Some("no-link"),
 			Self::SetPrimaryOutput => Some("primary-output"),
+			Self::SetSourceHomeFilepath => Some("source-home"),
+			Self::SetBinaryHomeFilepath => Some("binary-home"),
 		}
 	}
 
@@ -56,6 +64,8 @@ impl CompilerOptionToken {
 			Self::InputFilepath => None,
 			Self::NoLink => Some("Do not link the resulting object files into an executable"),
 			Self::SetPrimaryOutput => Some("Set the path of the primary output (resulting executable)"),
+			Self::SetSourceHomeFilepath => Some("Set the path of the source home directory, input paths are relative to this path."),
+			Self::SetBinaryHomeFilepath => Some("Set the path of the binary home directory, output paths are relative to this path."),
 		}
 	}
 
@@ -88,6 +98,8 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 	// Process each argument
 	let short_options = CompilerOptionToken::get_short_options();
 	let long_options = CompilerOptionToken::get_long_options();
+	let mut source_path = None;
+	let mut binary_path = None;
 	for argument in arguments.iter() {
 		let argument = *argument;
 		match argument_processing_state {
@@ -137,14 +149,55 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 					}
 					CompilerOptionToken::NoLink => main_data.do_link = false,
 					CompilerOptionToken::SetPrimaryOutput => argument_processing_state = ArgumentProcessingState::SetPrimaryOutput,
-					CompilerOptionToken::InputFilepath => main_data.input_filepaths.push(argument),
+					CompilerOptionToken::InputFilepath => main_data.filepaths_to_compile.push(argument),
+					CompilerOptionToken::SetSourceHomeFilepath => argument_processing_state = ArgumentProcessingState::SetSourceHomeFilepath,
+					CompilerOptionToken::SetBinaryHomeFilepath => argument_processing_state = ArgumentProcessingState::SetBinaryHomeFilepath,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {
 				main_data.primary_output_file = Some(argument);
 				argument_processing_state = ArgumentProcessingState::Normal;
 			}
+			ArgumentProcessingState::SetSourceHomeFilepath => {
+				source_path = Some(main_data.compiler_working_directory.join(argument));
+				argument_processing_state = ArgumentProcessingState::Normal;
+			}
+			ArgumentProcessingState::SetBinaryHomeFilepath => {
+				binary_path = Some(main_data.compiler_working_directory.join(argument));
+				argument_processing_state = ArgumentProcessingState::Normal;
+			}
 		}
 	}
+	// Make sure that an option that requires a continuation option was not at the end to the argument list
+	if argument_processing_state != ArgumentProcessingState::Normal {
+		return Err(Error::NoOptionContinuation);
+	}
+	// Set source path
+	main_data.source_path = match source_path {
+		Some(source_path) => source_path,
+		None => {
+			let bcz_source_path = main_data.compiler_working_directory.join("bcz_src");
+			if bcz_source_path.is_dir() {
+				bcz_source_path
+			}
+			else {
+				main_data.compiler_working_directory.join("src")
+			}
+		}
+	};
+	// Set binary path
+	main_data.binary_path = match binary_path {
+		Some(binary_path) => binary_path,
+		None => {
+			let bcz_source_path = main_data.compiler_working_directory.join("bcz_bin");
+			if bcz_source_path.is_dir() {
+				bcz_source_path
+			}
+			else {
+				main_data.compiler_working_directory.join("bin")
+			}
+		}
+	};
+	// Return
 	Ok(())
 }
