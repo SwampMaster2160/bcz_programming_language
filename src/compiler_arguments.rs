@@ -67,8 +67,8 @@ impl CompilerOptionToken {
 			Self::InputFilepath => None,
 			Self::NoLink => Some("Do not link the resulting object files into an executable"),
 			Self::SetPrimaryOutput => Some("Set the path of the primary output (resulting executable)"),
-			Self::SetSourceHomeFilepath => Some("Set the path of the source home directory, input paths are relative to this path."),
-			Self::SetBinaryHomeFilepath => Some("Set the path of the binary home directory, output paths are relative to this path."),
+			Self::SetSourceHomeFilepath => Some("Set the path of the source home directory, input paths are relative to this path"),
+			Self::SetBinaryHomeFilepath => Some("Set the path of the binary home directory, output paths are relative to this path"),
 			Self::PrintTokens => Some("Print tokens resulting from the lexer"),
 		}
 	}

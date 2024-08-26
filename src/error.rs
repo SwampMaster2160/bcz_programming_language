@@ -5,6 +5,7 @@ pub enum Error {
 	InvalidLongArgument(String),
 	NoOptionContinuation,
 	CouldNotOpenFile,
+	CouldNotReadLine,
 }
 
 impl Display for Error {
@@ -14,6 +15,7 @@ impl Display for Error {
 			Error::InvalidLongArgument(arg) => write!(f, "invalid long argument \"{}\"", arg),
 			Error::NoOptionContinuation => write!(f, "no option continuation"),
 			Error::CouldNotOpenFile => write!(f, "could not open file"),
+			Error::CouldNotReadLine => write!(f, "could not read line"),
 		}
 	}
 }
