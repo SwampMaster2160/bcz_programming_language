@@ -27,6 +27,7 @@ enum CompilerOptionToken {
 	SetPrimaryOutput,
 	SetSourceHomeFilepath,
 	SetBinaryHomeFilepath,
+	PrintTokens,
 }
 
 impl CompilerOptionToken {
@@ -40,6 +41,7 @@ impl CompilerOptionToken {
 			Self::SetPrimaryOutput => Some("o"),
 			Self::SetSourceHomeFilepath => Some("s"),
 			Self::SetBinaryHomeFilepath => Some("b"),
+			Self::PrintTokens => None,
 		}
 	}
 
@@ -53,6 +55,7 @@ impl CompilerOptionToken {
 			Self::SetPrimaryOutput => Some("primary-output"),
 			Self::SetSourceHomeFilepath => Some("source-home"),
 			Self::SetBinaryHomeFilepath => Some("binary-home"),
+			Self::PrintTokens => Some("print-tokens"),
 		}
 	}
 
@@ -66,6 +69,7 @@ impl CompilerOptionToken {
 			Self::SetPrimaryOutput => Some("Set the path of the primary output (resulting executable)"),
 			Self::SetSourceHomeFilepath => Some("Set the path of the source home directory, input paths are relative to this path."),
 			Self::SetBinaryHomeFilepath => Some("Set the path of the binary home directory, output paths are relative to this path."),
+			Self::PrintTokens => Some("Print tokens resulting from the lexer"),
 		}
 	}
 
@@ -152,6 +156,7 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 					CompilerOptionToken::InputFilepath => main_data.filepaths_to_compile.push(argument),
 					CompilerOptionToken::SetSourceHomeFilepath => argument_processing_state = ArgumentProcessingState::SetSourceHomeFilepath,
 					CompilerOptionToken::SetBinaryHomeFilepath => argument_processing_state = ArgumentProcessingState::SetBinaryHomeFilepath,
+					CompilerOptionToken::PrintTokens => main_data.print_tokens = true,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {

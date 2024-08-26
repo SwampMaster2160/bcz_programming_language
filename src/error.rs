@@ -4,6 +4,7 @@ pub enum Error {
 	InvalidShortArgument(String),
 	InvalidLongArgument(String),
 	NoOptionContinuation,
+	CouldNotOpenFile,
 }
 
 impl Display for Error {
@@ -12,6 +13,7 @@ impl Display for Error {
 			Error::InvalidShortArgument(arg) => write!(f, "invalid short argument \"{}\"", arg),
 			Error::InvalidLongArgument(arg) => write!(f, "invalid long argument \"{}\"", arg),
 			Error::NoOptionContinuation => write!(f, "no option continuation"),
+			Error::CouldNotOpenFile => write!(f, "could not open file"),
 		}
 	}
 }
