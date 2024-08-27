@@ -82,6 +82,7 @@ extern "C" {
 	pub fn LLVMTargetMachineEmitToFile(
 		T: LLVMTargetMachineRef, M: LLVMModuleRef, Filename: *const u8, codegen: LLVMCodeGenFileType, ErrorMessage: *mut *mut u8
 	) -> LLVMBool;
+	pub fn LLVMSizeOfTypeInBits(TD: LLVMTargetDataRef, Ty: LLVMTypeRef) -> c_ulonglong;
 }
 #[allow(non_upper_case_globals)]
 pub const LLVMCodeGenLevelDefault: LLVMCodeGenOptLevel = 2;

@@ -1,8 +1,13 @@
-use std::{env::{args, current_dir}, mem::take, path::PathBuf};
+use std::{env::{args, current_dir}, mem::take, path::PathBuf, ptr::null_mut};
 
 use compile::compile_file;
 use compiler_arguments::process_arguments;
-use llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef};
+use llvm_c::{
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMContextCreate, LLVMContextDispose, LLVMContextRef,
+	LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMDisposeMessage, LLVMGetDefaultTargetTriple, LLVMGetTargetFromTriple,
+	LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC,
+	LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetRef, LLVMTypeRef,
+};
 
 mod llvm_c;
 mod compiler_arguments;
@@ -19,6 +24,10 @@ pub struct MainData<'a> {
 	binary_path: PathBuf,
 	print_tokens: bool,
 	llvm_context: LLVMContextRef,
+	llvm_data_layout: LLVMTargetDataRef,
+	int_type: LLVMTypeRef,
+	int_bit_width: u8,
+	int_max_value: u64,
 }
 
 impl<'a> MainData<'a> {
@@ -32,6 +41,10 @@ impl<'a> MainData<'a> {
 			binary_path: PathBuf::new(),
 			print_tokens: false,
 			llvm_context: unsafe { LLVMContextCreate() },
+			llvm_data_layout: null_mut(),
+			int_type: null_mut(),
+			int_bit_width: 0,
+			int_max_value: 0,
 		}
 	}
 }
@@ -46,6 +59,34 @@ fn main() {
 		println!("Error while processing compiler arguments: {error}.");
 		return;
 	}
+	// Setup LLVM
+	// TODO: Non-X86
+	unsafe { LLVMInitializeX86TargetInfo() };
+	unsafe { LLVMInitializeX86Target() };
+	unsafe { LLVMInitializeX86TargetMC() };
+	unsafe { LLVMInitializeX86AsmParser() };
+	unsafe { LLVMInitializeX86AsmPrinter() };
+	let target_triple = unsafe { LLVMGetDefaultTargetTriple() };
+	let mut target: LLVMTargetRef = null_mut();
+	let result = unsafe { LLVMGetTargetFromTriple(target_triple, &mut target, null_mut()) };
+	if result != 0 {
+		println!("Error: failed to get target.");
+		return;
+	}
+	let target_machine = unsafe {
+		LLVMCreateTargetMachine(target, target_triple, "generic\0".as_ptr(), "\0".as_ptr(), LLVMCodeGenLevelDefault, LLVMRelocDefault, LLVMCodeModelDefault)
+	};
+	unsafe { LLVMDisposeMessage(target_triple) };
+	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(target_machine) };
+	// Get info about machine being compiled for
+	main_data.int_type = unsafe { LLVMIntPtrTypeInContext(main_data.llvm_context, main_data.llvm_data_layout) };
+	let int_type_width = unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, main_data.int_type) };
+	if int_type_width > 64 {
+		println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
+		return;
+	}
+	main_data.int_bit_width = int_type_width as u8;
+	main_data.int_max_value = ((1u128 << main_data.int_bit_width) - 1) as u64;
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
 		let absolute_filepath = main_data.source_path.join(filepath);
