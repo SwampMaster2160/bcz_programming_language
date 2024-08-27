@@ -6,6 +6,8 @@ pub enum Error {
 	NoOptionContinuation,
 	CouldNotOpenFile,
 	CouldNotReadLine,
+	FeatureNotYetImplemented,
+	InvalidTokenStartChar(char),
 }
 
 impl Display for Error {
@@ -16,6 +18,8 @@ impl Display for Error {
 			Error::NoOptionContinuation => write!(f, "no option continuation"),
 			Error::CouldNotOpenFile => write!(f, "could not open file"),
 			Error::CouldNotReadLine => write!(f, "could not read line"),
+			Error::FeatureNotYetImplemented => write!(f, "feature not yet implemented"),
+			Error::InvalidTokenStartChar(c) => write!(f, "invalid token start character '{}'", c),
 		}
 	}
 }

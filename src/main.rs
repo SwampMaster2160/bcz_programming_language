@@ -1,4 +1,4 @@
-use std::{env::{args, current_dir}, mem::take, path::PathBuf, ptr::null_mut};
+use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, mem::take, path::PathBuf, ptr::null_mut};
 
 use compile::compile_file;
 use compiler_arguments::process_arguments;
@@ -8,6 +8,7 @@ use llvm_c::{
 	LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC,
 	LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetRef, LLVMTypeRef,
 };
+use token::{Keyword, Operator, OperatorType, Separator};
 
 mod llvm_c;
 mod compiler_arguments;
@@ -28,6 +29,11 @@ pub struct MainData<'a> {
 	int_type: LLVMTypeRef,
 	int_bit_width: u8,
 	int_max_value: u64,
+	char_to_separator_mapping: HashMap<char, Separator>,
+	str_to_operator_mapping: HashMap<&'static str, Operator>,
+	operator_character_set: HashSet<char>,
+	char_to_operator_type_mapping: HashMap<char, OperatorType>,
+	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
 }
 
 impl<'a> MainData<'a> {
@@ -45,6 +51,11 @@ impl<'a> MainData<'a> {
 			int_type: null_mut(),
 			int_bit_width: 0,
 			int_max_value: 0,
+			char_to_separator_mapping: Separator::get_symbols_map(),
+			str_to_operator_mapping: Operator::get_symbols_map(),
+			operator_character_set: Operator::get_character_set(),
+			char_to_operator_type_mapping: OperatorType::get_symbols_map(),
+			str_to_keyword_mapping: Keyword::get_symbols_map(),
 		}
 	}
 }
