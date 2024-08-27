@@ -2,6 +2,7 @@ use std::{env::{args, current_dir}, mem::take, path::PathBuf};
 
 use compile::compile_file;
 use compiler_arguments::process_arguments;
+use llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef};
 
 mod llvm_c;
 mod compiler_arguments;
@@ -17,9 +18,7 @@ pub struct MainData<'a> {
 	source_path: PathBuf,
 	binary_path: PathBuf,
 	print_tokens: bool,
-	line: Option<usize>,
-	column: Option<usize>,
-	file: Option<PathBuf>,
+	llvm_context: LLVMContextRef,
 }
 
 impl<'a> MainData<'a> {
@@ -32,9 +31,7 @@ impl<'a> MainData<'a> {
 			source_path: PathBuf::new(),
 			binary_path: PathBuf::new(),
 			print_tokens: false,
-			column: None,
-			line: None,
-			file: None,
+			llvm_context: unsafe { LLVMContextCreate() },
 		}
 	}
 }
@@ -51,26 +48,15 @@ fn main() {
 	}
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
-		main_data.line = None;
-		main_data.column = None;
 		let absolute_filepath = main_data.source_path.join(filepath);
-		main_data.file = Some(absolute_filepath.clone());
 		let result = compile_file(&mut main_data, &absolute_filepath);
-		if let Err(error) = result {
-			print!("Error");
-			if let Some(file) = main_data.file {
-				print!(" while compiling {}", file.display());
-				if let Some(line) = main_data.line {
-					print!(":{line}");
-					if let Some(column) = main_data.column {
-						print!(":{column}");
-					}
-				}
-			}
-			println!(": {error}.");
+		if let Err((error, error_file, error_line, error_column)) = result {
+			print!("Error while compiling {}:{error_line}:{error_column}: {error}.", error_file.display());
 			return;
 		}
 	}
+	// Clean up
+	unsafe { LLVMContextDispose(main_data.llvm_context) };
 }
 
 //fn main() {
