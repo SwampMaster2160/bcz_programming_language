@@ -8,6 +8,9 @@ pub enum Error {
 	CouldNotReadLine,
 	FeatureNotYetImplemented,
 	InvalidTokenStartChar(char),
+	InvalidNumericalLiteralBase(char),
+	InvalidDigitForBase(char, u8),
+	NumericalLiteralTooLarge,
 }
 
 impl Display for Error {
@@ -19,7 +22,10 @@ impl Display for Error {
 			Error::CouldNotOpenFile => write!(f, "could not open file"),
 			Error::CouldNotReadLine => write!(f, "could not read line"),
 			Error::FeatureNotYetImplemented => write!(f, "feature not yet implemented"),
-			Error::InvalidTokenStartChar(c) => write!(f, "invalid token start character '{}'", c),
+			Error::InvalidTokenStartChar(c) => write!(f, "invalid token start character '{c}'"),
+			Error::InvalidNumericalLiteralBase(c) => write!(f, "invalid numerical literal base \"0{c}\""),
+			Error::InvalidDigitForBase(c, base) => write!(f, "invalid digit '{c}' for base {base}"),
+			Error::NumericalLiteralTooLarge => write!(f, "numerical literal too large"),
 		}
 	}
 }
