@@ -11,6 +11,8 @@ pub enum Error {
 	InvalidNumericalLiteralBase(char),
 	InvalidDigitForBase(char, u8),
 	NumericalLiteralTooLarge,
+	InvalidKeyword(String),
+	InvalidOperator(String),
 }
 
 impl Display for Error {
@@ -26,6 +28,8 @@ impl Display for Error {
 			Error::InvalidNumericalLiteralBase(c) => write!(f, "invalid numerical literal base \"0{c}\""),
 			Error::InvalidDigitForBase(c, base) => write!(f, "invalid digit '{c}' for base {base}"),
 			Error::NumericalLiteralTooLarge => write!(f, "numerical literal too large"),
+			Error::InvalidKeyword(keyword) => write!(f, "invalid keyword \"{keyword}\""),
+			Error::InvalidOperator(operator) => write!(f, "invalid operator \"{operator}\""),
 		}
 	}
 }

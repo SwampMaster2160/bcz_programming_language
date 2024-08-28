@@ -5,7 +5,7 @@ use strum_macros::{EnumDiscriminants, EnumIter};
 
 use crate::{error::Error, MainData};
 
-#[derive(EnumIter, Clone, Copy)]
+#[derive(EnumIter, Clone, Copy, Debug)]
 pub enum Separator {
 	Semicolon,
 	Comma,
@@ -40,7 +40,7 @@ impl Separator {
 	}
 }
 
-#[derive(EnumIter, Clone, Copy)]
+#[derive(EnumIter, Clone, Copy, Debug)]
 pub enum Keyword {
 	EntryPoint,
 }
@@ -59,7 +59,7 @@ impl Keyword {
 	}
 }
 
-#[derive(EnumIter, Clone, Copy)]
+#[derive(EnumIter, Clone, Copy, Debug)]
 pub enum Operator {
 	AddRead = 1,
 	SubtractNegate,
@@ -90,7 +90,7 @@ impl Operator {
 	}
 }
 
-#[derive(EnumIter, Clone, Copy)]
+#[derive(EnumIter, Clone, Copy, Debug)]
 pub enum OperatorType {
 	SignedLogicalShortCircuit,
 	UnsignedLogicalNotShortCircuit,
@@ -115,7 +115,7 @@ impl OperatorType {
 	}
 }
 
-#[derive(EnumDiscriminants)]
+#[derive(EnumDiscriminants, Debug)]
 pub enum TokenVariant {
 	NumericalLiteral(u64),
 	StringLiteral(Box<str>),
@@ -125,6 +125,7 @@ pub enum TokenVariant {
 	Operator(Option<Operator>, OperatorType, bool),
 }
 
+#[derive(Debug)]
 pub struct Token {
 	variant: TokenVariant,
 	line: usize,
@@ -213,7 +214,34 @@ impl Token {
 					out
 				}
 			}),
-			_ => todo!(),
+			TokenVariantDiscriminants::Keyword => TokenVariant::Keyword(match main_data.str_to_keyword_mapping.get(&token_string[1..]) {
+				Some(keyword) => *keyword,
+				None => return Err(Error::InvalidKeyword(token_string.to_string()))
+			}),
+			TokenVariantDiscriminants::Operator => {
+				// Get operator type
+				let operator_type = main_data.char_to_operator_type_mapping.get(&first_char);
+				let (operator_type, operator_string_without_type) = match operator_type {
+					Some(operator_type) => (*operator_type, &token_string[1..]),
+					None => (OperatorType::SignedLogicalShortCircuit, token_string),
+				};
+				// Get if the operator is an assignment
+				let (is_assignment, operator_base_string) = match operator_string_without_type.chars().last() == Some('=') && !matches!(operator_string_without_type, "==" | "!=" | "<=" | ">=") {
+					true => (true, &operator_string_without_type[..operator_string_without_type.len() - 1]),
+					false => (false, operator_string_without_type),
+				};
+				// Get operator base
+				let operator_base = match operator_base_string.is_empty() {
+					true => None,
+					false => Some(match (main_data.str_to_operator_mapping.get(operator_base_string)) {
+						Some(operator_base) => *operator_base,
+						None => return Err(Error::InvalidOperator(token_string.into())),
+					}),
+				};
+				// Create operator token varient
+				TokenVariant::Operator(operator_base, operator_type, is_assignment)
+			}
+			TokenVariantDiscriminants::StringLiteral => todo!(),
 		};
 		// Return
 		let token = Self {

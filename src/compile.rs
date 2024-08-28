@@ -44,6 +44,13 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			line_content = new_line_content;
 		}
 	}
+	// Print tokens if commanded to do so
+	if main_data.print_tokens {
+		println!("Tokens form tokenizing file {}:", filepath.display());
+		for token in tokens.iter() {
+			println!("{:?}", token);
+		}
+	}
 	// Return
 	Ok(())
 }
