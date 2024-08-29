@@ -34,9 +34,9 @@ impl ParseState {
 	}
 }
 
-/// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments` is `false` or from comma separated function arguments/parameters if `true`.
+/// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments_or_parameters` is `false` or from comma separated function arguments/parameters if `true`.
 /// The `bool` returned is `true` if the bracketed area ends in a separator.
-fn parse_separated_expressions(items_being_parsed: Vec<ParseState>, are_arguments: bool) -> Result<(Box<[AstNode]>, bool), (Error, usize, usize)> {
+fn parse_separated_expressions(items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool) -> Result<(Box<[AstNode]>, bool), (Error, usize, usize)> {
 	todo!()
 }
 
@@ -90,5 +90,6 @@ pub fn parse_tokens(tokens: Vec<Token>) -> Result<Box<[AstNode]>, (Error, usize,
 			other => ParseState::Token(other),
 		})
 		.collect();
-	todo!()
+	// Parse semi-colon separated expressions
+	Ok(parse_separated_expressions(items_being_parsed, false)?.0)
 }
