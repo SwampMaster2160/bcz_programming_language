@@ -27,7 +27,7 @@ pub enum AstNodeVariant {
 	/// For an identifier such as `my_var` or `myFunc`.
 	Identifier(Box<str>),
 	/// A semi-colon separated list of expressions that where between curly brackets and if the result is undefined.
-	Block(Box<[AstNodeVariant]>, bool),
+	Block(Box<[AstNode]>, bool),
 	/// A function pointer to call and the arguments passed in.
 	FunctionCall(Box<AstNodeVariant>, Box<[AstNodeVariant]>),
 	/// A list of parameters for a function definition and the function body.

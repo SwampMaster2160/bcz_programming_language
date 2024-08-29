@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::token::Separator;
+
 pub enum Error {
 	InvalidShortArgument(String),
 	InvalidLongArgument(String),
@@ -16,6 +18,7 @@ pub enum Error {
 	TooManyOpenParentheses,
 	TooManyCloseParentheses,
 	BlankExpression,
+	ParenthesisMismatch(Separator, Separator),
 }
 
 impl Display for Error {
@@ -36,6 +39,7 @@ impl Display for Error {
 			Error::TooManyCloseParentheses => write!(f, "too many close parentheses"),
 			Error::TooManyOpenParentheses => write!(f, "too many open parentheses"),
 			Error::BlankExpression => write!(f, "blank expression"),
+			Error::ParenthesisMismatch(open, close) => write!(f, "open '{}' mismatched with close '{}'", open.get_symbol(), close.get_symbol()),
 		}
 	}
 }
