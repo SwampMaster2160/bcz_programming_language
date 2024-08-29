@@ -13,6 +13,8 @@ pub enum Error {
 	NumericalLiteralTooLarge,
 	InvalidKeyword(String),
 	InvalidOperator(String),
+	TooManyOpenParentheses,
+	TooManyCloseParentheses,
 }
 
 impl Display for Error {
@@ -30,6 +32,8 @@ impl Display for Error {
 			Error::NumericalLiteralTooLarge => write!(f, "numerical literal too large"),
 			Error::InvalidKeyword(keyword) => write!(f, "invalid keyword \"{keyword}\""),
 			Error::InvalidOperator(operator) => write!(f, "invalid operator \"{operator}\""),
+			Error::TooManyCloseParentheses => write!(f, "too many close parentheses"),
+			Error::TooManyOpenParentheses => write!(f, "too many open parentheses"),
 		}
 	}
 }
