@@ -15,6 +15,7 @@ pub enum Error {
 	InvalidOperator(String),
 	TooManyOpenParentheses,
 	TooManyCloseParentheses,
+	BlankExpression,
 }
 
 impl Display for Error {
@@ -34,6 +35,7 @@ impl Display for Error {
 			Error::InvalidOperator(operator) => write!(f, "invalid operator \"{operator}\""),
 			Error::TooManyCloseParentheses => write!(f, "too many close parentheses"),
 			Error::TooManyOpenParentheses => write!(f, "too many open parentheses"),
+			Error::BlankExpression => write!(f, "blank expression"),
 		}
 	}
 }

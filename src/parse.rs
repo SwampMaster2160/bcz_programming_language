@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::{error, path::PathBuf};
 
-use crate::{ast_node::{AstNode, AstNodeVariant}, error::Error, token::{Separator, Token, TokenVariant}};
+use crate::{ast_node::{self, AstNode, AstNodeVariant}, error::Error, token::{Separator, Token, TokenVariant}};
 
+#[derive(Debug)]
 enum ParseState {
 	Token(Token),
 	AstNode(AstNode),
@@ -10,11 +11,11 @@ enum ParseState {
 
 impl ParseState {
 	fn is_open_parenthesis(&self) -> bool {
-		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(Separator::OpenParenthesis | Separator::OpenSquareParenthesis | Separator::OpenCurlyParenthesis), .. }))
+		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(separator), .. }) if separator.is_open_parenthesis())
 	}
 
 	fn is_close_parenthesis(&self) -> bool {
-		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(Separator::CloseParenthesis | Separator::CloseSquareParenthesis | Separator::CloseCurlyParenthesis), .. }))
+		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(separator), .. }) if separator.is_close_parenthesis())
 	}
 
 	fn get_start(&self) -> (usize, usize) {
@@ -36,8 +37,54 @@ impl ParseState {
 
 /// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments_or_parameters` is `false` or from comma separated function arguments/parameters if `true`.
 /// The `bool` returned is `true` if the bracketed area ends in a separator.
-fn parse_separated_expressions(items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool) -> Result<(Box<[AstNode]>, bool), (Error, usize, usize)> {
-	todo!()
+fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool) -> Result<(Box<[AstNode]>, bool), (Error, usize, usize)> {
+	let mut ast_nodes_out: Vec<AstNode> = Vec::new();
+	loop {
+		let mut parenthesis_depth = 0usize;
+		// Get the length to the next separator
+		let mut length = None;
+		for (length_so_far, item) in items_being_parsed.iter().enumerate() {
+			if let ParseState::Token(Token { variant: TokenVariant::Separator(separator), .. }) = item {
+				if separator.is_open_parenthesis() {
+					parenthesis_depth += 1;
+				}
+				if separator.is_close_parenthesis() {
+					parenthesis_depth = parenthesis_depth.checked_sub(1).ok_or_else(|| {
+						let error_location = item.get_start();
+						(Error::TooManyCloseParentheses, error_location.0, error_location.1)
+					})?;
+				}
+				if parenthesis_depth == 0 && (((!are_arguments_or_parameters) && *separator == Separator::Semicolon) || (are_arguments_or_parameters && *separator == Separator::Comma)) {
+					length = Some(length_so_far);
+					break;
+				}
+			}
+		}
+		let (length, is_last) = match length {
+			Some(length) => (length, false),
+			None => (items_being_parsed.len(), true),
+		};
+		// Remove items to separator and parse them
+		let split_off = items_being_parsed.split_off(length);
+		let expression_items = items_being_parsed;
+		items_being_parsed = split_off;
+		if !is_last {
+			items_being_parsed.remove(0);
+		}
+		if length == 0 {
+			if are_arguments_or_parameters && !is_last {
+				let error_location = items_being_parsed.first().unwrap().get_start();
+				return Err((Error::BlankExpression, error_location.0, error_location.1));
+			}
+		}
+		else {
+			ast_nodes_out.push(parse_expression(expression_items)?);
+		}
+		// Return if at the end
+		if is_last {
+			return Ok((ast_nodes_out.into(), length == 0));
+		}
+	}
 }
 
 /// Parses a single expression into an AST node.
@@ -56,7 +103,7 @@ fn parse_expression(items_being_parsed: Vec<ParseState>) -> Result<AstNode, (Err
 				}
 				if item.is_close_parenthesis() {
 					bracket_depth -= 1;
-					if length_so_far == 0 {
+					if bracket_depth == 0 {
 						length = Some(length_so_far);
 					}
 				}
@@ -64,15 +111,23 @@ fn parse_expression(items_being_parsed: Vec<ParseState>) -> Result<AstNode, (Err
 			let length = match length {
 				Some(length) => length,
 				None => {
-					let error_location = items_being_parsed.last().expect("Should be at least 1 item").get_end();
+					let error_location = items_being_parsed.last().unwrap().get_end();
 					return Err((Error::TooManyOpenParentheses, error_location.0, error_location.1));
 				}
 			};
+			// Parse bracketed area
 			todo!()
 		}
 		index += 1;
 	}
-	todo!()
+	// Return
+	if items_being_parsed.len() > 1 {
+		todo!();
+	}
+	match items_being_parsed.into_iter().next() {
+		Some(ParseState::AstNode(ast_node)) => Ok(ast_node),
+		_ => todo!(),
+	}
 }
 
 /// Takes in the tokens from tokenizing a file and parses each semi-colon separated global expression into a returned AST node.

@@ -5,7 +5,7 @@ use strum_macros::{EnumDiscriminants, EnumIter};
 
 use crate::{error::Error, MainData};
 
-#[derive(EnumIter, Clone, Copy, Debug)]
+#[derive(EnumIter, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Separator {
 	Semicolon,
 	Comma,
@@ -37,6 +37,14 @@ impl Separator {
 		Self::iter()
 			.map(|separator| (separator.get_symbol(), separator))
 			.collect()
+	}
+
+	pub fn is_open_parenthesis(self) -> bool {
+		matches!(self, Self::OpenParenthesis | Self::OpenSquareParenthesis | Self::OpenCurlyParenthesis)
+	}
+
+	pub fn is_close_parenthesis(self) -> bool {
+		matches!(self, Self::CloseParenthesis | Self::CloseSquareParenthesis | Self::CloseCurlyParenthesis)
 	}
 }
 
