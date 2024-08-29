@@ -36,9 +36,9 @@ pub enum AstNodeVariant {
 
 #[derive(Debug)]
 pub struct AstNode {
-	variant: AstNodeVariant,
+	pub variant: AstNodeVariant,
 	/// The line and column that this node starts at.
-	start: (usize, usize),
+	pub start: (usize, usize),
 	/// The line and column of the char after the last char of this node.
-	end: (usize, usize),
+	pub end: (usize, usize),
 }

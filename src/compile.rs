@@ -52,7 +52,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		}
 	}
 	// Parse
-	let ast_nodes = parse_tokens(&tokens)?;
+	let ast_nodes = parse_tokens(tokens)?;
 	// Print parsed AST nodes if commanded to do so
 	if main_data.print_tokens {
 		println!("Tokens from parsing file {}:", filepath.display());

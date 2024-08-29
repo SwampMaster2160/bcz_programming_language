@@ -128,11 +128,11 @@ pub enum TokenVariant {
 
 #[derive(Debug)]
 pub struct Token {
-	variant: TokenVariant,
+	pub variant: TokenVariant,
 	/// The line and column that this token starts at.
-	start: (usize, usize),
+	pub start: (usize, usize),
 	/// The line and column of the char after the last char of this token.
-	end: (usize, usize),
+	pub end: (usize, usize),
 }
 
 impl Token {
