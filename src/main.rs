@@ -8,13 +8,15 @@ use llvm_c::{
 	LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC,
 	LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetRef, LLVMTypeRef,
 };
-use token::{Keyword, Operator, OperatorType, Separator};
+use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod llvm_c;
 mod compiler_arguments;
 mod error;
 mod compile;
 mod token;
+mod ast_node;
+mod parse;
 
 pub struct MainData<'a> {
 	do_link: bool,
@@ -24,13 +26,14 @@ pub struct MainData<'a> {
 	source_path: PathBuf,
 	binary_path: PathBuf,
 	print_tokens: bool,
+	print_ast_nodes: bool,
 	llvm_context: LLVMContextRef,
 	llvm_data_layout: LLVMTargetDataRef,
 	int_type: LLVMTypeRef,
 	int_bit_width: u8,
 	int_max_value: u64,
 	char_to_separator_mapping: HashMap<char, Separator>,
-	str_to_operator_mapping: HashMap<&'static str, Operator>,
+	str_to_operator_mapping: HashMap<&'static str, OperatorSymbol>,
 	operator_character_set: HashSet<char>,
 	char_to_operator_type_mapping: HashMap<char, OperatorType>,
 	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
@@ -46,14 +49,15 @@ impl<'a> MainData<'a> {
 			source_path: PathBuf::new(),
 			binary_path: PathBuf::new(),
 			print_tokens: false,
+			print_ast_nodes: false,
 			llvm_context: unsafe { LLVMContextCreate() },
 			llvm_data_layout: null_mut(),
 			int_type: null_mut(),
 			int_bit_width: 0,
 			int_max_value: 0,
 			char_to_separator_mapping: Separator::get_symbols_map(),
-			str_to_operator_mapping: Operator::get_symbols_map(),
-			operator_character_set: Operator::get_character_set(),
+			str_to_operator_mapping: OperatorSymbol::get_symbols_map(),
+			operator_character_set: OperatorSymbol::get_character_set(),
 			char_to_operator_type_mapping: OperatorType::get_symbols_map(),
 			str_to_keyword_mapping: Keyword::get_symbols_map(),
 		}

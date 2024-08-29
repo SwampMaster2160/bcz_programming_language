@@ -19,7 +19,7 @@
 					"kind": "bin"
 				}
 			},
-			"args": ["-h", "main.bcz", "--print-tokens"],
+			"args": ["-h", "main.bcz", "--print-tokens", "--print-ast-nodes"],
 			"cwd": "${workspaceFolder}"
 		},
 		{

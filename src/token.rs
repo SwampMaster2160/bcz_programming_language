@@ -60,20 +60,21 @@ impl Keyword {
 }
 
 #[derive(EnumIter, Clone, Copy, Debug)]
-pub enum Operator {
+/// A tokenized operator symbol, the meaning of each symbol depends if it is used as prefix, infix or suffix operator.
+pub enum OperatorSymbol {
 	AddRead = 1,
 	SubtractNegate,
-	MultiplyDerefrence,
+	MultiplyDereference,
 	DivideReciprocal,
 	ModuloPercent,
 }
 
-impl Operator {
+impl OperatorSymbol {
 	pub fn get_symbol(self) -> &'static str {
 		match self {
 			Self::AddRead => "+",
 			Self::SubtractNegate => "-",
-			Self::MultiplyDerefrence => "*",
+			Self::MultiplyDereference => "*",
 			Self::DivideReciprocal => "/",
 			Self::ModuloPercent => "%",
 		}
@@ -122,15 +123,16 @@ pub enum TokenVariant {
 	Identifier(Box<str>),
 	Keyword(Keyword),
 	Separator(Separator),
-	Operator(Option<Operator>, OperatorType, bool),
+	Operator(Option<OperatorSymbol>, OperatorType, bool),
 }
 
 #[derive(Debug)]
 pub struct Token {
 	variant: TokenVariant,
-	line: usize,
-	column: usize,
-	char_length: usize,
+	/// The line and column that this token starts at.
+	start: (usize, usize),
+	/// The line and column of the char after the last char of this token.
+	end: (usize, usize),
 }
 
 impl Token {
@@ -233,7 +235,7 @@ impl Token {
 				// Get operator base
 				let operator_base = match operator_base_string.is_empty() {
 					true => None,
-					false => Some(match (main_data.str_to_operator_mapping.get(operator_base_string)) {
+					false => Some(match main_data.str_to_operator_mapping.get(operator_base_string) {
 						Some(operator_base) => *operator_base,
 						None => return Err(Error::InvalidOperator(token_string.into())),
 					}),
@@ -246,9 +248,8 @@ impl Token {
 		// Return
 		let token = Self {
 			variant: token_varient,
-			line: line_number,
-			column: column_number,
-			char_length: token_string.chars().count(),
+			start: (line_number, column_number),
+			end: (line_number, column_number + token_string.chars().count()),
 		};
 		Ok((token, string_without_token))
 	}

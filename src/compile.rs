@@ -1,6 +1,6 @@
 use std::{fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{error::Error, token::Token, MainData};
+use crate::{error::Error, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -46,11 +46,21 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	// Print tokens if commanded to do so
 	if main_data.print_tokens {
-		println!("Tokens form tokenizing file {}:", filepath.display());
+		println!("Tokens from tokenizing file {}:", filepath.display());
 		for token in tokens.iter() {
 			println!("{:?}", token);
 		}
 	}
+	// Parse
+	let ast_nodes = parse_tokens(&tokens)?;
+	// Print parsed AST nodes if commanded to do so
+	if main_data.print_tokens {
+		println!("Tokens from parsing file {}:", filepath.display());
+		for ast_node in ast_nodes.iter() {
+			println!("{:?}", ast_node);
+		}
+	}
+	// Add to main data
 	// Return
 	Ok(())
 }
