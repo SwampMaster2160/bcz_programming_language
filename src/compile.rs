@@ -57,7 +57,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	if main_data.print_tokens {
 		println!("Tokens from parsing file {}:", filepath.display());
 		for ast_node in ast_nodes.iter() {
-			println!("{:?}", ast_node);
+			ast_node.print_tree(0);
+			//println!("{:?}", ast_node);
 		}
 	}
 	// Add to main data

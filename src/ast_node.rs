@@ -1,3 +1,6 @@
+use strum_macros::EnumDiscriminants;
+//use strum::De;
+
 #[derive(Debug)]
 pub enum Operator {
 	IntegerAdd,
@@ -18,7 +21,7 @@ pub enum Operator {
 	Dereference,
 }
 
-#[derive(Debug)]
+#[derive(Debug, EnumDiscriminants)]
 pub enum AstNodeVariant {
 	/// A constant.
 	Constant(u64),
@@ -41,4 +44,44 @@ pub struct AstNode {
 	pub start: (usize, usize),
 	/// The line and column of the char after the last char of this node.
 	pub end: (usize, usize),
+}
+
+impl AstNode {
+	pub fn print_tree(&self, level: usize) {
+		for _ in 0..level {
+			print!("-");
+		}
+		print!("{} {}:{} to {}:{} {:?}", '{', self.start.0, self.start.1, self.end.0, self.end.1, AstNodeVariantDiscriminants::from(&self.variant));
+		match &self.variant {
+			AstNodeVariant::Block(_, result_is_undefined) => print!(", result_is_undefined: {:?}", result_is_undefined),
+			AstNodeVariant::Constant(value) => print!(", value: {}", value),
+			AstNodeVariant::FunctionCall(_, _) => {},
+			AstNodeVariant::FunctionDefinition(_, _) => {},
+			AstNodeVariant::Identifier(name) => print!(", name: {}", name),
+			AstNodeVariant::Operator(operator, _, is_assignment) => print!(", operator: {:?}, is_assignment: {:?}", operator, is_assignment),
+		}
+		println!(" {}", '}');
+		match &self.variant {
+			AstNodeVariant::Block(nodes, _) => for node in nodes {
+				node.print_tree(level + 1);
+			}
+			AstNodeVariant::FunctionCall(function, arguments) => {
+				function.print_tree(level + 1);
+				for argument in arguments {
+					argument.print_tree(level + 1);
+				}
+			},
+			AstNodeVariant::FunctionDefinition(parameters, body) => {
+				for parameter in parameters {
+					parameter.print_tree(level + 1);
+				}
+				body.print_tree(level + 1);
+			},
+			AstNodeVariant::Operator(_, operands, _) => for operand in operands {
+				operand.print_tree(level + 1);
+			}
+			AstNodeVariant::Constant(..) => {}
+			AstNodeVariant::Identifier(..) => {}
+		}
+	}
 }
