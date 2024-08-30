@@ -1,7 +1,6 @@
-use std::{error, path::PathBuf};
 use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{self, AstNode, AstNodeVariant, Operator}, error::Error, token::{OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
+use crate::{ast_node::{AstNode, AstNodeVariant, Operator}, error::Error, token::{OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
 
 #[derive(Debug)]
 enum ParseState {
@@ -170,12 +169,12 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 		index += 1;
 	}
-	// Parse binary operators
+	// Parse non-augmented binary operators
 	for operator_precedence_level in BINARY_OPERATOR_PRECEDENCE {
 		// Search for operators in the precedence level
 		let mut index = 1;
 		while index < items_being_parsed.len().saturating_sub(1) {
-			if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, false), start, end }) = &items_being_parsed[index] {
+			if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, false), start, end: _ }) = &items_being_parsed[index] {
 				let operator_symbol = match operator_symbol {
 					Some(operator_symbol) => *operator_symbol,
 					None => return Err((Error::NoOperatorBase, *start)),
@@ -209,6 +208,42 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			}
 			index += 1;
 		}
+	}
+	// Parse augmented binary operators
+	// Search backwards from the second to last item to the second item
+	let mut index = items_being_parsed.len().saturating_sub(2);
+	while index > 0 {
+		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, true), start: _, end: _ }) = &items_being_parsed[index] {
+			// If we find one
+			// Convert to AST operator
+			let operator = match operator_symbol {
+				Some(operator_symbol) => Some(binary_operator_from_symbol(*operator_symbol, *operator_type)),
+				None => None,
+			};
+			// Get left and right operands
+			let left_operand = items_being_parsed.remove(index - 1);
+			items_being_parsed.remove(index - 1);
+			let right_operand = items_being_parsed.remove(index - 1);
+			let left_operand = match left_operand {
+				ParseState::AstNode(ast_node) => ast_node,
+				_ => return Err((Error::BinaryOperatorNotUsedOnExpressions, left_operand.get_start())),
+			};
+			let right_operand = match right_operand {
+				ParseState::AstNode(ast_node) => ast_node,
+				_ => return Err((Error::BinaryOperatorNotUsedOnExpressions, right_operand.get_start())),
+			};
+			// Construct operator node
+			let operator_ast_node = AstNode {
+				start: left_operand.start,
+				end: right_operand.end,
+				variant: AstNodeVariant::Operator(operator, [left_operand, right_operand].into(), true),
+			};
+			// Insert back into list
+			items_being_parsed.insert(index - 1, ParseState::AstNode(operator_ast_node));
+			index -= 1;
+			continue;
+		}
+		index -= 1;
 	}
 	// Return
 	if items_being_parsed.len() > 1 {
