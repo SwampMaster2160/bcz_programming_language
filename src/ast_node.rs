@@ -23,15 +23,15 @@ pub enum AstNodeVariant {
 	/// A constant.
 	Constant(u64),
 	/// An operator with its operands and if is an assignment.
-	Operator(Option<Operator>, Box<[AstNodeVariant]>, bool),
+	Operator(Option<Operator>, Box<[AstNode]>, bool),
 	/// For an identifier such as `my_var` or `myFunc`.
 	Identifier(Box<str>),
 	/// A semi-colon separated list of expressions that where between curly brackets and if the result is undefined.
 	Block(Box<[AstNode]>, bool),
 	/// A function pointer to call and the arguments passed in.
-	FunctionCall(Box<AstNodeVariant>, Box<[AstNodeVariant]>),
+	FunctionCall(Box<AstNode>, Box<[AstNode]>),
 	/// A list of parameters for a function definition and the function body.
-	FunctionDefinition(Box<[AstNodeVariant]>, Box<AstNodeVariant>),
+	FunctionDefinition(Box<[AstNode]>, Box<AstNode>),
 }
 
 #[derive(Debug)]

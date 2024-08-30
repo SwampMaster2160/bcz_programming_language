@@ -188,6 +188,23 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					let left_operand = items_being_parsed.remove(index - 1);
 					items_being_parsed.remove(index - 1);
 					let right_operand = items_being_parsed.remove(index - 1);
+					let left_operand = match left_operand {
+						ParseState::AstNode(ast_node) => ast_node,
+						_ => return Err((Error::BinaryOperatorNotUsedOnExpressions, left_operand.get_start())),
+					};
+					let right_operand = match right_operand {
+						ParseState::AstNode(ast_node) => ast_node,
+						_ => return Err((Error::BinaryOperatorNotUsedOnExpressions, right_operand.get_start())),
+					};
+					// Construct operator node
+					let operator_ast_node = AstNode {
+						start: left_operand.start,
+						end: right_operand.end,
+						variant: AstNodeVariant::Operator(Some(operator), [left_operand, right_operand].into(), false),
+					};
+					// Insert back into list
+					items_being_parsed.insert(index - 1, ParseState::AstNode(operator_ast_node));
+					continue;
 				}
 			}
 			index += 1;

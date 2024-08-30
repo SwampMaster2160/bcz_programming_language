@@ -20,6 +20,7 @@ pub enum Error {
 	BlankExpression,
 	ParenthesisMismatch(Separator, Separator),
 	NoOperatorBase,
+	BinaryOperatorNotUsedOnExpressions,
 }
 
 impl Display for Error {
@@ -42,6 +43,7 @@ impl Display for Error {
 			Error::BlankExpression => write!(f, "blank expression"),
 			Error::ParenthesisMismatch(open, close) => write!(f, "open '{}' mismatched with close '{}'", open.get_symbol(), close.get_symbol()),
 			Error::NoOperatorBase => write!(f, "no operator base"),
+			Error::BinaryOperatorNotUsedOnExpressions => write!(f, "binary operator used on non-expressions"),
 		}
 	}
 }
