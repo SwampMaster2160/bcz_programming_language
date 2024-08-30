@@ -22,8 +22,8 @@ pub enum Operator {
 pub enum AstNodeVariant {
 	/// A constant.
 	Constant(u64),
-	/// An operator with its operands.
-	Operator(Operator, Box<[AstNodeVariant]>),
+	/// An operator with its operands and if is an assignment.
+	Operator(Option<Operator>, Box<[AstNodeVariant]>, bool),
 	/// For an identifier such as `my_var` or `myFunc`.
 	Identifier(Box<str>),
 	/// A semi-colon separated list of expressions that where between curly brackets and if the result is undefined.

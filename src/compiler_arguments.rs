@@ -33,7 +33,7 @@ enum CompilerOptionToken {
 
 impl CompilerOptionToken {
 	/// The short name of the option, without the preceding dash.
-	fn short_name(&self) -> Option<&'static str> {
+	const fn short_name(&self) -> Option<&'static str> {
 		match self {
 			Self::Help => Some("h"),
 			Self::Version => Some("v"),
@@ -48,7 +48,7 @@ impl CompilerOptionToken {
 	}
 
 	/// The long name of the option, without the preceding double dash.
-	fn long_name(&self) -> Option<&'static str> {
+	const fn long_name(&self) -> Option<&'static str> {
 		match self {
 			Self::Help => Some("help"),
 			Self::Version => Some("version"),
@@ -63,7 +63,7 @@ impl CompilerOptionToken {
 	}
 
 	/// A description of the option, `None` is returned if the option should not be listed in help.
-	fn description(&self) -> Option<&'static str> {
+	const fn description(&self) -> Option<&'static str> {
 		match self {
 			Self::Help => Some("Print this help message"),
 			Self::Version => Some("Print the version of the BCZ compiler"),

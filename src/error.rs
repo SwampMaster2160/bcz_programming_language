@@ -19,6 +19,7 @@ pub enum Error {
 	TooManyCloseParentheses,
 	BlankExpression,
 	ParenthesisMismatch(Separator, Separator),
+	NoOperatorBase,
 }
 
 impl Display for Error {
@@ -40,6 +41,7 @@ impl Display for Error {
 			Error::TooManyOpenParentheses => write!(f, "too many open parentheses"),
 			Error::BlankExpression => write!(f, "blank expression"),
 			Error::ParenthesisMismatch(open, close) => write!(f, "open '{}' mismatched with close '{}'", open.get_symbol(), close.get_symbol()),
+			Error::NoOperatorBase => write!(f, "no operator base"),
 		}
 	}
 }

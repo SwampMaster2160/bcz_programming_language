@@ -1,6 +1,7 @@
 use std::{error, path::PathBuf};
+use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{self, AstNode, AstNodeVariant}, error::Error, token::{Separator, Token, TokenVariant}};
+use crate::{ast_node::{self, AstNode, AstNodeVariant, Operator}, error::Error, token::{OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
 
 #[derive(Debug)]
 enum ParseState {
@@ -10,15 +11,15 @@ enum ParseState {
 }
 
 impl ParseState {
-	fn is_open_parenthesis(&self) -> bool {
+	const fn is_open_parenthesis(&self) -> bool {
 		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(separator), .. }) if separator.is_open_parenthesis())
 	}
 
-	fn is_close_parenthesis(&self) -> bool {
+	const fn is_close_parenthesis(&self) -> bool {
 		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(separator), .. }) if separator.is_close_parenthesis())
 	}
 
-	fn get_start(&self) -> (usize, usize) {
+	const fn get_start(&self) -> (usize, usize) {
 		match self {
 			ParseState::Token(token) => token.start,
 			ParseState::AstNode(ast_node) => ast_node.start,
@@ -26,12 +27,36 @@ impl ParseState {
 		}
 	}
 
-	fn get_end(&self) -> (usize, usize) {
+	const fn get_end(&self) -> (usize, usize) {
 		match self {
 			ParseState::Token(token) => token.end,
 			ParseState::AstNode(ast_node) => ast_node.end,
 			ParseState::FunctionArgumentsOrParameters(_, _, end) => *end,
 		}
+	}
+}
+
+auto_const_array! {
+	const BINARY_OPERATOR_PRECEDENCE: [&'static [OperatorSymbol]; _] = [
+		&[OperatorSymbol::MultiplyDereference, OperatorSymbol::DivideReciprocal, OperatorSymbol::ModuloPercent],
+		&[OperatorSymbol::AddRead, OperatorSymbol::SubtractNegate],
+	];
+}
+
+const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Operator {
+	match (symbol, operator_type) {
+		(OperatorSymbol::AddRead, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Operator::IntegerAdd,
+		(OperatorSymbol::AddRead, OperatorType::FloatingPointBitwise) => Operator::FloatAdd,
+		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Operator::IntegerSubtract,
+		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Operator::FloatSubtract,
+		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Operator::IntegerMultiply,
+		(OperatorSymbol::MultiplyDereference, OperatorType::FloatingPointBitwise) => Operator::FloatMultiply,
+		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Operator::SignedDivide,
+		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Operator::UnsignedDivide,
+		(OperatorSymbol::DivideReciprocal, OperatorType::FloatingPointBitwise) => Operator::FloatDivide,
+		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Operator::SignedModulo,
+		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Operator::UnsignedModulo,
+		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Operator::FloatModulo,
 	}
 }
 
@@ -145,6 +170,29 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 		index += 1;
 	}
+	// Parse binary operators
+	for operator_precedence_level in BINARY_OPERATOR_PRECEDENCE {
+		// Search for operators in the precedence level
+		let mut index = 1;
+		while index < items_being_parsed.len().saturating_sub(1) {
+			if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, false), start, end }) = &items_being_parsed[index] {
+				let operator_symbol = match operator_symbol {
+					Some(operator_symbol) => *operator_symbol,
+					None => return Err((Error::NoOperatorBase, *start)),
+				};
+				if operator_precedence_level.contains(&operator_symbol) {
+					// If we find one
+					// Convert to AST operator
+					let operator = binary_operator_from_symbol(operator_symbol, *operator_type);
+					// Get left and right operands
+					let left_operand = items_being_parsed.remove(index - 1);
+					items_being_parsed.remove(index - 1);
+					let right_operand = items_being_parsed.remove(index - 1);
+				}
+			}
+			index += 1;
+		}
+	}
 	// Return
 	if items_being_parsed.len() > 1 {
 		todo!();
@@ -160,9 +208,15 @@ pub fn parse_tokens(tokens: Vec<Token>) -> Result<Box<[AstNode]>, (Error, (usize
 	// Wrap all the tokens in a parse state object
 	let items_being_parsed: Vec<ParseState> = tokens.into_iter()
 		.map(|token| match token {
-			// Identifier tokens should be converted to identifier AST node parse state object
+			// Identifier tokens should be converted to identifier AST node parse state objects
 			Token { variant: TokenVariant::Identifier(name), start, end } => ParseState::AstNode(AstNode {
 				variant: AstNodeVariant::Identifier(name),
+				start,
+				end,
+			}),
+			// Numerical tokens should be converted to constant AST node parse state objects
+			Token { variant: TokenVariant::NumericalLiteral(number), start, end } => ParseState::AstNode(AstNode {
+				variant: AstNodeVariant::Constant(number),
 				start,
 				end,
 			}),

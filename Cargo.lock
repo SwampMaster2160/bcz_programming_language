@@ -3,9 +3,21 @@
 version = 3
 
 [[package]]
+name = "auto-const-array"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62f7df18977a1ee03650ee4b31b4aefed6d56bac188760b6e37610400fe8d4bb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bcz_programming_language"
 version = "0.0.0"
 dependencies = [
+ "auto-const-array",
  "strum",
  "strum_macros",
 ]

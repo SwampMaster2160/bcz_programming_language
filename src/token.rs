@@ -19,7 +19,7 @@ pub enum Separator {
 }
 
 impl Separator {
-	pub fn get_symbol(&self) -> char {
+	pub const fn get_symbol(&self) -> char {
 		match self {
 			Self::Semicolon => ';',
 			Self::Comma => ',',
@@ -39,11 +39,11 @@ impl Separator {
 			.collect()
 	}
 
-	pub fn is_open_parenthesis(self) -> bool {
+	pub const fn is_open_parenthesis(self) -> bool {
 		matches!(self, Self::OpenParenthesis | Self::OpenSquareParenthesis | Self::OpenCurlyParenthesis)
 	}
 
-	pub fn is_close_parenthesis(self) -> bool {
+	pub const fn is_close_parenthesis(self) -> bool {
 		matches!(self, Self::CloseParenthesis | Self::CloseSquareParenthesis | Self::CloseCurlyParenthesis)
 	}
 }
@@ -54,7 +54,7 @@ pub enum Keyword {
 }
 
 impl Keyword {
-	pub fn get_symbol(self) -> &'static str {
+	pub const fn get_symbol(self) -> &'static str {
 		match self {
 			Self::EntryPoint => "entry_point",
 		}
@@ -67,7 +67,7 @@ impl Keyword {
 	}
 }
 
-#[derive(EnumIter, Clone, Copy, Debug)]
+#[derive(EnumIter, Clone, Copy, Debug, PartialEq, Eq)]
 /// A tokenized operator symbol, the meaning of each symbol depends if it is used as prefix, infix or suffix operator.
 pub enum OperatorSymbol {
 	AddRead = 1,
@@ -78,7 +78,7 @@ pub enum OperatorSymbol {
 }
 
 impl OperatorSymbol {
-	pub fn get_symbol(self) -> &'static str {
+	pub const fn get_symbol(self) -> &'static str {
 		match self {
 			Self::AddRead => "+",
 			Self::SubtractNegate => "-",
@@ -107,7 +107,7 @@ pub enum OperatorType {
 }
 
 impl OperatorType {
-	pub fn get_symbol(self) -> Option<char> {
+	pub const fn get_symbol(self) -> Option<char> {
 		match self {
 			Self::SignedLogicalShortCircuit => None,
 			Self::UnsignedLogicalNotShortCircuit => Some('$'),
