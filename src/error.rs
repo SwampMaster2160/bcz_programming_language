@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::token::Separator;
+use crate::token::{OperatorSymbol, Separator};
 
 pub enum Error {
 	InvalidShortArgument(String),
@@ -21,6 +21,9 @@ pub enum Error {
 	ParenthesisMismatch(Separator, Separator),
 	NoOperatorBase,
 	BinaryOperatorNotUsedOnExpressions,
+	UnaryOperatorNotUsedOnExpressions,
+	InvalidPrefixOperatorSymbol(OperatorSymbol),
+	InvalidInfixOperatorSymbol(OperatorSymbol),
 }
 
 impl Display for Error {
@@ -44,6 +47,9 @@ impl Display for Error {
 			Error::ParenthesisMismatch(open, close) => write!(f, "open '{}' mismatched with close '{}'", open.get_symbol(), close.get_symbol()),
 			Error::NoOperatorBase => write!(f, "no operator base"),
 			Error::BinaryOperatorNotUsedOnExpressions => write!(f, "binary operator used on non-expressions"),
+			Error::UnaryOperatorNotUsedOnExpressions => write!(f, "unary operator used on non-expressions"),
+			Error::InvalidPrefixOperatorSymbol(symbol) => write!(f, "invalid prefix operator symbol base \"{}\"", symbol.get_symbol()),
+			Error::InvalidInfixOperatorSymbol(symbol) => write!(f, "invalid infix operator symbol base \"{}\"", symbol.get_symbol()),
 		}
 	}
 }

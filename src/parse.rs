@@ -42,20 +42,31 @@ auto_const_array! {
 	];
 }
 
-const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Operator {
+const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operator> {
 	match (symbol, operator_type) {
-		(OperatorSymbol::AddRead, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Operator::IntegerAdd,
-		(OperatorSymbol::AddRead, OperatorType::FloatingPointBitwise) => Operator::FloatAdd,
-		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Operator::IntegerSubtract,
-		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Operator::FloatSubtract,
-		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Operator::IntegerMultiply,
-		(OperatorSymbol::MultiplyDereference, OperatorType::FloatingPointBitwise) => Operator::FloatMultiply,
-		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Operator::SignedDivide,
-		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Operator::UnsignedDivide,
-		(OperatorSymbol::DivideReciprocal, OperatorType::FloatingPointBitwise) => Operator::FloatDivide,
-		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Operator::SignedModulo,
-		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Operator::UnsignedModulo,
-		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Operator::FloatModulo,
+		(OperatorSymbol::AddRead, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerAdd),
+		(OperatorSymbol::AddRead, OperatorType::FloatingPointBitwise) => Some(Operator::FloatAdd),
+		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerSubtract),
+		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operator::FloatSubtract),
+		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerMultiply),
+		(OperatorSymbol::MultiplyDereference, OperatorType::FloatingPointBitwise) => Some(Operator::FloatMultiply),
+		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedDivide),
+		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::UnsignedDivide),
+		(OperatorSymbol::DivideReciprocal, OperatorType::FloatingPointBitwise) => Some(Operator::FloatDivide),
+		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedModulo),
+		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::UnsignedModulo),
+		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Some(Operator::FloatModulo),
+		//_ => None,
+	}
+}
+
+const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operator> {
+	match (symbol, operator_type) {
+		(OperatorSymbol::AddRead, _) => Some(Operator::Read),
+		(OperatorSymbol::MultiplyDereference, _) => Some(Operator::Dereference),
+		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerNegate),
+		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operator::FloatNegate),
+		_ => None,
 	}
 }
 
@@ -169,6 +180,53 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 		index += 1;
 	}
+	// TODO: Parse function calls
+	// Parse unary prefix operators
+	for index in (0..items_being_parsed.len().saturating_sub(1)).rev() {
+		// Make sure the item is an operator token
+		let (operator_symbol, operator_type, is_assignment, start) = match &items_being_parsed[index] {
+			ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment), start, end: _ }) =>
+				(*operator_symbol, *operator_type, *is_assignment, *start),
+				_ => continue,
+		};
+		// Make sure the item to the left is not a parsed expression
+		match index.checked_sub(1) {
+			None => {},
+			Some(index) => match &items_being_parsed[index] {
+				ParseState::AstNode(..) => continue,
+				_ => {},
+			},
+		}
+		// Make sure it's not an assignment
+		if is_assignment {
+			return Err((Error::FeatureNotYetImplemented, start));
+		}
+		// Make sure the base operator is Some
+		let operator_symbol = match operator_symbol {
+			Some(operator_symbol) => operator_symbol,
+			None => return Err((Error::NoOperatorBase, start)),
+		};
+		// Get operator
+		let operator = match prefix_operator_from_symbol(operator_symbol, operator_type) {
+			Some(operator) => operator,
+			None => return Err((Error::InvalidPrefixOperatorSymbol(operator_symbol), start)),
+		};
+		// Get operand
+		let operand = items_being_parsed.remove(index + 1);
+		let operand = match operand {
+			ParseState::AstNode(ast_node) => ast_node,
+			_ => return Err((Error::BinaryOperatorNotUsedOnExpressions, operand.get_start())),
+		};
+		// Construct operator node
+		let operator_ast_node = AstNode {
+			start,
+			end: operand.end,
+			variant: AstNodeVariant::Operator(Some(operator), [operand].into(), is_assignment),
+		};
+		// Insert back into list
+		items_being_parsed[index] = ParseState::AstNode(operator_ast_node);
+	}
+	// TODO: Parse unary postfix operators
 	// Parse non-augmented binary operators
 	for operator_precedence_level in BINARY_OPERATOR_PRECEDENCE {
 		// Search for operators in the precedence level
@@ -182,7 +240,10 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 				if operator_precedence_level.contains(&operator_symbol) {
 					// If we find one
 					// Convert to AST operator
-					let operator = binary_operator_from_symbol(operator_symbol, *operator_type);
+					let operator = match binary_operator_from_symbol(operator_symbol, *operator_type) {
+						Some(operator) => operator,
+						None => return Err((Error::InvalidInfixOperatorSymbol(operator_symbol), *start)),
+					};
 					// Get left and right operands
 					let left_operand = items_being_parsed.remove(index - 1);
 					items_being_parsed.remove(index - 1);
@@ -209,15 +270,19 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			index += 1;
 		}
 	}
+	// TODO: Parse ternary operators
+	// TODO: Parse function definitions
 	// Parse augmented binary operators
-	// Search backwards from the second to last item to the second item
 	let mut index = items_being_parsed.len().saturating_sub(2);
 	while index > 0 {
-		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, true), start: _, end: _ }) = &items_being_parsed[index] {
+		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, true), start, end: _ }) = &items_being_parsed[index] {
 			// If we find one
 			// Convert to AST operator
 			let operator = match operator_symbol {
-				Some(operator_symbol) => Some(binary_operator_from_symbol(*operator_symbol, *operator_type)),
+				Some(operator_symbol) => Some(match binary_operator_from_symbol(*operator_symbol, *operator_type) {
+					Some(operator) => operator,
+					None => return Err((Error::BinaryOperatorNotUsedOnExpressions, *start)),
+				}),
 				None => None,
 			};
 			// Get left and right operands
