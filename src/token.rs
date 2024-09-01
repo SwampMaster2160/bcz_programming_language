@@ -118,7 +118,7 @@ impl OperatorType {
 	pub fn get_symbols_map() -> HashMap<char, Self> {
 		Self::iter()
 			.map(|operator_type| (operator_type.get_symbol(), operator_type))
-			.filter(|(symbol, operator_type)| symbol.is_some())
+			.filter(|(symbol, _)| symbol.is_some())
 			.map(|(symbol, operator_type)| (symbol.unwrap(), operator_type))
 			.collect()
 	}

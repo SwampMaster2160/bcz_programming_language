@@ -70,6 +70,12 @@ const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 	}
 }
 
+const fn postfix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operator> {
+	match (symbol, operator_type) {
+		_ => None,
+	}
+}
+
 /// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments_or_parameters` is `false` or from comma separated function arguments/parameters if `true`.
 /// The `bool` returned is `true` if the bracketed area ends in a separator.
 fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool) -> Result<(Box<[AstNode]>, bool), (Error, (usize, usize))> {
@@ -226,7 +232,46 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		// Insert back into list
 		items_being_parsed[index] = ParseState::AstNode(operator_ast_node);
 	}
-	// TODO: Parse unary postfix operators
+	// Parse unary postfix operators
+	let mut index = 1;
+	while index < items_being_parsed.len().saturating_sub(1) {
+		// Make sure the item is an operator token
+		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment), start, end }) = &items_being_parsed[index] {
+			let (operator_symbol, operator_type, is_assignment, start, end) = (*operator_symbol, *operator_type, *is_assignment, *start, *end);
+			// Make sure the item to the right is not a parsed expression
+			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..)) {
+				// Assignments not yet implemented
+				if is_assignment {
+					return Err((Error::FeatureNotYetImplemented, start));
+				}
+				// Make sure the base operator is Some
+				let operator_symbol = match operator_symbol {
+					Some(operator_symbol) => operator_symbol,
+					None => return Err((Error::NoOperatorBase, start)),
+				};
+				// Get operator
+				let operator = match postfix_operator_from_symbol(operator_symbol, operator_type) {
+					Some(operator) => operator,
+					None => return Err((Error::InvalidPrefixOperatorSymbol(operator_symbol), start)),
+				};
+				// Get operand
+				let operand = items_being_parsed.remove(index - 1);
+				let operand = match operand {
+					ParseState::AstNode(ast_node) => ast_node,
+					_ => return Err((Error::BinaryOperatorNotUsedOnExpressions, operand.get_start())),
+				};
+				// Construct operator node
+				let operator_ast_node = AstNode {
+					start: operand.start,
+					end,
+					variant: AstNodeVariant::Operator(Some(operator), [operand].into(), is_assignment),
+				};
+				// Insert back into list
+				items_being_parsed[index] = ParseState::AstNode(operator_ast_node);
+			}
+		};
+		index += 1;
+	}
 	// Parse non-augmented binary operators
 	for operator_precedence_level in BINARY_OPERATOR_PRECEDENCE {
 		// Search for operators in the precedence level
