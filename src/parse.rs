@@ -267,7 +267,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					variant: AstNodeVariant::Operator(Some(operator), [operand].into(), is_assignment),
 				};
 				// Insert back into list
-				items_being_parsed[index] = ParseState::AstNode(operator_ast_node);
+				items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
 			}
 		};
 		index += 1;
