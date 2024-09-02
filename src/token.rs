@@ -175,10 +175,35 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 				if !code.is_ascii() {
 					return Err(Error::InvalidEscapeSequence(sequence.into()));
 				}
+				if code.len() != 2 {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
 				match u8::from_str_radix(&code, 16) {
 					Ok(value) => return Ok((value.into(), 4)),
 					Err(_) => return Err(Error::InvalidEscapeSequence(sequence.into())),
 				}
+			}
+			// Octal char
+			'o' => {
+				if sequence.len() < 5 {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				let code: String = sequence.chars().skip(2).take(3).collect();
+				if !code.is_ascii() {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				if code.len() != 3 {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				let value = match u32::from_str_radix(&code, 8) {
+					Ok(value) => value,
+					Err(_) => return Err(Error::InvalidEscapeSequence(sequence.into())),
+				};
+				let value = match char::from_u32(value) {
+					Some(value) => value,
+					None => return Err(Error::InvalidEscapeSequence(sequence.into())),
+				};
+				return Ok((value, 5));
 			}
 			// Unicode values
 			'u' => {
@@ -211,6 +236,9 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 					if !code.is_ascii() {
 						return Err(Error::InvalidEscapeSequence(sequence.into()));
 					}
+					if code.len() != 4 {
+						return Err(Error::InvalidEscapeSequence(sequence.into()));
+					}
 					let value = match u32::from_str_radix(&code, 16) {
 						Ok(value) => value,
 						Err(_) => return Err(Error::InvalidEscapeSequence(sequence.into())),
@@ -229,6 +257,9 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 				}
 				let code: String = sequence.chars().skip(2).take(6).collect();
 				if !code.is_ascii() {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				if code.len() != 6 {
 					return Err(Error::InvalidEscapeSequence(sequence.into()));
 				}
 				let value = match u32::from_str_radix(&code, 16) {
