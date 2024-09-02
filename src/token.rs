@@ -143,6 +143,7 @@ pub struct Token {
 	pub end: (usize, usize),
 }
 
+/// Reads a single char that may be escaped, returns it and it's source length in bytes.
 fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 	let first_char = sequence.chars().next().unwrap();
 	if first_char == '\\' {
@@ -152,6 +153,94 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 		return Ok((match sequence.chars().nth(1).unwrap() {
 			'\\' => '\\',
 			'\'' => '\'',
+			'"' => '"',
+			'0' => '\0',
+			'n' => '\n',
+			'r' => '\r',
+			't' => '\t',
+			'?' => '?',
+			'a' => '\x07',
+			'b' => '\x08',
+			'e' => '\x1B',
+			'f' => '\x0C',
+			'v' => '\x0B',
+			's' => ' ',
+			'd' => '\x7F',
+			// Single byte unicode values
+			'x' => {
+				if sequence.len() < 4 {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				let code: String = sequence.chars().skip(2).take(2).collect();
+				if !code.is_ascii() {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				match u8::from_str_radix(&code, 16) {
+					Ok(value) => return Ok((value.into(), 4)),
+					Err(_) => return Err(Error::InvalidEscapeSequence(sequence.into())),
+				}
+			}
+			// Unicode values
+			'u' => {
+				let next_char = match sequence.chars().nth(2) {
+					Some(next_char) => next_char,
+					None => return Err(Error::InvalidEscapeSequence(sequence.into())),
+				};
+				// 1-6 digit value
+				if next_char == '{' {
+					let escape_length = sequence.find('}')
+						.ok_or(Error::InvalidEscapeSequence(sequence.into()))? + 1;
+					if escape_length > 10 || escape_length < 5 {
+						return Err(Error::InvalidEscapeSequence(sequence.into()));
+					}
+					let digits = &sequence[3..escape_length - 1];
+					let value = u32::from_str_radix(digits, 16)
+						.map_err(|_| Error::InvalidEscapeSequence(sequence.into()))?;
+					let value = match char::from_u32(value) {
+						Some(value) => value,
+						None => return Err(Error::InvalidEscapeSequence(sequence.into())),
+					};
+					return Ok((value, escape_length));
+				}
+				// 4 digit value
+				else {
+					if sequence.len() < 6 {
+						return Err(Error::InvalidEscapeSequence(sequence.into()));
+					}
+					let code: String = sequence.chars().skip(2).take(4).collect();
+					if !code.is_ascii() {
+						return Err(Error::InvalidEscapeSequence(sequence.into()));
+					}
+					let value = match u32::from_str_radix(&code, 16) {
+						Ok(value) => value,
+						Err(_) => return Err(Error::InvalidEscapeSequence(sequence.into())),
+					};
+					let value = match char::from_u32(value) {
+						Some(value) => value,
+						None => return Err(Error::InvalidEscapeSequence(sequence.into())),
+					};
+					return Ok((value, 6));
+				}
+			}
+			// 6 digit unicode value
+			'U' => {
+				if sequence.len() < 8 {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				let code: String = sequence.chars().skip(2).take(6).collect();
+				if !code.is_ascii() {
+					return Err(Error::InvalidEscapeSequence(sequence.into()));
+				}
+				let value = match u32::from_str_radix(&code, 16) {
+					Ok(value) => value,
+					Err(_) => return Err(Error::InvalidEscapeSequence(sequence.into())),
+				};
+				let value = match char::from_u32(value) {
+					Some(value) => value,
+					None => return Err(Error::InvalidEscapeSequence(sequence.into())),
+				};
+				return Ok((value, 8));
+			}
 			_ => return Err(Error::InvalidEscapeSequence(sequence.into())),
 		}, 2));
 	}
@@ -185,9 +274,11 @@ impl Token {
 			'\'' => (
 				TokenVariantDiscriminants::NumericalLiteral,
 				{
-					match line_content {
-						"'''" | "'\\'" => 3,
-						_ => match (&line_content[1..]).find('\'') {
+					if line_content.starts_with("'''") || line_content.starts_with("'\\'") {
+						3
+					}
+					else {
+						match (&line_content[1..]).find('\'') {
 							Some(length_in_bytes) => length_in_bytes + 2,
 							None => return Err(Error::UnterminatedCharLiteral),
 						}
@@ -212,7 +303,13 @@ impl Token {
 						"\'" => '\'' as u64,
 						"\\" => '\\' as u64,
 						"" => return Err(Error::EmptyCharLiteral),
-						_ => escaped_char_value(content)?.0 as u64
+						_ => {
+							let (value, length) = escaped_char_value(content)?;
+							if length != token_string.len() - 2 {
+								return Err(Error::MultipleCharsInCharLiteral);
+							}
+							value as u64
+						}
 					};
 					if value > main_data.int_max_value {
 						return Err(Error::NumericalLiteralTooLarge);

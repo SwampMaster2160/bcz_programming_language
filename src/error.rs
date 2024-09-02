@@ -31,6 +31,7 @@ pub enum Error {
 	EmptyCharLiteral,
 	NothingEscaped,
 	InvalidEscapeSequence(String),
+	MultipleCharsInCharLiteral,
 }
 
 impl Display for Error {
@@ -64,6 +65,7 @@ impl Display for Error {
 			Error::EmptyCharLiteral => write!(f, "empty char literal"),
 			Error::NothingEscaped => write!(f, "nothing escaped"),
 			Error::InvalidEscapeSequence(sequence) => write!(f, "invalid escape sequence \"{sequence}\""),
+			Error::MultipleCharsInCharLiteral => write!(f, "multiple chars in char literal"),
 		}
 	}
 }
