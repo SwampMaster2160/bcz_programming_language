@@ -1,3 +1,5 @@
+use std::mem::take;
+
 use auto_const_array::auto_const_array;
 
 use crate::{ast_node::{AstNode, AstNodeVariant, Operator}, error::Error, token::{OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
@@ -239,7 +241,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment), start, end }) = &items_being_parsed[index] {
 			let (operator_symbol, operator_type, is_assignment, start, end) = (*operator_symbol, *operator_type, *is_assignment, *start, *end);
 			// Make sure the item to the right is not a parsed expression
-			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..)) {
+			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..) | ParseState::FunctionArgumentsOrParameters(..)) {
 				// Assignments not yet implemented
 				if is_assignment {
 					return Err((Error::FeatureNotYetImplemented("augmented suffix operators".into()), start));
@@ -317,7 +319,37 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 	}
 	// TODO: Parse ternary operators
-	// TODO: Parse function definitions
+	// Parse function definitions
+	for index in (0..items_being_parsed.len()).rev() {
+		// Make sure the item is a function arguments/parameters item
+		let (parameters_start, parameters_end) = match &items_being_parsed[index] {
+			ParseState::FunctionArgumentsOrParameters(_, parameters_start, parameters_end) =>
+				(*parameters_start, *parameters_end),
+				_ => continue,
+		};
+		// Get function body
+		if index == items_being_parsed.len().saturating_sub(1) {
+			return Err((Error::FunctionParametersWithoutBody, parameters_end));
+		}
+		let function_body = items_being_parsed.remove(index + 1);
+		let function_body_ast_node = match function_body {
+			ParseState::AstNode(ast_node) => ast_node,
+			_ => return Err((Error::FunctionParametersWithoutBody, function_body.get_start())),
+		};
+		// Get function parameters
+		let function_parameters = match &mut items_being_parsed[index] {
+			ParseState::FunctionArgumentsOrParameters(arguments_or_parameters, _, _) => take(arguments_or_parameters),
+			_ => unreachable!(),
+		};
+		// Construct function node
+		let function_ast_node = AstNode {
+			start: parameters_start,
+			end: function_body_ast_node.end,
+			variant: AstNodeVariant::FunctionDefinition(function_parameters, Box::new(function_body_ast_node)),
+		};
+		// Insert back into list
+		items_being_parsed[index] = ParseState::AstNode(function_ast_node);
+	}
 	// Parse augmented binary operators
 	let mut index = items_being_parsed.len().saturating_sub(2);
 	while index > 0 {

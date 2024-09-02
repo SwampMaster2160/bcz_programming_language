@@ -26,6 +26,7 @@ pub enum Error {
 	InvalidSeparatorLocation(Separator),
 	InvalidPrefixOperatorSymbol(OperatorSymbol),
 	InvalidInfixOperatorSymbol(OperatorSymbol),
+	FunctionParametersWithoutBody,
 }
 
 impl Display for Error {
@@ -54,6 +55,7 @@ impl Display for Error {
 			Error::InvalidInfixOperatorSymbol(symbol) => write!(f, "invalid infix operator symbol base \"{}\"", symbol.get_symbol()),
 			Error::OperatorUsedOnNothing => write!(f, "operator used on nothing"),
 			Error::InvalidSeparatorLocation(separator) => write!(f, "separator \'{}\' does not belong here", separator.get_symbol()),
+			Error::FunctionParametersWithoutBody => write!(f, "function parameters without body"),
 		}
 	}
 }
