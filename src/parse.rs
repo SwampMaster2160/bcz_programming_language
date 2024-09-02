@@ -188,7 +188,42 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 		index += 1;
 	}
-	// TODO: Parse function calls
+	// Parse function calls
+	let mut index = 1;
+	while index < items_being_parsed.len() {
+		// Make sure the item is a function arguments/parameters item
+		if let ParseState::FunctionArgumentsOrParameters(_, arguments_start, arguments_end) = &items_being_parsed[index] {
+			let (_, arguments_end) = (*arguments_start, *arguments_end);
+			// Make sure the item to the left is not a parsed expression
+			if matches!(&items_being_parsed[index - 1], ParseState::AstNode(..)) {
+				// Get function pointer
+				let function_pointer = items_being_parsed.remove(index - 1);
+				let function_pointer = match function_pointer {
+					ParseState::AstNode(ast_node) => ast_node,
+					_ => {
+						index += 1;
+						continue;
+					}
+				};
+				// Get function parameters
+				let parameters = match &mut items_being_parsed[index - 1] {
+					ParseState::FunctionArgumentsOrParameters(parameters, _, _) => take(parameters),
+					_ => unreachable!(),
+				};
+				// Construct function call node
+				let operator_ast_node = AstNode {
+					start: function_pointer.start,
+					end: arguments_end,
+					variant: AstNodeVariant::FunctionCall(Box::new(function_pointer), parameters),
+				};
+				// Insert back into list
+				items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
+				index -= 1;
+				continue;
+			}
+		};
+		index += 1;
+	}
 	// Parse unary prefix operators
 	for index in (0..items_being_parsed.len().saturating_sub(1)).rev() {
 		// Make sure the item is an operator token
