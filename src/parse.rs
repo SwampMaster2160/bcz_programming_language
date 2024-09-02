@@ -178,7 +178,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					let (expressions, result_is_undefined) = parse_separated_expressions(parenthesised_items, false)?;
 					ParseState::AstNode(AstNode { start: open_parenthesis.get_start(), end: close_parenthesis.get_end(), variant: AstNodeVariant::Block(expressions, result_is_undefined) })
 				},
-				Separator::OpenSquareParenthesis => return Err((Error::FeatureNotYetImplemented, open_parenthesis.get_start())),
+				Separator::OpenSquareParenthesis => return Err((Error::FeatureNotYetImplemented("index operator".into()), open_parenthesis.get_start())),
 				_ => unreachable!(),
 			};
 			// Insert result of parse back into list
@@ -205,7 +205,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 		// Make sure it's not an assignment
 		if is_assignment {
-			return Err((Error::FeatureNotYetImplemented, start));
+			return Err((Error::FeatureNotYetImplemented("augmented prefix operators".into()), start));
 		}
 		// Make sure the base operator is Some
 		let operator_symbol = match operator_symbol {
@@ -242,7 +242,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..)) {
 				// Assignments not yet implemented
 				if is_assignment {
-					return Err((Error::FeatureNotYetImplemented, start));
+					return Err((Error::FeatureNotYetImplemented("augmented suffix operators".into()), start));
 				}
 				// Make sure the base operator is Some
 				let operator_symbol = match operator_symbol {
@@ -357,13 +357,21 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		index -= 1;
 	}
 	// Return
-	if items_being_parsed.len() > 1 {
-		todo!();
+	if items_being_parsed.len() == 1 && matches!(&items_being_parsed[0], ParseState::AstNode(..)) {
+		match items_being_parsed.into_iter().next() {
+			Some(ParseState::AstNode(ast_node)) => return Ok(ast_node),
+			_ => unreachable!(),
+		}
 	}
-	match items_being_parsed.into_iter().next() {
-		Some(ParseState::AstNode(ast_node)) => Ok(ast_node),
-		_ => todo!(),
+	for item in items_being_parsed.iter() {
+		match item {
+			ParseState::Token(Token { variant: TokenVariant::Operator(..), start, .. }) => return Err((Error::OperatorUsedOnNothing, *start)),
+			ParseState::Token(Token { variant: TokenVariant::Separator(..), start, .. }) => return Err((Error::OperatorUsedOnNothing, *start)),
+			_ => {},
+		}
 	}
+	let start = items_being_parsed.first().unwrap().get_start();
+	return Err((Error::FeatureNotYetImplemented("feature".into()), start));
 }
 
 /// Takes in the tokens from tokenizing a file and parses each semi-colon separated global expression into a returned AST node.

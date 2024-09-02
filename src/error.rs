@@ -8,7 +8,7 @@ pub enum Error {
 	NoOptionContinuation,
 	CouldNotOpenFile,
 	CouldNotReadLine,
-	FeatureNotYetImplemented,
+	FeatureNotYetImplemented(String),
 	InvalidTokenStartChar(char),
 	InvalidNumericalLiteralBase(char),
 	InvalidDigitForBase(char, u8),
@@ -22,6 +22,8 @@ pub enum Error {
 	NoOperatorBase,
 	BinaryOperatorNotUsedOnExpressions,
 	UnaryOperatorNotUsedOnExpressions,
+	OperatorUsedOnNothing,
+	InvalidSeparatorLocation(Separator),
 	InvalidPrefixOperatorSymbol(OperatorSymbol),
 	InvalidInfixOperatorSymbol(OperatorSymbol),
 }
@@ -34,7 +36,7 @@ impl Display for Error {
 			Error::NoOptionContinuation => write!(f, "no option continuation"),
 			Error::CouldNotOpenFile => write!(f, "could not open file"),
 			Error::CouldNotReadLine => write!(f, "could not read line"),
-			Error::FeatureNotYetImplemented => write!(f, "feature not yet implemented"),
+			Error::FeatureNotYetImplemented(feature) => write!(f, "{feature} not yet implemented"),
 			Error::InvalidTokenStartChar(c) => write!(f, "invalid token start character '{c}'"),
 			Error::InvalidNumericalLiteralBase(c) => write!(f, "invalid numerical literal base \"0{c}\""),
 			Error::InvalidDigitForBase(c, base) => write!(f, "invalid digit '{c}' for base {base}"),
@@ -50,6 +52,8 @@ impl Display for Error {
 			Error::UnaryOperatorNotUsedOnExpressions => write!(f, "unary operator used on non-expressions"),
 			Error::InvalidPrefixOperatorSymbol(symbol) => write!(f, "invalid prefix operator symbol base \"{}\"", symbol.get_symbol()),
 			Error::InvalidInfixOperatorSymbol(symbol) => write!(f, "invalid infix operator symbol base \"{}\"", symbol.get_symbol()),
+			Error::OperatorUsedOnNothing => write!(f, "operator used on nothing"),
+			Error::InvalidSeparatorLocation(separator) => write!(f, "separator \'{}\' does not belong here", separator.get_symbol()),
 		}
 	}
 }

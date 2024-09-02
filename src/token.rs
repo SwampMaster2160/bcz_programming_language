@@ -148,8 +148,8 @@ impl Token {
 	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: usize, column_number: usize) -> Result<(Self, &'a str), Error> {
 		// Get the token varient descriminant and length in bytes
 		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next().expect("Function input should not be empty") {
-			_ if line_content.starts_with("//") => return Err(Error::FeatureNotYetImplemented),
-			_ if line_content.starts_with("/*") => return Err(Error::FeatureNotYetImplemented),
+			_ if line_content.starts_with("//") => return Err(Error::FeatureNotYetImplemented("comments".into())),
+			_ if line_content.starts_with("/*") => return Err(Error::FeatureNotYetImplemented("comments".into())),
 			first_char if first_char.is_ascii_alphabetic() || first_char == '_' => (
 				TokenVariantDiscriminants::Identifier,
 				line_content.find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()),
@@ -167,8 +167,8 @@ impl Token {
 				TokenVariantDiscriminants::Keyword,
 				&line_content[1..].find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()) + 1,
 			),
-			'\'' => return Err(Error::FeatureNotYetImplemented),
-			'"' => return Err(Error::FeatureNotYetImplemented),
+			'\'' => return Err(Error::FeatureNotYetImplemented("char literals".into())),
+			'"' => return Err(Error::FeatureNotYetImplemented("string literals".into())),
 			invalid_char => return Err(Error::InvalidTokenStartChar(invalid_char)),
 		};
 		// Split the input string into the token and the remaining string
@@ -201,7 +201,7 @@ impl Token {
 				};
 				// Parse number
 				if is_float {
-					return Err(Error::FeatureNotYetImplemented);
+					return Err(Error::FeatureNotYetImplemented("float literals".into()));
 				}
 				else {
 					// Parse number char by char
