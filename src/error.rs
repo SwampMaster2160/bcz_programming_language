@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{f32::consts::E, fmt::Display};
 
 use crate::token::{OperatorSymbol, Separator};
 
@@ -27,6 +27,10 @@ pub enum Error {
 	InvalidPrefixOperatorSymbol(OperatorSymbol),
 	InvalidInfixOperatorSymbol(OperatorSymbol),
 	FunctionParametersWithoutBody,
+	UnterminatedCharLiteral,
+	EmptyCharLiteral,
+	NothingEscaped,
+	InvalidEscapeSequence(String),
 }
 
 impl Display for Error {
@@ -56,6 +60,10 @@ impl Display for Error {
 			Error::OperatorUsedOnNothing => write!(f, "operator used on nothing"),
 			//Error::InvalidSeparatorLocation(separator) => write!(f, "separator \'{}\' does not belong here", separator.get_symbol()),
 			Error::FunctionParametersWithoutBody => write!(f, "function parameters without body"),
+			Error::UnterminatedCharLiteral => write!(f, "unterminated char literal"),
+			Error::EmptyCharLiteral => write!(f, "empty char literal"),
+			Error::NothingEscaped => write!(f, "nothing escaped"),
+			Error::InvalidEscapeSequence(sequence) => write!(f, "invalid escape sequence \"{sequence}\""),
 		}
 	}
 }

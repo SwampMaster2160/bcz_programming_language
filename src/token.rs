@@ -143,6 +143,21 @@ pub struct Token {
 	pub end: (usize, usize),
 }
 
+fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
+	let first_char = sequence.chars().next().unwrap();
+	if first_char == '\\' {
+		if sequence.len() == 1 {
+			return Err(Error::NothingEscaped);
+		}
+		return Ok((match sequence.chars().nth(1).unwrap() {
+			'\\' => '\\',
+			'\'' => '\'',
+			_ => return Err(Error::InvalidEscapeSequence(sequence.into())),
+		}, 2));
+	}
+	Ok((first_char, first_char.len_utf8()))
+}
+
 impl Token {
 	/// Takes in a string slice `line_content` and tokenizes the first token in the string. Returns the tokenized token and the input string slice with the tokenized chars removed.
 	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: usize, column_number: usize) -> Result<(Self, &'a str), Error> {
@@ -167,7 +182,18 @@ impl Token {
 				TokenVariantDiscriminants::Keyword,
 				&line_content[1..].find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()) + 1,
 			),
-			'\'' => return Err(Error::FeatureNotYetImplemented("char literals".into())),
+			'\'' => (
+				TokenVariantDiscriminants::NumericalLiteral,
+				{
+					match line_content {
+						"'''" | "'\\'" => 3,
+						_ => match (&line_content[1..]).find('\'') {
+							Some(length_in_bytes) => length_in_bytes + 2,
+							None => return Err(Error::UnterminatedCharLiteral),
+						}
+					}
+				},
+			),
 			'"' => return Err(Error::FeatureNotYetImplemented("string literals".into())),
 			invalid_char => return Err(Error::InvalidTokenStartChar(invalid_char)),
 		};
@@ -179,49 +205,65 @@ impl Token {
 			TokenVariantDiscriminants::Identifier => TokenVariant::Identifier(token_string.into()),
 			TokenVariantDiscriminants::Separator => TokenVariant::Separator(main_data.char_to_separator_mapping[&first_char]),
 			TokenVariantDiscriminants::NumericalLiteral => TokenVariant::NumericalLiteral({
-				// Get the base from the number prefix
-				let (has_prefix, base, is_float) = if first_char == '0' {
-					match token_string.chars().nth(1) {
-						None => (false, 10, false),
-						Some(second_char) if second_char.is_ascii_digit() => (false, 10, false),
-						Some('x') => (true, 16, false),
-						Some('o') => (true, 8, false),
-						Some('b') => (true, 2, false),
-						Some('f') => (true, 10, true),
-						Some(invalid_char) => return Err(Error::InvalidNumericalLiteralBase(invalid_char)),
+				// If we have a char literal
+				if first_char == '\'' {
+					let content = &token_string[1..token_string.len() - 1];
+					let value = match content {
+						"\'" => '\'' as u64,
+						"\\" => '\\' as u64,
+						"" => return Err(Error::EmptyCharLiteral),
+						_ => escaped_char_value(content)?.0 as u64
+					};
+					if value > main_data.int_max_value {
+						return Err(Error::NumericalLiteralTooLarge);
 					}
+					value
 				}
+				// If we have a numerical literal
 				else {
-					(false, 10, false)
-				};
-				// Remove the prefix if it has one
-				let string_without_prefix = match has_prefix {
-					true => &token_string[2..],
-					false => token_string,
-				};
-				// Parse number
-				if is_float {
-					return Err(Error::FeatureNotYetImplemented("float literals".into()));
-				}
-				else {
-					// Parse number char by char
-					let mut out = 0u64;
-					for chr in string_without_prefix.chars() {
-						// Skip underscores
-						if chr == '_' {
-							continue;
-						}
-						// Parse digit
-						match chr.to_digit(base) {
-							Some(digit) => out = match out.checked_mul(base as u64).map(|value| value.checked_add(digit as u64)).flatten() {
-								Some(value) if value > main_data.int_max_value => return Err(Error::NumericalLiteralTooLarge),
-								Some(value) => value,
-								None => return Err(Error::NumericalLiteralTooLarge),
-							},
-							None => return Err(Error::InvalidDigitForBase(chr, base as u8)),
+					let (has_prefix, base, is_float) = if first_char == '0' {
+						match token_string.chars().nth(1) {
+							None => (false, 10, false),
+							Some(second_char) if second_char.is_ascii_digit() => (false, 10, false),
+							Some('x') => (true, 16, false),
+							Some('o') => (true, 8, false),
+							Some('b') => (true, 2, false),
+							Some('f') => (true, 10, true),
+							Some(invalid_char) => return Err(Error::InvalidNumericalLiteralBase(invalid_char)),
 						}
 					}
-					out
+					else {
+						(false, 10, false)
+					};
+					// Remove the prefix if it has one
+					let string_without_prefix = match has_prefix {
+						true => &token_string[2..],
+						false => token_string,
+					};
+					// Parse number
+					if is_float {
+						return Err(Error::FeatureNotYetImplemented("float literals".into()));
+					}
+					else {
+						// Parse number char by char
+						let mut out = 0u64;
+						for chr in string_without_prefix.chars() {
+							// Skip underscores
+							if chr == '_' {
+								continue;
+							}
+							// Parse digit
+							match chr.to_digit(base) {
+								Some(digit) => out = match out.checked_mul(base as u64).map(|value| value.checked_add(digit as u64)).flatten() {
+									Some(value) if value > main_data.int_max_value => return Err(Error::NumericalLiteralTooLarge),
+									Some(value) => value,
+									None => return Err(Error::NumericalLiteralTooLarge),
+								},
+								None => return Err(Error::InvalidDigitForBase(chr, base as u8)),
+							}
+						}
+						out
+					}
 				}
 			}),
 			TokenVariantDiscriminants::Keyword => TokenVariant::Keyword(match main_data.str_to_keyword_mapping.get(&token_string[1..]) {
