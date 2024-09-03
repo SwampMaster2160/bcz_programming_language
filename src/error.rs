@@ -1,4 +1,4 @@
-use std::{f32::consts::E, fmt::Display};
+use std::fmt::Display;
 
 use crate::token::{OperatorSymbol, Separator};
 
@@ -32,6 +32,7 @@ pub enum Error {
 	NothingEscaped,
 	InvalidEscapeSequence(String),
 	MultipleCharsInCharLiteral,
+	UnterminatedStringLiteral,
 }
 
 impl Display for Error {
@@ -66,6 +67,7 @@ impl Display for Error {
 			Error::NothingEscaped => write!(f, "nothing escaped"),
 			Error::InvalidEscapeSequence(sequence) => write!(f, "invalid escape sequence \"{sequence}\""),
 			Error::MultipleCharsInCharLiteral => write!(f, "multiple chars in char literal"),
+			Error::UnterminatedStringLiteral => write!(f, "unterminated string literal"),
 		}
 	}
 }

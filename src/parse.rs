@@ -452,6 +452,12 @@ pub fn parse_tokens(tokens: Vec<Token>) -> Result<Box<[AstNode]>, (Error, (usize
 				start,
 				end,
 			}),
+			// String tokens should be converted to string AST node parse state objects
+			Token { variant: TokenVariant::StringLiteral(string), start, end } => ParseState::AstNode(AstNode {
+				variant: AstNodeVariant::String(string),
+				start,
+				end,
+			}),
 			// Numerical tokens should be converted to constant AST node parse state objects
 			Token { variant: TokenVariant::NumericalLiteral(number), start, end } => ParseState::AstNode(AstNode {
 				variant: AstNodeVariant::Constant(number),

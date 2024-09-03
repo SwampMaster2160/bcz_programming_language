@@ -34,6 +34,8 @@ pub enum AstNodeVariant {
 	FunctionCall(Box<AstNode>, Box<[AstNode]>),
 	/// A list of parameters for a function definition and the function body.
 	FunctionDefinition(Box<[AstNode]>, Box<AstNode>),
+	/// A string literal.
+	String(Box<str>),
 }
 
 #[derive(Debug)]
@@ -56,7 +58,8 @@ impl AstNode {
 			AstNodeVariant::Constant(value) => print!(", value: {}", value),
 			AstNodeVariant::FunctionCall(_, _) => {},
 			AstNodeVariant::FunctionDefinition(_, _) => {},
-			AstNodeVariant::Identifier(name) => print!(", name: {}", name),
+			AstNodeVariant::Identifier(name) => print!(", name: {name}"),
+			AstNodeVariant::String(string_value) => print!(", string_value: {string_value:?}"),
 			AstNodeVariant::Operator(operator, _, is_assignment) => print!(", operator: {:?}, is_assignment: {:?}", operator, is_assignment),
 		}
 		println!(" {}", '}');
@@ -81,6 +84,7 @@ impl AstNode {
 			}
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::Identifier(..) => {}
+			AstNodeVariant::String(..) => {}
 		}
 	}
 }
