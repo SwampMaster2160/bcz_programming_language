@@ -20,6 +20,11 @@ pub enum Operator {
 	Dereference,
 }
 
+#[derive(Debug)]
+pub enum Metadata {
+	EntryPoint,
+}
+
 #[derive(Debug, EnumDiscriminants)]
 pub enum AstNodeVariant {
 	/// A constant.
@@ -36,6 +41,8 @@ pub enum AstNodeVariant {
 	FunctionDefinition(Box<[AstNode]>, Box<AstNode>),
 	/// A string literal.
 	String(Box<str>),
+	/// Metadata about a child node.
+	Metadata(Metadata, Box<AstNode>),
 }
 
 #[derive(Debug)]
@@ -61,6 +68,7 @@ impl AstNode {
 			AstNodeVariant::Identifier(name) => print!(", name: {name}"),
 			AstNodeVariant::String(string_value) => print!(", string_value: {string_value:?}"),
 			AstNodeVariant::Operator(operator, _, is_assignment) => print!(", operator: {:?}, is_assignment: {:?}", operator, is_assignment),
+			AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {:?}", metadata),
 		}
 		println!(" {}", '}');
 		match &self.variant {
@@ -82,6 +90,7 @@ impl AstNode {
 			AstNodeVariant::Operator(_, operands, _) => for operand in operands {
 				operand.print_tree(level + 1);
 			}
+			AstNodeVariant::Metadata(_, child) => child.print_tree(level + 1),
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::Identifier(..) => {}
 			AstNodeVariant::String(..) => {}

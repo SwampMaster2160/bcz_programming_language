@@ -2,7 +2,7 @@ use std::mem::take;
 
 use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{AstNode, AstNodeVariant, Operator}, error::Error, token::{OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
+use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operator}, error::Error, token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
 
 #[derive(Debug)]
 enum ParseState {
@@ -276,7 +276,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment), start, end }) = &items_being_parsed[index] {
 			let (operator_symbol, operator_type, is_assignment, start, end) = (*operator_symbol, *operator_type, *is_assignment, *start, *end);
 			// Make sure the item to the right is not a parsed expression
-			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..) | ParseState::FunctionArgumentsOrParameters(..)) {
+			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..) | ParseState::FunctionArgumentsOrParameters(..) | ParseState::Token(Token { variant: TokenVariant::Keyword(..), .. })) {
 				// Assignments not yet implemented
 				if is_assignment {
 					return Err((Error::FeatureNotYetImplemented("augmented suffix operators".into()), start));
@@ -384,6 +384,32 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		};
 		// Insert back into list
 		items_being_parsed[index] = ParseState::AstNode(function_ast_node);
+	}
+	// Parse some metadata items
+	for index in (0..items_being_parsed.len()).rev() {
+		// Make sure we have a keyword
+		let (keyword, start, end) = match &items_being_parsed[index] {
+			ParseState::Token(Token { variant: TokenVariant::Keyword(keyword), start, end }) => (*keyword, *start, *end),
+			_ => continue,
+		};
+		// Get the type of metadata the keyword represents
+		let metadata = match keyword {
+			Keyword::EntryPoint => Metadata::EntryPoint,
+			//_ => continue,
+		};
+		// Take child node
+		let child_node = match items_being_parsed.remove(index + 1) {
+			ParseState::AstNode(ast_node) => ast_node,
+			_ => return Err((Error::MetadataItemWithoutChildNode, start)),
+		};
+		// Construct new node
+		let metadata_ast_node = AstNode {
+			start,
+			end: child_node.end,
+			variant: AstNodeVariant::Metadata(metadata, Box::new(child_node)),
+		};
+		// Insert back into list
+		items_being_parsed[index] = ParseState::AstNode(metadata_ast_node);
 	}
 	// Parse augmented binary operators
 	let mut index = items_being_parsed.len().saturating_sub(2);

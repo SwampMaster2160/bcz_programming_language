@@ -33,6 +33,7 @@ pub enum Error {
 	InvalidEscapeSequence(String),
 	MultipleCharsInCharLiteral,
 	UnterminatedStringLiteral,
+	MetadataItemWithoutChildNode,
 }
 
 impl Display for Error {
@@ -68,6 +69,7 @@ impl Display for Error {
 			Error::InvalidEscapeSequence(sequence) => write!(f, "invalid escape sequence \"{sequence}\""),
 			Error::MultipleCharsInCharLiteral => write!(f, "multiple chars in char literal"),
 			Error::UnterminatedStringLiteral => write!(f, "unterminated string literal"),
+			Error::MetadataItemWithoutChildNode => write!(f, "metadata item without child node"),
 		}
 	}
 }
