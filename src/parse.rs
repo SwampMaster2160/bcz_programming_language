@@ -388,7 +388,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	// Parse some metadata items
 	for index in (0..items_being_parsed.len()).rev() {
 		// Make sure we have a keyword
-		let (keyword, start, end) = match &items_being_parsed[index] {
+		let (keyword, start, _) = match &items_being_parsed[index] {
 			ParseState::Token(Token { variant: TokenVariant::Keyword(keyword), start, end }) => (*keyword, *start, *end),
 			_ => continue,
 		};

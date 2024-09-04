@@ -29,6 +29,7 @@ enum CompilerOptionToken {
 	SetBinaryHomeFilepath,
 	PrintTokens,
 	PrintAstNodes,
+	PrintAfterAnalyzer,
 }
 
 impl CompilerOptionToken {
@@ -44,6 +45,7 @@ impl CompilerOptionToken {
 			Self::SetBinaryHomeFilepath => Some("b"),
 			Self::PrintTokens => None,
 			Self::PrintAstNodes => None,
+			Self::PrintAfterAnalyzer => None,
 		}
 	}
 
@@ -59,6 +61,7 @@ impl CompilerOptionToken {
 			Self::SetBinaryHomeFilepath => Some("binary-home"),
 			Self::PrintTokens => Some("print-tokens"),
 			Self::PrintAstNodes => Some("print-ast-nodes"),
+			Self::PrintAfterAnalyzer => Some("print-after-analyzer"),
 		}
 	}
 
@@ -74,6 +77,7 @@ impl CompilerOptionToken {
 			Self::SetBinaryHomeFilepath => Some("Set the path of the binary home directory, output paths are relative to this path"),
 			Self::PrintTokens => Some("Print tokens resulting from the lexer"),
 			Self::PrintAstNodes => Some("Print AST nodes resulting from the parser"),
+			Self::PrintAfterAnalyzer => Some("Print AST nodes after the analyzer has run"),
 		}
 	}
 
@@ -162,6 +166,7 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 					CompilerOptionToken::SetBinaryHomeFilepath => argument_processing_state = ArgumentProcessingState::SetBinaryHomeFilepath,
 					CompilerOptionToken::PrintTokens => main_data.print_tokens = true,
 					CompilerOptionToken::PrintAstNodes => main_data.print_ast_nodes = true,
+					CompilerOptionToken::PrintAfterAnalyzer => main_data.print_after_analyzer = true,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {

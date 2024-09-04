@@ -27,6 +27,7 @@ pub struct MainData<'a> {
 	binary_path: PathBuf,
 	print_tokens: bool,
 	print_ast_nodes: bool,
+	print_after_analyzer: bool,
 	llvm_context: LLVMContextRef,
 	llvm_data_layout: LLVMTargetDataRef,
 	int_type: LLVMTypeRef,
@@ -60,6 +61,7 @@ impl<'a> MainData<'a> {
 			operator_character_set: OperatorSymbol::get_character_set(),
 			char_to_operator_type_mapping: OperatorType::get_symbols_map(),
 			str_to_keyword_mapping: Keyword::get_symbols_map(),
+			print_after_analyzer: false,
 		}
 	}
 }
