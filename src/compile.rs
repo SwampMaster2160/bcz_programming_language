@@ -1,4 +1,4 @@
-use std::{fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::{collections::HashMap, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
 use crate::{error::Error, parse::parse_tokens, token::Token, MainData};
 
@@ -52,16 +52,28 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		}
 	}
 	// Parse
-	let ast_nodes = parse_tokens(tokens).map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
+	let mut ast_nodes = parse_tokens(tokens).map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	// Print parsed AST nodes if commanded to do so
 	if main_data.print_tokens {
 		println!("Tokens from parsing file {}:", filepath.display());
 		for ast_node in ast_nodes.iter() {
 			ast_node.print_tree(0);
-			//println!("{:?}", ast_node);
 		}
 	}
-	// Add to main data
+	// Separate global variables out
+	let mut globals = HashMap::new();
+	for ast_node in ast_nodes.iter_mut() {
+		ast_node.separate_globals(&mut globals, true)
+			.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
+	}
+	// Print global variables if commanded to do so
+	if main_data.print_after_analyzer {
+		println!("Globals of {}:", filepath.display());
+		for (name, global) in globals.iter() {
+			print!("{name} = ");
+			global.print_tree(0);
+		}
+	}
 	// Return
 	Ok(())
 }

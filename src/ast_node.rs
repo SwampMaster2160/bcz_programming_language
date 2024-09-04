@@ -1,4 +1,8 @@
+use std::{collections::HashMap, mem::swap};
+
 use strum_macros::EnumDiscriminants;
+
+use crate::error::Error;
 
 #[derive(Debug)]
 pub enum Operator {
@@ -95,5 +99,67 @@ impl AstNode {
 			AstNodeVariant::Identifier(..) => {}
 			AstNodeVariant::String(..) => {}
 		}
+	}
+
+	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, Self>, will_be_discarded: bool) -> Result<(), (Error, (usize, usize))> {
+		let start = self.start;
+		//let end = self.end;
+		match &mut self.variant {
+			AstNodeVariant::Operator(operator, operands, is_assignment) => match is_assignment {
+				true => {
+					// Make sure the assignment is not augmented
+					if !matches!(operator, None) {
+						return Err((Error::GlobalAugmentedOperator, start));
+					}
+					// Separate operands
+					let mut identifier_node = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
+					let mut operand_node = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
+					swap(&mut operands[0], &mut identifier_node);
+					swap(&mut operands[1], &mut operand_node);
+					operand_node.separate_globals(global_list, false)?;
+					// Get name to assign to
+					let AstNode {
+						start: _,
+						end:_,
+						variant,
+					} = &identifier_node;
+					let name = match variant {
+						AstNodeVariant::Identifier(name) => name.clone(),
+						_ => return Err((Error::GlobalAssignmentToNonIdentifier, start)),
+					};
+					// Pop out global assignment into global variable list
+					match global_list.insert(name, operand_node) {
+						Some(..) => return Err((Error::GlobalVariableConflict(match variant {
+							AstNodeVariant::Identifier(name) => name.clone().into(),
+							_ => return Err((Error::GlobalAssignmentToNonIdentifier, start)),
+						}), start)),
+						None => {}
+					};
+					// Replace node with the identifier node
+					*self = identifier_node;
+				}
+				false => for operand in operands {
+					operand.separate_globals(global_list, will_be_discarded)?;
+				}
+			}
+			AstNodeVariant::Constant(..) => {}
+			AstNodeVariant::FunctionCall(..) => if will_be_discarded {
+				return Err((Error::DiscardedGlobalFunctionCall, start));
+			}
+			AstNodeVariant::Block(children, is_result_undefined) => {
+				if *is_result_undefined || children.len() != 1 {
+					return Err((Error::FeatureNotYetImplemented("global blocks".into()), start));
+				}
+				let mut child = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
+				swap(&mut children[0], &mut child);
+				child.separate_globals(global_list, will_be_discarded)?;
+				*self = child;
+			}
+			AstNodeVariant::FunctionDefinition(..) => {}
+			AstNodeVariant::Identifier(..) => {}
+			AstNodeVariant::Metadata(_, child) => child.separate_globals(global_list, will_be_discarded)?,
+			AstNodeVariant::String(..) => {}
+		}
+		Ok(())
 	}
 }

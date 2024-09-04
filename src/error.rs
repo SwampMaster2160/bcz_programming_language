@@ -34,6 +34,10 @@ pub enum Error {
 	MultipleCharsInCharLiteral,
 	UnterminatedStringLiteral,
 	MetadataItemWithoutChildNode,
+	GlobalAugmentedOperator,
+	DiscardedGlobalFunctionCall,
+	GlobalAssignmentToNonIdentifier,
+	GlobalVariableConflict(String),
 }
 
 impl Display for Error {
@@ -70,6 +74,10 @@ impl Display for Error {
 			Error::MultipleCharsInCharLiteral => write!(f, "multiple chars in char literal"),
 			Error::UnterminatedStringLiteral => write!(f, "unterminated string literal"),
 			Error::MetadataItemWithoutChildNode => write!(f, "metadata item without child node"),
+			Error::GlobalAugmentedOperator => write!(f, "augmented operator used in global context"),
+			Error::DiscardedGlobalFunctionCall => write!(f, "discarded global function call"),
+			Error::GlobalAssignmentToNonIdentifier => write!(f, "global assignment to non-identifier"),
+			Error::GlobalVariableConflict(name) => write!(f, "re-assignment to global variable {name}"),
 		}
 	}
 }
