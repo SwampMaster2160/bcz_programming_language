@@ -38,6 +38,7 @@ pub enum Error {
 	DiscardedGlobalFunctionCall,
 	GlobalAssignmentToNonIdentifier,
 	GlobalVariableConflict(String),
+	ExpectedIdentifier,
 }
 
 impl Display for Error {
@@ -78,6 +79,7 @@ impl Display for Error {
 			Error::DiscardedGlobalFunctionCall => write!(f, "discarded global function call"),
 			Error::GlobalAssignmentToNonIdentifier => write!(f, "global assignment to non-identifier"),
 			Error::GlobalVariableConflict(name) => write!(f, "re-assignment to global variable {name}"),
+			Error::ExpectedIdentifier => write!(f, "expected an identifier"),
 		}
 	}
 }

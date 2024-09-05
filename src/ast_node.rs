@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem::swap};
+use std::{collections::{HashMap, HashSet}, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
@@ -101,9 +101,9 @@ impl AstNode {
 		}
 	}
 
+	/// Removes global assignments nodes and puts them into a `(name, node)` hash map, replacing them with an identifier node.
 	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, Self>, will_be_discarded: bool) -> Result<(), (Error, (usize, usize))> {
 		let start = self.start;
-		//let end = self.end;
 		match &mut self.variant {
 			AstNodeVariant::Operator(operator, operands, is_assignment) => match is_assignment {
 				true => {
@@ -158,6 +158,61 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(..) => {}
 			AstNodeVariant::Identifier(..) => {}
 			AstNodeVariant::Metadata(_, child) => child.separate_globals(global_list, will_be_discarded)?,
+			AstNodeVariant::String(..) => {}
+		}
+		Ok(())
+	}
+
+	/// Will search a global node and its children for global variable dependencies that need to be compiled before this node is.
+	pub fn get_variable_dependencies(
+		&self, variable_dependencies: &mut HashSet<Box<str>>,
+		import_dependencies: &mut HashSet<Box<str>>,
+		local_variables: &mut HashSet<Box<str>>
+	) -> Result<(), (Error, (usize, usize))> {
+		let AstNode {
+			variant,
+			start,
+			end: _,
+		} = self;
+		match variant {
+			AstNodeVariant::Block(sub_expressions, _) => for expression in sub_expressions {
+				expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables)?;
+			}
+			AstNodeVariant::Constant(..) => {}
+			AstNodeVariant::FunctionCall(function, arguments) => {
+				function.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone())?;
+				for argument in arguments {
+					argument.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone())?;
+				}
+			}
+			AstNodeVariant::FunctionDefinition(parameters, body) => {
+				for parameter in parameters {
+					match &parameter.variant {
+						AstNodeVariant::Identifier(name) => local_variables.insert(name.clone()),
+						_ => return Err((Error::ExpectedIdentifier, *start)),
+					};
+				}
+				body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables)?;
+			}
+			AstNodeVariant::Identifier(name) => if !local_variables.contains(name) {
+				variable_dependencies.insert(name.clone());
+			}
+			AstNodeVariant::Metadata(_, child) => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables)?,
+			AstNodeVariant::Operator(_, operands, is_assignment) => {
+				for (index, operand) in operands.iter().enumerate() {
+					if !(*is_assignment && index == 0 && matches!(&operands[0].variant, AstNodeVariant::Identifier(..))) {
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone())?;
+					}
+				}
+				if *is_assignment {
+					match &operands[0].variant {
+						AstNodeVariant::Identifier(name) => {
+							local_variables.insert(name.clone());
+						}
+						_ => {}
+					};
+				}
+			}
 			AstNodeVariant::String(..) => {}
 		}
 		Ok(())

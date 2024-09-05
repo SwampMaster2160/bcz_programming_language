@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{error::Error, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -66,12 +66,25 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		ast_node.separate_globals(&mut globals, true)
 			.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	}
+	// Get dependencies for each global variable
+	let mut import_dependencies = HashSet::new();
+	let mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
+	for (name, expression) in globals.into_iter() {
+		let mut variable_dependencies = HashSet::new();
+		expression.get_variable_dependencies(&mut variable_dependencies, &mut import_dependencies, &mut HashSet::new())
+			.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
+		globals_and_dependencies.insert(name, (expression, variable_dependencies));
+	}
 	// Print global variables if commanded to do so
 	if main_data.print_after_analyzer {
 		println!("Globals of {}:", filepath.display());
-		for (name, global) in globals.iter() {
-			print!("{name} = ");
+		for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
+			print!("{name} -> {:?} = ", variable_dependencies);
 			global.print_tree(0);
+		}
+		println!("Import dependencies of {}:", filepath.display());
+		for import_dependency in import_dependencies {
+			println!("{import_dependency}");
 		}
 	}
 	// Return
