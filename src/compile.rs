@@ -22,27 +22,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			Err(_) => return Err((Error::CouldNotReadLine, filepath.clone(), line_number, 1)),
 		}
 		// Read tokens from line
-		let mut column_number = 1;
-		let mut line_content = line_content.as_str();
-		loop {
-			// Get how many whitespace chars there are untill the next non-whitespace, chars and bytes are the same size sice since we are only looking for ASCII whitespace chars
-			let start_whitespace_length = match line_content.find(|chr: char| !chr.is_ascii_whitespace()) {
-				Some(start_whitespace_length) => start_whitespace_length,
-				None => break,
-			};
-			// Skip said amount of chars
-			column_number += start_whitespace_length;
-			line_content = &line_content[start_whitespace_length..];
-			// Tokenize a token from the string and push to list of read tokens
-			let (token, new_line_content) = Token::tokenize_from_line(main_data, line_content, line_number, column_number)
-				.map_err(|error| (error, filepath.clone(), line_number, column_number))?;
-			tokens.push(token);
-			// Skip over the chars that where consumed by the tokenization
-			let bytes_consumed_by_parse = line_content.len() - new_line_content.len();
-			let chars_consumed_by_parse = &line_content[..bytes_consumed_by_parse].chars().count();
-			column_number += chars_consumed_by_parse;
-			line_content = new_line_content;
-		}
+		let line_content = line_content.as_str();
+		tokenize_line(main_data, line_content, line_number, &mut tokens).map_err(|(error, column)| (error, filepath.clone(), line_number, column))?;
 	}
 	// Print tokens if commanded to do so
 	if main_data.print_tokens {
@@ -88,5 +69,33 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		}
 	}
 	// Return
+	Ok(())
+}
+
+/// Takes in a line of source code and tokenizes it to `Token`s that are appended to `push_to`.
+fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: usize, push_to: &mut Vec<Token>) -> Result<(), (Error, usize)> {
+	let mut column_number = 1;
+	loop {
+		// Get how many whitespace chars there are untill the next non-whitespace, chars and bytes are the same size sice since we are only looking for ASCII whitespace chars
+		let start_whitespace_length = match line_string.find(|chr: char| !chr.is_ascii_whitespace()) {
+			Some(start_whitespace_length) => start_whitespace_length,
+			None => break,
+		};
+		// Skip said amount of chars
+		column_number += start_whitespace_length;
+		line_string = &line_string[start_whitespace_length..];
+		// Tokenize a token from the string and push to list of read tokens
+		let (token, new_line_string) = Token::tokenize_from_line(main_data, line_string, line_number, column_number)
+			.map_err(|error| (error, column_number))?;
+		match token {
+			Some(token) => push_to.push(token),
+			None => {},
+		}
+		// Skip over the chars that where consumed by the tokenization
+		let bytes_consumed_by_parse = line_string.len() - new_line_string.len();
+		let chars_consumed_by_parse = &line_string[..bytes_consumed_by_parse].chars().count();
+		column_number += chars_consumed_by_parse;
+		line_string = new_line_string;
+	}
 	Ok(())
 }
