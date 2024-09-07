@@ -1,12 +1,9 @@
-use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, mem::take, path::PathBuf, ptr::null_mut};
+use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, ffi::CString, mem::take, path::PathBuf, ptr::null_mut};
 
 use compile::compile_file;
 use compiler_arguments::process_arguments;
 use llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMContextCreate, LLVMContextDispose, LLVMContextRef,
-	LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMDisposeMessage, LLVMGetDefaultTargetTriple, LLVMGetTargetFromTriple,
-	LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC,
-	LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetRef, LLVMTypeRef,
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef, LLVMTypeRef
 };
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
@@ -32,6 +29,7 @@ pub struct MainData<'a> {
 	llvm_context: LLVMContextRef,
 	llvm_data_layout: LLVMTargetDataRef,
 	int_type: LLVMTypeRef,
+	llvm_target_triple: CString,
 	int_bit_width: u8,
 	int_max_value: u64,
 	char_to_separator_mapping: HashMap<char, Separator>,
@@ -39,6 +37,8 @@ pub struct MainData<'a> {
 	operator_character_set: HashSet<char>,
 	char_to_operator_type_mapping: HashMap<char, OperatorType>,
 	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
+	//llvm_target: LLVMTargetRef,
+	llvm_target_machine: LLVMTargetMachineRef,
 }
 
 impl<'a> MainData<'a> {
@@ -64,6 +64,9 @@ impl<'a> MainData<'a> {
 			str_to_keyword_mapping: Keyword::get_symbols_map(),
 			print_after_analyzer: false,
 			dump_llvm_module: false,
+			llvm_target_triple: CString::default(),
+			//llvm_target: null_mut(),
+			llvm_target_machine: null_mut(),
 		}
 	}
 }
@@ -85,18 +88,25 @@ fn main() {
 	unsafe { LLVMInitializeX86TargetMC() };
 	unsafe { LLVMInitializeX86AsmParser() };
 	unsafe { LLVMInitializeX86AsmPrinter() };
-	let target_triple = unsafe { LLVMGetDefaultTargetTriple() };
-	let mut target: LLVMTargetRef = null_mut();
-	let result = unsafe { LLVMGetTargetFromTriple(target_triple, &mut target, null_mut()) };
+	main_data.llvm_target_triple = c"x86_64-pc-windows-msvc".into();
+	let mut llvm_target: LLVMTargetRef = null_mut();
+	let result = unsafe { LLVMGetTargetFromTriple(main_data.llvm_target_triple.as_ptr() as *const u8, &mut llvm_target, null_mut()) };
 	if result != 0 {
 		println!("Error: failed to get target.");
 		return;
 	}
-	let target_machine = unsafe {
-		LLVMCreateTargetMachine(target, target_triple, "generic\0".as_ptr(), "\0".as_ptr(), LLVMCodeGenLevelDefault, LLVMRelocDefault, LLVMCodeModelDefault)
+	main_data.llvm_target_machine = unsafe {
+		LLVMCreateTargetMachine(
+			llvm_target,
+			main_data.llvm_target_triple.as_ptr() as *const u8,
+			"generic\0".as_ptr(),
+			"\0".as_ptr(),
+			LLVMCodeGenLevelDefault,
+			LLVMRelocDefault,
+			LLVMCodeModelDefault
+		)
 	};
-	unsafe { LLVMDisposeMessage(target_triple) };
-	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(target_machine) };
+	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(main_data.llvm_target_machine) };
 	// Get info about machine being compiled for
 	main_data.int_type = unsafe { LLVMIntPtrTypeInContext(main_data.llvm_context, main_data.llvm_data_layout) };
 	let int_type_width = unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, main_data.int_type) };

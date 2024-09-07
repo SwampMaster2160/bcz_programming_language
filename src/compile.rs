@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf, ptr::{null, null_mut}};
 
-use crate::{ast_node::AstNode, error::Error, llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, llvm_c::{LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule, LLVMGetDefaultTargetTriple, LLVMGetTargetFromTriple, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetTarget, LLVMTargetRef}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -120,5 +120,5 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 }
 
 fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, filepath: &PathBuf, globals_and_dependencies: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) {
-
+	unsafe { LLVMSetTarget(llvm_module, main_data.llvm_target_triple.as_ptr() as *const u8) };
 }
