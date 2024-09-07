@@ -30,6 +30,7 @@ enum CompilerOptionToken {
 	PrintTokens,
 	PrintAstNodes,
 	PrintAfterAnalyzer,
+	DumpLlvmModule,
 }
 
 impl CompilerOptionToken {
@@ -46,6 +47,7 @@ impl CompilerOptionToken {
 			Self::PrintTokens => None,
 			Self::PrintAstNodes => None,
 			Self::PrintAfterAnalyzer => None,
+			Self::DumpLlvmModule => None,
 		}
 	}
 
@@ -62,6 +64,7 @@ impl CompilerOptionToken {
 			Self::PrintTokens => Some("print-tokens"),
 			Self::PrintAstNodes => Some("print-ast-nodes"),
 			Self::PrintAfterAnalyzer => Some("print-after-analyzer"),
+			Self::DumpLlvmModule => Some("dump-llvm-module"),
 		}
 	}
 
@@ -78,6 +81,7 @@ impl CompilerOptionToken {
 			Self::PrintTokens => Some("Print tokens resulting from the lexer"),
 			Self::PrintAstNodes => Some("Print AST nodes resulting from the parser"),
 			Self::PrintAfterAnalyzer => Some("Print AST nodes after the analyzer has run"),
+			Self::DumpLlvmModule => Some("Print the content of the built LLVM module"),
 		}
 	}
 
@@ -167,6 +171,7 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 					CompilerOptionToken::PrintTokens => main_data.print_tokens = true,
 					CompilerOptionToken::PrintAstNodes => main_data.print_ast_nodes = true,
 					CompilerOptionToken::PrintAfterAnalyzer => main_data.print_after_analyzer = true,
+					CompilerOptionToken::DumpLlvmModule => main_data.dump_llvm_module = true,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {

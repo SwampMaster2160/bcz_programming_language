@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{ast_node::AstNode, error::Error, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -68,6 +68,25 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			println!("{import_dependency}");
 		}
 	}
+	// TODO: compile import dependencies
+	// Build LLVM module
+	let mut module_name: Vec<u8> = match filepath.file_stem() {
+		None => "invalid_name",
+		Some(stem) => match stem.to_str() {
+			None => "invalid_name",
+			Some(stem) => stem,
+		}
+	}.bytes().collect();
+	module_name.push(0);
+	let llvm_module = unsafe { LLVMModuleCreateWithNameInContext(module_name.as_ptr(), main_data.llvm_context) };
+	build_llvm_module(main_data, llvm_module, filepath, &globals_and_dependencies);
+	// Dump module if commanded to do so
+	if main_data.dump_llvm_module {
+		println!("LLVM IR of {}:", filepath.display());
+		unsafe { LLVMDumpModule(llvm_module) };
+	}
+	// Clean up
+	unsafe { LLVMDisposeModule(llvm_module) };
 	// Return
 	Ok(())
 }
@@ -98,4 +117,8 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 		line_string = new_line_string;
 	}
 	Ok(())
+}
+
+fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, filepath: &PathBuf, globals_and_dependencies: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) {
+
 }
