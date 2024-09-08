@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::error::Error;
+use crate::{error::Error, llvm_c::LLVMValueRef, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -216,5 +216,13 @@ impl AstNode {
 			AstNodeVariant::String(..) => {}
 		}
 		Ok(())
+	}
+
+	pub fn build_r_value(&self, main_data: MainData, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
+		todo!()
+	}
+
+	pub fn build_global_assignment(&self, name: &str, main_data: &mut MainData, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
+		todo!()
 	}
 }

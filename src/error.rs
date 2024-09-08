@@ -39,6 +39,7 @@ pub enum Error {
 	GlobalAssignmentToNonIdentifier,
 	GlobalVariableConflict(String),
 	ExpectedIdentifier,
+	CyclicDependency,
 }
 
 impl Display for Error {
@@ -80,6 +81,7 @@ impl Display for Error {
 			Error::GlobalAssignmentToNonIdentifier => write!(f, "global assignment to non-identifier"),
 			Error::GlobalVariableConflict(name) => write!(f, "re-assignment to global variable {name}"),
 			Error::ExpectedIdentifier => write!(f, "expected an identifier"),
+			Error::CyclicDependency => write!(f, "cyclic dependency"),
 		}
 	}
 }

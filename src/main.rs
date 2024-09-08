@@ -103,7 +103,7 @@ fn main() {
 			"\0".as_ptr(),
 			LLVMCodeGenLevelDefault,
 			LLVMRelocDefault,
-			LLVMCodeModelDefault
+			LLVMCodeModelDefault,
 		)
 	};
 	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(main_data.llvm_target_machine) };

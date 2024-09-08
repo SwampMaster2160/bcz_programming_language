@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf, ptr::{null, null_mut}};
+use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{ast_node::AstNode, error::Error, llvm_c::{LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule, LLVMGetDefaultTargetTriple, LLVMGetTargetFromTriple, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetTarget, LLVMTargetRef}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMValueRef}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -79,7 +79,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}.bytes().collect();
 	module_name.push(0);
 	let llvm_module = unsafe { LLVMModuleCreateWithNameInContext(module_name.as_ptr(), main_data.llvm_context) };
-	build_llvm_module(main_data, llvm_module, filepath, &globals_and_dependencies);
+	build_llvm_module(main_data, llvm_module, filepath, globals_and_dependencies)
+		.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	// Dump module if commanded to do so
 	if main_data.dump_llvm_module {
 		println!("LLVM IR of {}:", filepath.display());
@@ -119,6 +120,36 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 	Ok(())
 }
 
-fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, filepath: &PathBuf, globals_and_dependencies: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) {
+fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, filepath: &PathBuf, mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
+	// Set up module
 	unsafe { LLVMSetTarget(llvm_module, main_data.llvm_target_triple.as_ptr() as *const u8) };
+	unsafe { LLVMSetModuleDataLayout(llvm_module, main_data.llvm_data_layout) };
+	// Build each global in rounds
+	let mut built_globals: HashMap<Box<str>, LLVMValueRef> = HashMap::new();
+	while !globals_and_dependencies.is_empty() {
+		// Build all globals this round in their dependencies are built
+		let mut globals_built_this_round = HashSet::new();
+		for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
+			// Make sure that the dependencies are built
+			for variable_dependency in variable_dependencies.iter() {
+				if !built_globals.contains_key(variable_dependency) {
+					continue;
+				}
+			}
+			// Build
+			let built_result = global.build_global_assignment(name, main_data, &built_globals)?;
+			// Add to list
+			built_globals.insert(name.clone(), built_result);
+			globals_built_this_round.insert(name.clone());
+		}
+		//
+		if globals_built_this_round.is_empty() {
+			return Err((Error::CyclicDependency, globals_and_dependencies.iter().next().unwrap().1.0.start));
+		}
+		// Remove built globals from the to build list
+		for name in globals_built_this_round.iter() {
+			globals_and_dependencies.remove(name);
+		}
+	}
+	Ok(())
 }
