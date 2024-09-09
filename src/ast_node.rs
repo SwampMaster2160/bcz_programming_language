@@ -1,8 +1,8 @@
-use std::{collections::{HashMap, HashSet}, mem::swap};
+use std::{collections::{HashMap, HashSet}, ffi::CString, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{error::Error, llvm_c::LLVMValueRef, MainData};
+use crate::{error::Error, llvm_c::{LLVMAddGlobal, LLVMBool, LLVMConstInt, LLVMModuleRef, LLVMSetInitializer, LLVMValueRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -218,11 +218,18 @@ impl AstNode {
 		Ok(())
 	}
 
-	pub fn build_r_value(&self, main_data: MainData, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
-		todo!()
+	pub fn build_r_value(&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
+		// TODO
+		Ok(unsafe { LLVMConstInt(main_data.int_type, 420, false as LLVMBool) })
 	}
 
-	pub fn build_global_assignment(&self, name: &str, main_data: &mut MainData, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
-		todo!()
+	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
+		// TODO: functions
+		let r_value = self.build_r_value(main_data, llvm_module, built_globals)?;
+		let mut name: Vec<u8> = name.bytes().collect();
+		name.push(0);
+		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name.as_ptr()) };
+		unsafe { LLVMSetInitializer(global, r_value) };
+		return Ok(global);
 	}
 }

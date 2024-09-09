@@ -79,7 +79,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}.bytes().collect();
 	module_name.push(0);
 	let llvm_module = unsafe { LLVMModuleCreateWithNameInContext(module_name.as_ptr(), main_data.llvm_context) };
-	build_llvm_module(main_data, llvm_module, filepath, globals_and_dependencies)
+	build_llvm_module(main_data, llvm_module, globals_and_dependencies)
 		.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	// Dump module if commanded to do so
 	if main_data.dump_llvm_module {
@@ -120,7 +120,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 	Ok(())
 }
 
-fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, filepath: &PathBuf, mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
+fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
 	// Set up module
 	unsafe { LLVMSetTarget(llvm_module, main_data.llvm_target_triple.as_ptr() as *const u8) };
 	unsafe { LLVMSetModuleDataLayout(llvm_module, main_data.llvm_data_layout) };
@@ -137,7 +137,7 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, filep
 				}
 			}
 			// Build
-			let built_result = global.build_global_assignment(name, main_data, &built_globals)?;
+			let built_result = global.build_global_assignment(name, llvm_module, main_data, &built_globals)?;
 			// Add to list
 			built_globals.insert(name.clone(), built_result);
 			globals_built_this_round.insert(name.clone());
