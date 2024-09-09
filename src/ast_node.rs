@@ -1,8 +1,8 @@
-use std::{collections::{HashMap, HashSet}, ffi::c_ulonglong, mem::swap};
+use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{repeat, once}, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddGlobal, LLVMBool, LLVMBuildAdd, LLVMBuildMul, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMModuleRef, LLVMSetInitializer}, MainData};
+use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMBool, LLVMBuildAdd, LLVMBuildMul, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMModuleRef, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -222,7 +222,7 @@ impl AstNode {
 		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>
 	) -> Result<BuiltValue, (Error, (usize, usize))> {
 		let Self {
-			start: _,
+			start,
 			end: _,
 			variant,
 		} = self;
@@ -262,6 +262,17 @@ impl AstNode {
 					_ => return Err((Error::FeatureNotYetImplemented("operator".into()), self.start)),
 				}
 			}
+			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => {
+				if function_parameters.len() > u16::MAX as usize {
+					return Err((Error::TooManyFunctionParameters, *start));
+				}
+				let function_parameter_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(function_parameters.len()).collect();
+				let function_type = build_function(main_data, llvm_module, llvm_builder, built_globals, local_variables, "unnamedFunction", main_data.int_type, &function_parameter_types);
+				//let function_type = unsafe {
+				//	LLVMFunctionType(main_data.int_type, function_parameter_types.as_ptr(), function_parameter_types.len() as c_uint, false as LLVMBool)
+				//};
+				todo!()
+			}
 			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
 		})
 	}
@@ -276,4 +287,15 @@ impl AstNode {
 		unsafe { LLVMSetInitializer(global, r_value.get_value()) };
 		return Ok(BuiltValue::GlobalVariable(global));
 	}
+}
+
+fn build_function(
+	main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
+	built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>,
+	name: &str, return_type: LLVMTypeRef, parameter_types: &[LLVMTypeRef],
+) -> Result<BuiltValue, (Error, (usize, usize))> {
+	let function_type = unsafe { LLVMFunctionType(main_data.int_type, parameter_types.as_ptr(), parameter_types.len() as c_uint, false as LLVMBool) };
+	let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+	let function = unsafe { LLVMAddFunction(llvm_module, name.as_ptr(), function_type) };
+	todo!()
 }
