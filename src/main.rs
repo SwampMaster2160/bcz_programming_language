@@ -14,6 +14,7 @@ mod compile;
 mod token;
 mod ast_node;
 mod parse;
+mod built_value;
 
 pub struct MainData<'a> {
 	do_link: bool,

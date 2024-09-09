@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{ast_node::AstNode, error::Error, llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMValueRef}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, built_value::BuiltValue, error::Error, llvm_c::{LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -124,25 +124,27 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 	// Set up module
 	unsafe { LLVMSetTarget(llvm_module, main_data.llvm_target_triple.as_ptr() as *const u8) };
 	unsafe { LLVMSetModuleDataLayout(llvm_module, main_data.llvm_data_layout) };
+	// Create builder
+	let llvm_builder = unsafe { LLVMCreateBuilderInContext(main_data.llvm_context) };
 	// Build each global in rounds
-	let mut built_globals: HashMap<Box<str>, LLVMValueRef> = HashMap::new();
+	let mut built_globals: HashMap<Box<str>, BuiltValue> = HashMap::new();
 	while !globals_and_dependencies.is_empty() {
 		// Build all globals this round in their dependencies are built
 		let mut globals_built_this_round = HashSet::new();
-		for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
+		'a: for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
 			// Make sure that the dependencies are built
 			for variable_dependency in variable_dependencies.iter() {
 				if !built_globals.contains_key(variable_dependency) {
-					continue;
+					continue 'a;
 				}
 			}
 			// Build
-			let built_result = global.build_global_assignment(name, llvm_module, main_data, &built_globals)?;
+			let built_result = global.build_global_assignment(name, llvm_module, llvm_builder, main_data, &built_globals)?;
 			// Add to list
 			built_globals.insert(name.clone(), built_result);
 			globals_built_this_round.insert(name.clone());
 		}
-		//
+		// If we did not compile anything this round, there is a cyclic dependency
 		if globals_built_this_round.is_empty() {
 			return Err((Error::CyclicDependency, globals_and_dependencies.iter().next().unwrap().1.0.start));
 		}
@@ -151,5 +153,7 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 			globals_and_dependencies.remove(name);
 		}
 	}
+	// Clean up and return
+	unsafe { LLVMDisposeBuilder(llvm_builder) };
 	Ok(())
 }

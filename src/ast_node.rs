@@ -1,8 +1,8 @@
-use std::{collections::{HashMap, HashSet}, ffi::CString, mem::swap};
+use std::{collections::{HashMap, HashSet}, ffi::c_ulonglong, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{error::Error, llvm_c::{LLVMAddGlobal, LLVMBool, LLVMConstInt, LLVMModuleRef, LLVMSetInitializer, LLVMValueRef}, MainData};
+use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddGlobal, LLVMBool, LLVMBuildAdd, LLVMBuilderRef, LLVMConstInt, LLVMModuleRef, LLVMSetInitializer}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -218,18 +218,52 @@ impl AstNode {
 		Ok(())
 	}
 
-	pub fn build_r_value(&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
-		// TODO
-		Ok(unsafe { LLVMConstInt(main_data.int_type, 420, false as LLVMBool) })
+	pub fn build_r_value(
+		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>
+	) -> Result<BuiltValue, (Error, (usize, usize))> {
+		let Self {
+			start: _,
+			end: _,
+			variant,
+		} = self;
+		Ok(match variant {
+			AstNodeVariant::Constant(value) => BuiltValue::NumericalValue(unsafe {
+				LLVMConstInt(main_data.int_type, *value as c_ulonglong, false as LLVMBool)
+			}),
+			AstNodeVariant::Identifier(name) => {
+				built_globals[name].clone()
+				// TODO: Local variables
+			}
+			AstNodeVariant::Operator(operator, operands, is_assignment) => {
+				if *is_assignment {
+					return Err((Error::FeatureNotYetImplemented("local assignments".into()), self.start));
+				}
+				let operator = match operator {
+					Some(operator) => operator,
+					None => return Err((Error::FeatureNotYetImplemented("no operator".into()), self.start)),
+				};
+				match operator {
+					Operator::IntegerAdd => {
+						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables.clone())?.get_value();
+						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value();
+						let result = unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) };
+						BuiltValue::NumericalValue(result)
+					}
+					_ => return Err((Error::FeatureNotYetImplemented("operator".into()), self.start)),
+				}
+			}
+			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
+		})
 	}
 
-	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, LLVMValueRef>) -> Result<LLVMValueRef, (Error, (usize, usize))> {
+	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltValue>) ->
+		Result<BuiltValue, (Error, (usize, usize))> {
 		// TODO: functions
-		let r_value = self.build_r_value(main_data, llvm_module, built_globals)?;
+		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, None)?;
 		let mut name: Vec<u8> = name.bytes().collect();
 		name.push(0);
 		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name.as_ptr()) };
-		unsafe { LLVMSetInitializer(global, r_value) };
-		return Ok(global);
+		unsafe { LLVMSetInitializer(global, r_value.get_value()) };
+		return Ok(BuiltValue::GlobalVariable(global));
 	}
 }

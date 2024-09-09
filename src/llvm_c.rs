@@ -49,6 +49,7 @@ extern "C" {
 	// Core/Values/Constants/Global Variables
 	pub fn LLVMAddGlobal(M: LLVMModuleRef, Ty: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMSetInitializer(GlobalVar: LLVMValueRef, ConstantVal: LLVMValueRef) -> c_void;
+	pub fn LLVMGetInitializer(GlobalVar: LLVMValueRef) -> LLVMValueRef;
 	// Core/Values/Constants/Composite Constants
 	pub fn LLVMConstStringInContext(C: LLVMContextRef, Str: *const u8, Length: c_uint, DontNullTerminate: LLVMBool) -> LLVMValueRef;
 	// Core/Values/Constants/Function values
