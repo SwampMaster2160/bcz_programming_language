@@ -65,6 +65,12 @@ extern "C" {
 	pub fn LLVMBuildPtrToInt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildCall2(B: LLVMBuilderRef, Ty: LLVMTypeRef, Fn: LLVMValueRef, Args: *const LLVMValueRef, NumArgs: c_uint, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildAdd(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildSub(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildMul(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildUDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildURem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildSDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildSRem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildRet(B: LLVMBuilderRef, V: LLVMValueRef) -> LLVMValueRef;
 	// Target information
 	pub fn LLVMInitializeX86TargetInfo() -> c_void;

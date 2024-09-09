@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::c_ulonglong, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddGlobal, LLVMBool, LLVMBuildAdd, LLVMBuilderRef, LLVMConstInt, LLVMModuleRef, LLVMSetInitializer}, MainData};
+use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddGlobal, LLVMBool, LLVMBuildAdd, LLVMBuildMul, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMModuleRef, LLVMSetInitializer}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -15,7 +15,7 @@ pub enum Operator {
 	SignedDivide,
 	UnsignedDivide,
 	FloatDivide,
-	SignedModulo,
+	SignedTruncatedModulo,
 	UnsignedModulo,
 	FloatModulo,
 	Read,
@@ -243,10 +243,20 @@ impl AstNode {
 					None => return Err((Error::FeatureNotYetImplemented("no operator".into()), self.start)),
 				};
 				match operator {
-					Operator::IntegerAdd => {
+					Operator::IntegerAdd | Operator::IntegerSubtract | Operator::IntegerMultiply |
+					Operator::UnsignedDivide | Operator::UnsignedModulo | Operator::SignedDivide | Operator::SignedTruncatedModulo => {
 						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables.clone())?.get_value();
 						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value();
-						let result = unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) };
+						let result = match operator {
+							Operator::IntegerAdd => unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) },
+							Operator::IntegerSubtract => unsafe { LLVMBuildSub(llvm_builder, left_value, right_value, c"sub_temp".as_ptr() as *const u8) },
+							Operator::IntegerMultiply => unsafe { LLVMBuildMul(llvm_builder, left_value, right_value, c"mul_temp".as_ptr() as *const u8) },
+							Operator::UnsignedDivide => unsafe { LLVMBuildUDiv(llvm_builder, left_value, right_value, c"udiv_temp".as_ptr() as *const u8) },
+							Operator::UnsignedModulo => unsafe { LLVMBuildURem(llvm_builder, left_value, right_value, c"umod_temp".as_ptr() as *const u8) },
+							Operator::SignedDivide => unsafe { LLVMBuildSDiv(llvm_builder, left_value, right_value, c"sdiv_temp".as_ptr() as *const u8) },
+							Operator::SignedTruncatedModulo => unsafe { LLVMBuildSRem(llvm_builder, left_value, right_value, c"stmod_temp".as_ptr() as *const u8) },
+							_ => unreachable!(),
+						};
 						BuiltValue::NumericalValue(result)
 					}
 					_ => return Err((Error::FeatureNotYetImplemented("operator".into()), self.start)),

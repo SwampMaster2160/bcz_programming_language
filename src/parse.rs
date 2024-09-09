@@ -55,7 +55,7 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedDivide),
 		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::UnsignedDivide),
 		(OperatorSymbol::DivideReciprocal, OperatorType::FloatingPointBitwise) => Some(Operator::FloatDivide),
-		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedModulo),
+		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedTruncatedModulo),
 		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::UnsignedModulo),
 		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Some(Operator::FloatModulo),
 		//_ => None,
