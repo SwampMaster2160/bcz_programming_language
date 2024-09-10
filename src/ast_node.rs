@@ -220,7 +220,7 @@ impl AstNode {
 
 	fn build_function_definition(
 		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
-		built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>, name: &str,
+		built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Option<Vec<HashMap<Box<str>, BuiltValue>>>, name: &str,
 	) -> Result<BuiltValue, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
@@ -244,17 +244,28 @@ impl AstNode {
 		// Build function body
 		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, function, c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(llvm_builder, basic_block) };
-		// TODO
-		//let function_parameter_variables = HashMap::new();
+		// Create inner local scope
+		let function_parameter_variables = HashMap::new();
+		for parameter in parameters.iter() {
+			//TODO
+		}
+		let inner_local_variables = match local_variables {
+			None => vec![function_parameter_variables],
+			Some(parameter_variables) => {
+				let mut inner_local_variables = parameter_variables.clone();
+				inner_local_variables.push(function_parameter_variables);
+				inner_local_variables
+			}
+		};
 		// Build function body
-		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?;
+		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut Some(inner_local_variables))?;
 		unsafe { LLVMBuildRet(llvm_builder, function_body_built.get_value(main_data, llvm_builder)) };
 		// Return
 		Ok(BuiltValue::Function(function))
 	}
 
 	pub fn build_r_value(
-		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>
+		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Option<Vec<HashMap<Box<str>, BuiltValue>>>
 	) -> Result<BuiltValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,
@@ -280,7 +291,7 @@ impl AstNode {
 				match operator {
 					Operator::IntegerAdd | Operator::IntegerSubtract | Operator::IntegerMultiply |
 					Operator::UnsignedDivide | Operator::UnsignedModulo | Operator::SignedDivide | Operator::SignedTruncatedModulo => {
-						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables.clone())?.get_value(main_data, llvm_builder);
+						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value(main_data, llvm_builder);
 						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value(main_data, llvm_builder);
 						let result = match operator {
 							Operator::IntegerAdd => unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) },
@@ -297,7 +308,7 @@ impl AstNode {
 					_ => return Err((Error::FeatureNotYetImplemented("operator".into()), self.start)),
 				}
 			}
-			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => {
+			AstNodeVariant::FunctionDefinition(..) => {
 				self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, local_variables, "unnamedFunction")?
 			}
 			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
@@ -307,7 +318,7 @@ impl AstNode {
 	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltValue>) ->
 		Result<BuiltValue, (Error, (usize, usize))> {
 		// TODO: functions
-		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, None)?;
+		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut None)?;
 		let mut name: Vec<u8> = name.bytes().collect();
 		name.push(0);
 		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name.as_ptr()) };
