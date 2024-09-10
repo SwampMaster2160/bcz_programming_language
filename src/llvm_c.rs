@@ -54,6 +54,8 @@ extern "C" {
 	pub fn LLVMConstStringInContext(C: LLVMContextRef, Str: *const u8, Length: c_uint, DontNullTerminate: LLVMBool) -> LLVMValueRef;
 	// Core/Values/Constants/Function values
 	pub fn LLVMSetFunctionCallConv(Fn: LLVMValueRef, CC: c_uint) -> c_void;
+	// Core/Values/Constants/Function values/Function Parameters
+	pub fn LLVMGetParam(Fn: LLVMValueRef, Index: c_uint) -> LLVMValueRef;
 	// Core/Values/Constants/Scalar constants
 	pub fn LLVMConstInt(IntTy: LLVMTypeRef, N: c_ulonglong, SignExtend: LLVMBool) -> LLVMValueRef;
 	// Core/Basic Block
@@ -72,6 +74,9 @@ extern "C" {
 	pub fn LLVMBuildSDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildSRem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildRet(B: LLVMBuilderRef, V: LLVMValueRef) -> LLVMValueRef;
+	pub fn LLVMBuildAlloca(B: LLVMBuilderRef, Ty: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildStore(B: LLVMBuilderRef, Val: LLVMValueRef, Ptr: LLVMValueRef) -> LLVMValueRef;
+	pub fn LLVMBuildLoad2(B: LLVMBuilderRef, Ty: LLVMTypeRef, PointerVal: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
 	// Target information
 	pub fn LLVMInitializeX86TargetInfo() -> c_void;
 	pub fn LLVMInitializeX86Target() -> c_void;
