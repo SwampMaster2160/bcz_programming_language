@@ -146,7 +146,7 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 		}
 		// If we did not compile anything this round, there is a cyclic dependency
 		if globals_built_this_round.is_empty() {
-			return Err((Error::CyclicDependency, globals_and_dependencies.iter().next().unwrap().1.0.start));
+			return Err((Error::InvalidDependency, globals_and_dependencies.iter().next().unwrap().1.0.start));
 		}
 		// Remove built globals from the to build list
 		for name in globals_built_this_round.iter() {

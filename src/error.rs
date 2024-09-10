@@ -1,4 +1,4 @@
-use std::{f32::consts::E, fmt::Display};
+use std::fmt::Display;
 
 use crate::token::{OperatorSymbol, Separator};
 
@@ -39,7 +39,7 @@ pub enum Error {
 	GlobalAssignmentToNonIdentifier,
 	GlobalVariableConflict(String),
 	ExpectedIdentifier,
-	CyclicDependency,
+	InvalidDependency,
 	TooManyFunctionParameters,
 }
 
@@ -82,7 +82,7 @@ impl Display for Error {
 			Error::GlobalAssignmentToNonIdentifier => write!(f, "global assignment to non-identifier"),
 			Error::GlobalVariableConflict(name) => write!(f, "re-assignment to global variable {name}"),
 			Error::ExpectedIdentifier => write!(f, "expected an identifier"),
-			Error::CyclicDependency => write!(f, "cyclic dependency"),
+			Error::InvalidDependency => write!(f, "invalid or cyclic dependency"),
 			Error::TooManyFunctionParameters => write!(f, "too many function parameters"),
 		}
 	}

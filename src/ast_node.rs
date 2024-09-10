@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMBool, LLVMBuildAdd, LLVMBuildMul, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMModuleRef, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildAdd, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -218,11 +218,46 @@ impl AstNode {
 		Ok(())
 	}
 
+	fn build_function_definition(
+		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
+		built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>, name: &str,
+	) -> Result<BuiltValue, (Error, (usize, usize))> {
+		// Unpack function definition node
+		let Self {
+			start,
+			end: _,
+			variant,
+		} = self;
+		let (parameters, function_body) = match variant {
+			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
+			_ => todo!(),
+		};
+		// Create function parameter type
+		if parameters.len() > u16::MAX as usize {
+			return Err((Error::TooManyFunctionParameters, *start));
+		}
+		let parameter_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(parameters.len()).collect();
+		let function_type = unsafe { LLVMFunctionType(main_data.int_type, parameter_types.as_ptr(), parameter_types.len() as c_uint, false as LLVMBool) };
+		// Build function value
+		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let function = unsafe { LLVMAddFunction(llvm_module, name.as_ptr(), function_type) };
+		// Build function body
+		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, function, c"entry".as_ptr() as *const u8) };
+		unsafe { LLVMPositionBuilderAtEnd(llvm_builder, basic_block) };
+		// TODO
+		//let function_parameter_variables = HashMap::new();
+		// Build function body
+		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?;
+		unsafe { LLVMBuildRet(llvm_builder, function_body_built.get_value(main_data, llvm_builder)) };
+		// Return
+		Ok(BuiltValue::Function(function))
+	}
+
 	pub fn build_r_value(
 		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>
 	) -> Result<BuiltValue, (Error, (usize, usize))> {
 		let Self {
-			start,
+			start: _,
 			end: _,
 			variant,
 		} = self;
@@ -245,8 +280,8 @@ impl AstNode {
 				match operator {
 					Operator::IntegerAdd | Operator::IntegerSubtract | Operator::IntegerMultiply |
 					Operator::UnsignedDivide | Operator::UnsignedModulo | Operator::SignedDivide | Operator::SignedTruncatedModulo => {
-						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables.clone())?.get_value();
-						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value();
+						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables.clone())?.get_value(main_data, llvm_builder);
+						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value(main_data, llvm_builder);
 						let result = match operator {
 							Operator::IntegerAdd => unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) },
 							Operator::IntegerSubtract => unsafe { LLVMBuildSub(llvm_builder, left_value, right_value, c"sub_temp".as_ptr() as *const u8) },
@@ -263,15 +298,7 @@ impl AstNode {
 				}
 			}
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => {
-				if function_parameters.len() > u16::MAX as usize {
-					return Err((Error::TooManyFunctionParameters, *start));
-				}
-				let function_parameter_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(function_parameters.len()).collect();
-				let function_type = build_function(main_data, llvm_module, llvm_builder, built_globals, local_variables, "unnamedFunction", main_data.int_type, &function_parameter_types);
-				//let function_type = unsafe {
-				//	LLVMFunctionType(main_data.int_type, function_parameter_types.as_ptr(), function_parameter_types.len() as c_uint, false as LLVMBool)
-				//};
-				todo!()
+				self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, local_variables, "unnamedFunction")?
 			}
 			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
 		})
@@ -284,18 +311,7 @@ impl AstNode {
 		let mut name: Vec<u8> = name.bytes().collect();
 		name.push(0);
 		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name.as_ptr()) };
-		unsafe { LLVMSetInitializer(global, r_value.get_value()) };
+		unsafe { LLVMSetInitializer(global, r_value.get_value(main_data, llvm_builder)) };
 		return Ok(BuiltValue::GlobalVariable(global));
 	}
-}
-
-fn build_function(
-	main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
-	built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: Option<Vec<HashMap<Box<str>, BuiltValue>>>,
-	name: &str, return_type: LLVMTypeRef, parameter_types: &[LLVMTypeRef],
-) -> Result<BuiltValue, (Error, (usize, usize))> {
-	let function_type = unsafe { LLVMFunctionType(main_data.int_type, parameter_types.as_ptr(), parameter_types.len() as c_uint, false as LLVMBool) };
-	let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
-	let function = unsafe { LLVMAddFunction(llvm_module, name.as_ptr(), function_type) };
-	todo!()
 }
