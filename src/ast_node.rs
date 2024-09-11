@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -312,6 +312,26 @@ impl AstNode {
 			}
 			AstNodeVariant::FunctionDefinition(..) => {
 				self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, local_variables, "unnamedFunction")?
+			}
+			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
+				// If we are in the global scope
+				if local_variables.is_empty() {
+					return Err((Error::FeatureNotYetImplemented("blocks in global scope".into()), self.start));
+				}
+				// Push block scope
+				local_variables.push(HashMap::new());
+				// Build each expression
+				let mut last_built_expression = None;
+				for expression in block_expressions {
+					last_built_expression = Some(expression.build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?);
+				}
+				// Pop the scope we pushed
+				local_variables.pop();
+				// Return
+				match (is_result_undefined, last_built_expression) {
+					(true, _) | (false, None) => BuiltValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }),
+					(false, Some(last_built_expression)) => last_built_expression,
+				}
 			}
 			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
 		})

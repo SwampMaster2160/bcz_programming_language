@@ -1,3 +1,6 @@
 A = 69;
 B = A + 1;
-myFunc = (a, b) a + b + A;
+myFunc = (a, b) {
+	a + b + A * {2 + 2}
+};
+cFunc = () {};

@@ -44,6 +44,8 @@ extern "C" {
 	pub fn LLVMFunctionType(ReturnType: LLVMTypeRef, ParamTypes: *const LLVMTypeRef, ParamCount: c_uint, IsVarArg: LLVMBool) -> LLVMTypeRef;
 	// Core/Types/Sequential Types
 	pub fn LLVMArrayType2(ElementType: LLVMTypeRef, ElementCount: u64) -> LLVMTypeRef;
+	// Core/Values/Constants
+	pub fn LLVMGetUndef(Ty: LLVMTypeRef) -> LLVMValueRef;
 	// Core/Values/Constants/Global Values
 	pub fn LLVMSetLinkage(Global: LLVMValueRef, Linkage: LLVMLinkage) -> c_void;
 	// Core/Values/Constants/Global Variables
