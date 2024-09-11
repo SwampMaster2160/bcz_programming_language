@@ -223,7 +223,7 @@ impl AstNode {
 
 	fn build_function_definition(
 		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
-		built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltValue>>, name: &str,
+		built_globals: &HashMap<Box<str>, BuiltValue>, name: &str,
 	) -> Result<BuiltValue, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
@@ -312,7 +312,7 @@ impl AstNode {
 				}
 			}
 			AstNodeVariant::FunctionDefinition(..) => {
-				self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, local_variables, "unnamedFunction")?
+				self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, "unnamedFunction")?
 			}
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
@@ -343,11 +343,13 @@ impl AstNode {
 
 	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltValue>) ->
 		Result<BuiltValue, (Error, (usize, usize))> {
-		// TODO: functions
+		if matches!(self.variant, AstNodeVariant::FunctionDefinition(..)) {
+			let function = self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, name)?;
+			return Ok(function);
+		}
+		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut Vec::new())?;
-		let mut name: Vec<u8> = name.bytes().collect();
-		name.push(0);
-		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name.as_ptr()) };
+		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name_c.as_ptr()) };
 		unsafe { LLVMSetInitializer(global, r_value.get_value(main_data, llvm_builder)) };
 		return Ok(BuiltValue::GlobalVariable(global));
 	}
