@@ -147,7 +147,10 @@ impl AstNode {
 				return Err((Error::DiscardedGlobalFunctionCall, start));
 			}
 			AstNodeVariant::Block(children, is_result_undefined) => {
-				if *is_result_undefined || children.len() != 1 {
+				if *is_result_undefined && children.is_empty() {
+					return Ok(());
+				}
+				if children.len() != 1 || (*is_result_undefined && children.len() != 0) {
 					return Err((Error::FeatureNotYetImplemented("global blocks".into()), start));
 				}
 				let mut child = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
@@ -244,7 +247,7 @@ impl AstNode {
 		// Build function body
 		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, function, c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(llvm_builder, basic_block) };
-		// Add a local scope to the scope stack that contains the function parameters
+		// Create local scope with the scope that contains the function parameters
 		let mut function_parameter_variables = HashMap::new();
 		for (parameter_index, parameter) in parameters.iter().enumerate() {
 			// Get parameter name
@@ -259,12 +262,10 @@ impl AstNode {
 			unsafe { LLVMBuildStore(llvm_builder, parameter_value, parameter_variable) };
 			function_parameter_variables.insert(parameter_name.clone(), BuiltValue::AllocaVariable(parameter_variable));
 		}
-		local_variables.push(function_parameter_variables);
+		let mut inner_local_variables = vec![function_parameter_variables];
 		// Build function body
-		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?;
+		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut inner_local_variables)?;
 		unsafe { LLVMBuildRet(llvm_builder, function_body_built.get_value(main_data, llvm_builder)) };
-		// Pop the local scope that we pushed before
-		local_variables.pop();
 		// Return
 		Ok(BuiltValue::Function(function))
 	}
@@ -315,6 +316,9 @@ impl AstNode {
 			}
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
+				if *is_result_undefined && block_expressions.is_empty() {
+					return Ok(BuiltValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }));
+				}
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("blocks in global scope".into()), self.start));
 				}

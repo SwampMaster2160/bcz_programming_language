@@ -4,3 +4,4 @@ myFunc = (a, b) {
 	a + b + A * {2 + 2}
 };
 cFunc = () {};
+C = {};
