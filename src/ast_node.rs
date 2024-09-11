@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -264,14 +264,15 @@ impl AstNode {
 		}
 		let mut inner_local_variables = vec![function_parameter_variables];
 		// Build function body
-		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut inner_local_variables)?;
+		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut inner_local_variables, Some(basic_block))?;
 		unsafe { LLVMBuildRet(llvm_builder, function_body_built.get_value(main_data, llvm_builder)) };
 		// Return
 		Ok(BuiltValue::Function(function))
 	}
 
 	pub fn build_r_value(
-		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltValue>>
+		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltValue>>,
+		basic_block: Option<LLVMBasicBlockRef>,
 	) -> Result<BuiltValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,
@@ -294,8 +295,8 @@ impl AstNode {
 				match operator {
 					Operator::IntegerAdd | Operator::IntegerSubtract | Operator::IntegerMultiply |
 					Operator::UnsignedDivide | Operator::UnsignedModulo | Operator::SignedDivide | Operator::SignedTruncatedModulo => {
-						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value(main_data, llvm_builder);
-						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?.get_value(main_data, llvm_builder);
+						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?.get_value(main_data, llvm_builder);
+						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?.get_value(main_data, llvm_builder);
 						let result = match operator {
 							Operator::IntegerAdd => unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) },
 							Operator::IntegerSubtract => unsafe { LLVMBuildSub(llvm_builder, left_value, right_value, c"sub_temp".as_ptr() as *const u8) },
@@ -312,7 +313,11 @@ impl AstNode {
 				}
 			}
 			AstNodeVariant::FunctionDefinition(..) => {
-				self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, "unnamedFunction")?
+				let out = self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, "unnamedFunction")?;
+				if let Some(basic_block) = basic_block {
+					unsafe { LLVMPositionBuilderAtEnd(llvm_builder, basic_block) };
+				}
+				out
 			}
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
@@ -327,7 +332,7 @@ impl AstNode {
 				// Build each expression
 				let mut last_built_expression = None;
 				for expression in block_expressions {
-					last_built_expression = Some(expression.build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables)?);
+					last_built_expression = Some(expression.build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?);
 				}
 				// Pop the scope we pushed
 				local_variables.pop();
@@ -348,7 +353,7 @@ impl AstNode {
 			return Ok(function);
 		}
 		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
-		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut Vec::new())?;
+		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut Vec::new(), None)?;
 		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name_c.as_ptr()) };
 		unsafe { LLVMSetInitializer(global, r_value.get_value(main_data, llvm_builder)) };
 		return Ok(BuiltValue::GlobalVariable(global));
