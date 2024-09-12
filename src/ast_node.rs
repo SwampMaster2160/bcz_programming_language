@@ -227,18 +227,31 @@ impl AstNode {
 					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
 					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 				}
-				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("augmented operators".into()), *start)),
-				Operator::Normal(operation) => match operation {
+				Operator::Augmented(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo => {
-						for operand in operands {
-							operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
-						}
+						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 					}
-					_ => return Err((Error::FeatureNotYetImplemented("this operator".into()), *start)),
+					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read => return Err((Error::FeatureNotYetImplemented("augmented unary operators".into()), *start)),
 				}
-				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("l-value assignments".into()), *start)),
+				Operator::Normal(operation) => match operation {
+					// Operators that only have r-values as operands
+					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
+					Operation::UnsignedDivide | Operation::UnsignedModulo |
+					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
+					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate => for operand in operands {
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+					}
+					// Operators that only have l-values as operands
+					Operation::Read => for operand in operands {
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+					}
+				}
+				Operator::LValueAssignment => for operand in operands {
+					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+				}
 			}
 			AstNodeVariant::String(..) => {}
 		}
