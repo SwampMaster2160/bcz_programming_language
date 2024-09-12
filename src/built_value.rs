@@ -26,34 +26,15 @@ pub enum BuiltLValue {
 }
 
 impl BuiltLValue {
-	pub fn get_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef) -> LLVMValueRef {
+	pub fn get_value(&self, _main_data: &MainData, _llvm_builder: LLVMBuilderRef) -> BuiltRValue {
 		match self {
-			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildLoad2(llvm_builder, main_data.int_type, *alloca_variable, c"alloca_read_temp".as_ptr() as *const u8) },
+			Self::AllocaVariable(alloca_variable) => BuiltRValue::AllocaVariable(*alloca_variable),
 		}
 	}
 
 	pub fn set_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef, value: BuiltRValue) -> LLVMValueRef {
 		match self {
 			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildStore(llvm_builder, value.get_value(main_data, llvm_builder), *alloca_variable) },
-		}
-	}
-}
-
-#[derive(Clone, Debug)]
-pub enum BuiltLocalVariable {
-	AllocaVariable(LLVMValueRef),
-}
-
-impl BuiltLocalVariable {
-	pub fn as_l_value(&self, _main_data: &MainData, _llvm_builder: LLVMBuilderRef) -> BuiltLValue {
-		match self {
-			Self::AllocaVariable(alloca_variable) => BuiltLValue::AllocaVariable(*alloca_variable),
-		}
-	}
-
-	pub fn as_r_value(&self, _main_data: &MainData, _llvm_builder: LLVMBuilderRef) -> BuiltRValue {
-		match self {
-			Self::AllocaVariable(alloca_variable) => BuiltRValue::AllocaVariable(*alloca_variable),
 		}
 	}
 }

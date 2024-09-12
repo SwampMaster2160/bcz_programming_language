@@ -41,6 +41,9 @@ pub enum Error {
 	ExpectedIdentifier,
 	InvalidDependency,
 	TooManyFunctionParameters,
+	GlobalLValueAssignment,
+	LValueFunctionCall,
+	LValueFunctionDefinition,
 }
 
 impl Display for Error {
@@ -84,6 +87,9 @@ impl Display for Error {
 			Error::ExpectedIdentifier => write!(f, "expected an identifier"),
 			Error::InvalidDependency => write!(f, "invalid or cyclic dependency"),
 			Error::TooManyFunctionParameters => write!(f, "too many function parameters"),
+			Error::GlobalLValueAssignment => write!(f, "global l-value assignment"),
+			Error::LValueFunctionCall => write!(f, "l-value function call"),
+			Error::LValueFunctionDefinition => write!(f, "l-value function definition"),
 		}
 	}
 }

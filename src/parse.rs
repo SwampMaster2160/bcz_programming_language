@@ -2,7 +2,7 @@ use std::mem::take;
 
 use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operator}, error::Error, token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
+use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operation, Operator}, error::Error, token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
 
 #[derive(Debug)]
 enum ParseState {
@@ -44,35 +44,35 @@ auto_const_array! {
 	];
 }
 
-const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operator> {
+const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operation> {
 	match (symbol, operator_type) {
-		(OperatorSymbol::AddRead, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerAdd),
-		(OperatorSymbol::AddRead, OperatorType::FloatingPointBitwise) => Some(Operator::FloatAdd),
-		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerSubtract),
-		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operator::FloatSubtract),
-		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerMultiply),
-		(OperatorSymbol::MultiplyDereference, OperatorType::FloatingPointBitwise) => Some(Operator::FloatMultiply),
-		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedDivide),
-		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::UnsignedDivide),
-		(OperatorSymbol::DivideReciprocal, OperatorType::FloatingPointBitwise) => Some(Operator::FloatDivide),
-		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Some(Operator::SignedTruncatedModulo),
-		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::UnsignedModulo),
-		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Some(Operator::FloatModulo),
+		(OperatorSymbol::AddRead, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerAdd),
+		(OperatorSymbol::AddRead, OperatorType::FloatingPointBitwise) => Some(Operation::FloatAdd),
+		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerSubtract),
+		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operation::FloatSubtract),
+		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerMultiply),
+		(OperatorSymbol::MultiplyDereference, OperatorType::FloatingPointBitwise) => Some(Operation::FloatMultiply),
+		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedDivide),
+		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedDivide),
+		(OperatorSymbol::DivideReciprocal, OperatorType::FloatingPointBitwise) => Some(Operation::FloatDivide),
+		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedTruncatedModulo),
+		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedModulo),
+		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Some(Operation::FloatTruncatedModulo),
 		//_ => None,
 	}
 }
 
-const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operator> {
+const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operation> {
 	match (symbol, operator_type) {
-		(OperatorSymbol::AddRead, _) => Some(Operator::Read),
-		(OperatorSymbol::MultiplyDereference, _) => Some(Operator::Dereference),
-		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operator::IntegerNegate),
-		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operator::FloatNegate),
+		(OperatorSymbol::AddRead, _) => Some(Operation::Read),
+		(OperatorSymbol::MultiplyDereference, _) => Some(Operation::Dereference),
+		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerNegate),
+		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operation::FloatNegate),
 		_ => None,
 	}
 }
 
-const fn postfix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operator> {
+const fn postfix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operation> {
 	match (symbol, operator_type) {
 		_ => None,
 	}
@@ -264,7 +264,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		let operator_ast_node = AstNode {
 			start,
 			end: operand.end,
-			variant: AstNodeVariant::Operator(Some(operator), [operand].into(), is_assignment),
+			variant: AstNodeVariant::Operator(Operator::Normal(operator), [operand].into()),
 		};
 		// Insert back into list
 		items_being_parsed[index] = ParseState::AstNode(operator_ast_node);
@@ -301,7 +301,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 				let operator_ast_node = AstNode {
 					start: operand.start,
 					end,
-					variant: AstNodeVariant::Operator(Some(operator), [operand].into(), is_assignment),
+					variant: AstNodeVariant::Operator(Operator::Normal(operator), [operand].into()),
 				};
 				// Insert back into list
 				items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
@@ -343,7 +343,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					let operator_ast_node = AstNode {
 						start: left_operand.start,
 						end: right_operand.end,
-						variant: AstNodeVariant::Operator(Some(operator), [left_operand, right_operand].into(), false),
+						variant: AstNodeVariant::Operator(Operator::Normal(operator), [left_operand, right_operand].into()),
 					};
 					// Insert back into list
 					items_being_parsed.insert(index - 1, ParseState::AstNode(operator_ast_node));
@@ -418,11 +418,11 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			// If we find one
 			// Convert to AST operator
 			let operator = match operator_symbol {
-				Some(operator_symbol) => Some(match binary_operator_from_symbol(*operator_symbol, *operator_type) {
+				Some(operator_symbol) => Operator::Augmented(match binary_operator_from_symbol(*operator_symbol, *operator_type) {
 					Some(operator) => operator,
 					None => return Err((Error::BinaryOperatorNotUsedOnExpressions, *start)),
 				}),
-				None => None,
+				None => Operator::Assignment,
 			};
 			// Get left and right operands
 			let left_operand = items_being_parsed.remove(index - 1);
@@ -440,7 +440,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			let operator_ast_node = AstNode {
 				start: left_operand.start,
 				end: right_operand.end,
-				variant: AstNodeVariant::Operator(operator, [left_operand, right_operand].into(), true),
+				variant: AstNodeVariant::Operator(operator, [left_operand, right_operand].into()),
 			};
 			// Insert back into list
 			items_being_parsed.insert(index - 1, ParseState::AstNode(operator_ast_node));

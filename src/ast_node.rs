@@ -2,10 +2,10 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltLocalVariable, BuiltRValue}, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
-pub enum Operator {
+pub enum Operation {
 	IntegerAdd,
 	FloatAdd,
 	IntegerSubtract,
@@ -17,11 +17,19 @@ pub enum Operator {
 	FloatDivide,
 	SignedTruncatedModulo,
 	UnsignedModulo,
-	FloatModulo,
+	FloatTruncatedModulo,
 	Read,
 	IntegerNegate,
 	FloatNegate,
 	Dereference,
+}
+
+#[derive(Debug)]
+pub enum Operator {
+	Assignment,
+	Normal(Operation),
+	Augmented(Operation),
+	LValueAssignment,
 }
 
 #[derive(Debug)]
@@ -33,8 +41,8 @@ pub enum Metadata {
 pub enum AstNodeVariant {
 	/// A constant.
 	Constant(u64),
-	/// An operator with its operands and if is an assignment.
-	Operator(Option<Operator>, Box<[AstNode]>, bool),
+	/// An operator with its operands.
+	Operator(Operator, Box<[AstNode]>),
 	/// For an identifier such as `my_var` or `myFunc`.
 	Identifier(Box<str>),
 	/// A semi-colon separated list of expressions that where between curly brackets and if the result is undefined.
@@ -71,7 +79,7 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(_, _) => {},
 			AstNodeVariant::Identifier(name) => print!(", name: {name}"),
 			AstNodeVariant::String(string_value) => print!(", string_value: {string_value:?}"),
-			AstNodeVariant::Operator(operator, _, is_assignment) => print!(", operator: {:?}, is_assignment: {:?}", operator, is_assignment),
+			AstNodeVariant::Operator(operator, _) => print!(", operator: {:?}", operator),
 			AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {:?}", metadata),
 		}
 		println!(" {}", '}');
@@ -91,7 +99,7 @@ impl AstNode {
 				}
 				body.print_tree(level + 1);
 			},
-			AstNodeVariant::Operator(_, operands, _) => for operand in operands {
+			AstNodeVariant::Operator(_, operands) => for operand in operands {
 				operand.print_tree(level + 1);
 			}
 			AstNodeVariant::Metadata(_, child) => child.print_tree(level + 1),
@@ -105,12 +113,8 @@ impl AstNode {
 	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, Self>, will_be_discarded: bool) -> Result<(), (Error, (usize, usize))> {
 		let start = self.start;
 		match &mut self.variant {
-			AstNodeVariant::Operator(operator, operands, is_assignment) => match is_assignment {
-				true => {
-					// Make sure the assignment is not augmented
-					if !matches!(operator, None) {
-						return Err((Error::GlobalAugmentedOperator, start));
-					}
+			AstNodeVariant::Operator(operator, operands) => match operator {
+				Operator::Assignment => {
 					// Separate operands
 					let mut identifier_node = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
 					let mut operand_node = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
@@ -138,9 +142,11 @@ impl AstNode {
 					// Replace node with the identifier node
 					*self = identifier_node;
 				}
-				false => for operand in operands {
+				Operator::Normal(..) => for operand in operands {
 					operand.separate_globals(global_list, will_be_discarded)?;
 				}
+				Operator::Augmented(..) => return Err((Error::GlobalAugmentedOperator, start)),
+				Operator::LValueAssignment => return Err((Error::GlobalLValueAssignment, start)),
 			}
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::FunctionCall(..) => if will_be_discarded {
@@ -170,7 +176,8 @@ impl AstNode {
 	pub fn get_variable_dependencies(
 		&self, variable_dependencies: &mut HashSet<Box<str>>,
 		import_dependencies: &mut HashSet<Box<str>>,
-		local_variables: &mut HashSet<Box<str>>
+		local_variables: &mut HashSet<Box<str>>,
+		is_l_value: bool
 	) -> Result<(), (Error, (usize, usize))> {
 		let AstNode {
 			variant,
@@ -179,42 +186,59 @@ impl AstNode {
 		} = self;
 		match variant {
 			AstNodeVariant::Block(sub_expressions, _) => for expression in sub_expressions {
-				expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables)?;
+				match is_l_value {
+					false => expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?,
+					true => return Err((Error::FeatureNotYetImplemented("l-value blocks".into()), *start)),
+				};
 			}
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::FunctionCall(function, arguments) => {
-				function.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone())?;
+				if is_l_value {
+					return Err((Error::LValueFunctionCall, *start));
+				}
+				function.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
 				for argument in arguments {
-					argument.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone())?;
+					argument.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
+				if is_l_value {
+					return Err((Error::LValueFunctionDefinition, *start));
+				}
 				for parameter in parameters {
 					match &parameter.variant {
 						AstNodeVariant::Identifier(name) => local_variables.insert(name.clone()),
 						_ => return Err((Error::ExpectedIdentifier, *start)),
 					};
 				}
-				body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables)?;
+				body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 			}
-			AstNodeVariant::Identifier(name) => if !local_variables.contains(name) {
-				variable_dependencies.insert(name.clone());
-			}
-			AstNodeVariant::Metadata(_, child) => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables)?,
-			AstNodeVariant::Operator(_, operands, is_assignment) => {
-				for (index, operand) in operands.iter().enumerate() {
-					if !(*is_assignment && index == 0 && matches!(&operands[0].variant, AstNodeVariant::Identifier(..))) {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone())?;
-					}
+			AstNodeVariant::Identifier(name) => match is_l_value {
+				false => if !local_variables.contains(name) {
+					variable_dependencies.insert(name.clone());
 				}
-				if *is_assignment {
-					match &operands[0].variant {
-						AstNodeVariant::Identifier(name) => {
-							local_variables.insert(name.clone());
+				true => {
+					local_variables.insert(name.clone());
+				}
+			}
+			AstNodeVariant::Metadata(_, child) => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?,
+			AstNodeVariant::Operator(operator, operands) => match operator {
+				Operator::Assignment => {
+					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+				}
+				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("augmented operators".into()), *start)),
+				Operator::Normal(operation) => match operation {
+					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
+					Operation::UnsignedDivide | Operation::UnsignedModulo |
+					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo => {
+						for operand in operands {
+							operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 						}
-						_ => {}
-					};
+					}
+					_ => return Err((Error::FeatureNotYetImplemented("this operator".into()), *start)),
 				}
+				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("l-value assignments".into()), *start)),
 			}
 			AstNodeVariant::String(..) => {}
 		}
@@ -260,7 +284,7 @@ impl AstNode {
 			let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
 			let parameter_variable = unsafe { LLVMBuildAlloca(llvm_builder, main_data.int_type, parameter_name_c.as_ptr()) };
 			unsafe { LLVMBuildStore(llvm_builder, parameter_value, parameter_variable) };
-			function_parameter_variables.insert(parameter_name.clone(), BuiltLocalVariable::AllocaVariable(parameter_variable));
+			function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
 		}
 		let mut inner_local_variables = vec![function_parameter_variables];
 		// Build function body
@@ -271,11 +295,11 @@ impl AstNode {
 	}
 
 	pub fn build_r_value(
-		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLocalVariable>>,
+		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>,
 		basic_block: Option<LLVMBasicBlockRef>,
 	) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		let Self {
-			start: _,
+			start,
 			end: _,
 			variant,
 		} = self;
@@ -284,39 +308,34 @@ impl AstNode {
 				LLVMConstInt(main_data.int_type, *value as c_ulonglong, false as LLVMBool)
 			}),
 			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, llvm_builder, built_globals, local_variables, &*name),
-			AstNodeVariant::Operator(operator, operands, is_assignment) => {
-				if *is_assignment {
-					if operator.is_some() {
-						return Err((Error::FeatureNotYetImplemented("augmented assignments".into()), self.start));
-					}
+			AstNodeVariant::Operator(operator, operands) => match operator {
+				Operator::Assignment => {
 					let l_value = operands[0].build_l_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?;
 					let r_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?;
 					l_value.set_value(main_data, llvm_builder, r_value.clone());
 					return Ok(r_value);
 				}
-				let operator = match operator {
-					Some(operator) => operator,
-					None => return Err((Error::FeatureNotYetImplemented("no operator".into()), self.start)),
-				};
-				match operator {
-					Operator::IntegerAdd | Operator::IntegerSubtract | Operator::IntegerMultiply |
-					Operator::UnsignedDivide | Operator::UnsignedModulo | Operator::SignedDivide | Operator::SignedTruncatedModulo => {
+				Operator::Normal(operation) => match operation {
+					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
+					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo => {
 						let left_value = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?.get_value(main_data, llvm_builder);
 						let right_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?.get_value(main_data, llvm_builder);
-						let result = match operator {
-							Operator::IntegerAdd => unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) },
-							Operator::IntegerSubtract => unsafe { LLVMBuildSub(llvm_builder, left_value, right_value, c"sub_temp".as_ptr() as *const u8) },
-							Operator::IntegerMultiply => unsafe { LLVMBuildMul(llvm_builder, left_value, right_value, c"mul_temp".as_ptr() as *const u8) },
-							Operator::UnsignedDivide => unsafe { LLVMBuildUDiv(llvm_builder, left_value, right_value, c"udiv_temp".as_ptr() as *const u8) },
-							Operator::UnsignedModulo => unsafe { LLVMBuildURem(llvm_builder, left_value, right_value, c"umod_temp".as_ptr() as *const u8) },
-							Operator::SignedDivide => unsafe { LLVMBuildSDiv(llvm_builder, left_value, right_value, c"sdiv_temp".as_ptr() as *const u8) },
-							Operator::SignedTruncatedModulo => unsafe { LLVMBuildSRem(llvm_builder, left_value, right_value, c"stmod_temp".as_ptr() as *const u8) },
+						let result = match operation {
+							Operation::IntegerAdd => unsafe { LLVMBuildAdd(llvm_builder, left_value, right_value, c"add_temp".as_ptr() as *const u8) },
+							Operation::IntegerSubtract => unsafe { LLVMBuildSub(llvm_builder, left_value, right_value, c"sub_temp".as_ptr() as *const u8) },
+							Operation::IntegerMultiply => unsafe { LLVMBuildMul(llvm_builder, left_value, right_value, c"mul_temp".as_ptr() as *const u8) },
+							Operation::UnsignedDivide => unsafe { LLVMBuildUDiv(llvm_builder, left_value, right_value, c"udiv_temp".as_ptr() as *const u8) },
+							Operation::UnsignedModulo => unsafe { LLVMBuildURem(llvm_builder, left_value, right_value, c"umod_temp".as_ptr() as *const u8) },
+							Operation::SignedDivide => unsafe { LLVMBuildSDiv(llvm_builder, left_value, right_value, c"sdiv_temp".as_ptr() as *const u8) },
+							Operation::SignedTruncatedModulo => unsafe { LLVMBuildSRem(llvm_builder, left_value, right_value, c"stmod_temp".as_ptr() as *const u8) },
 							_ => unreachable!(),
 						};
 						BuiltRValue::NumericalValue(result)
 					}
-					_ => return Err((Error::FeatureNotYetImplemented("operator".into()), self.start)),
+					_ => return Err((Error::FeatureNotYetImplemented("this operator".into()), *start)),
 				}
+				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("augmented assignments".into()), self.start)),
+				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("l-value assignments".into()), self.start)),
 			}
 			AstNodeVariant::FunctionDefinition(..) => {
 				let out = self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, "unnamedFunction")?;
@@ -353,7 +372,7 @@ impl AstNode {
 	}
 
 	pub fn build_l_value(
-		&self, main_data: &mut MainData, _llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, _built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLocalVariable>>,
+		&self, main_data: &mut MainData, _llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, _built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>,
 		_basic_block: Option<LLVMBasicBlockRef>,
 	) -> Result<BuiltLValue, (Error, (usize, usize))> {
 		let Self {
@@ -366,13 +385,13 @@ impl AstNode {
 				// Get local variable if it exists
 				for scope_level in local_variables.iter().rev() {
 					if let Some(variable) = scope_level.get(name) {
-						return Ok(variable.as_l_value(main_data, llvm_builder));
+						return Ok(variable.clone());
 					}
 				}
 				// Else create local variable
 				let variable_name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
 				let variable = unsafe { LLVMBuildAlloca(llvm_builder, main_data.int_type, variable_name_c.as_ptr()) };
-				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLocalVariable::AllocaVariable(variable));
+				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLValue::AllocaVariable(variable));
 				BuiltLValue::AllocaVariable(variable)
 			}
 			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
@@ -393,11 +412,11 @@ impl AstNode {
 	}
 }
 
-fn get_variable_by_name(main_data: &MainData, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLocalVariable>>, name: &str)
+fn get_variable_by_name(main_data: &MainData, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, name: &str)
 	-> BuiltRValue {
 	for scope_level in local_variables.iter().rev() {
 		if let Some(variable) = scope_level.get(name) {
-			return variable.as_r_value(main_data, llvm_builder);
+			return variable.get_value(main_data, llvm_builder);
 		}
 	}
 	built_globals[name].clone()
