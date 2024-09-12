@@ -131,7 +131,7 @@ pub enum TokenVariant {
 	Identifier(Box<str>),
 	Keyword(Keyword),
 	Separator(Separator),
-	Operator(Option<OperatorSymbol>, OperatorType, bool),
+	Operator(Option<OperatorSymbol>, OperatorType, bool, bool),
 }
 
 #[derive(Debug)]
@@ -249,6 +249,10 @@ impl Token {
 				TokenVariantDiscriminants::Operator,
 				line_content.find(|chr: char| !main_data.operator_character_set.contains(&chr)).unwrap_or_else(|| line_content.len()),
 			),
+			_ if line_content.starts_with("@=") => match line_content.chars().nth(2) {
+				Some(chr) if !main_data.operator_character_set.contains(&chr) => (TokenVariantDiscriminants::Operator, 2),
+				_ => return Err(Error::InvalidOperator(line_content.split_at(line_content.find(|chr| !main_data.operator_character_set.contains(&chr)).unwrap_or_else(|| line_content.len())).0.into())),
+			}
 			'@' => (
 				TokenVariantDiscriminants::Keyword,
 				&line_content[1..].find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()) + 1,
@@ -362,6 +366,14 @@ impl Token {
 				None => return Err(Error::InvalidKeyword(token_string.to_string()))
 			}),
 			TokenVariantDiscriminants::Operator => {
+				// Parse the l-value assignment operator
+				if token_string == "@=" {
+					return Ok((Some(Self {
+						variant: TokenVariant::Operator(None, OperatorType::UnsignedLogicalNotShortCircuit, true, true),
+						start: (line_number, column_number),
+						end: (line_number, column_number + 2),
+					}), string_without_token));
+				}
 				// Get operator type
 				let operator_type = main_data.char_to_operator_type_mapping.get(&first_char);
 				let (operator_type, operator_string_without_type) = match operator_type {
@@ -382,7 +394,7 @@ impl Token {
 					}),
 				};
 				// Create operator token varient
-				TokenVariant::Operator(operator_base, operator_type, is_assignment)
+				TokenVariant::Operator(operator_base, operator_type, is_assignment, false)
 			}
 			TokenVariantDiscriminants::StringLiteral => {
 				let mut string_quote_content = &token_string[1..token_string.len() - 1];

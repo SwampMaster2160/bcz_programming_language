@@ -228,7 +228,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	for index in (0..items_being_parsed.len().saturating_sub(1)).rev() {
 		// Make sure the item is an operator token
 		let (operator_symbol, operator_type, is_assignment, start) = match &items_being_parsed[index] {
-			ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment), start, end: _ }) =>
+			ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment, _), start, end: _ }) =>
 				(*operator_symbol, *operator_type, *is_assignment, *start),
 				_ => continue,
 		};
@@ -273,7 +273,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	let mut index = 1;
 	while index < items_being_parsed.len().saturating_sub(1) {
 		// Make sure the item is an operator token
-		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment), start, end }) = &items_being_parsed[index] {
+		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment, _), start, end }) = &items_being_parsed[index] {
 			let (operator_symbol, operator_type, is_assignment, start, end) = (*operator_symbol, *operator_type, *is_assignment, *start, *end);
 			// Make sure the item to the right is not a parsed expression
 			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..) | ParseState::FunctionArgumentsOrParameters(..) | ParseState::Token(Token { variant: TokenVariant::Keyword(..), .. })) {
@@ -315,7 +315,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		// Search for operators in the precedence level
 		let mut index = 1;
 		while index < items_being_parsed.len().saturating_sub(1) {
-			if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, false), start, end: _ }) = &items_being_parsed[index] {
+			if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, false, false), start, end: _ }) = &items_being_parsed[index] {
 				let operator_symbol = match operator_symbol {
 					Some(operator_symbol) => *operator_symbol,
 					None => return Err((Error::NoOperatorBase, *start)),
@@ -414,15 +414,19 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	// Parse augmented binary operators
 	let mut index = items_being_parsed.len().saturating_sub(2);
 	while index > 0 {
-		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, true), start, end: _ }) = &items_being_parsed[index] {
+		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, true, is_l_value_assignment), start, end: _ })
+		= &items_being_parsed[index] {
 			// If we find one
 			// Convert to AST operator
-			let operator = match operator_symbol {
-				Some(operator_symbol) => Operator::Augmented(match binary_operator_from_symbol(*operator_symbol, *operator_type) {
-					Some(operator) => operator,
-					None => return Err((Error::BinaryOperatorNotUsedOnExpressions, *start)),
-				}),
-				None => Operator::Assignment,
+			let operator = match is_l_value_assignment {
+				false => match operator_symbol {
+					Some(operator_symbol) => Operator::Augmented(match binary_operator_from_symbol(*operator_symbol, *operator_type) {
+						Some(operator) => operator,
+						None => return Err((Error::BinaryOperatorNotUsedOnExpressions, *start)),
+					}),
+					None => Operator::Assignment,
+				}
+				true => Operator::LValueAssignment,
 			};
 			// Get left and right operands
 			let left_operand = items_being_parsed.remove(index - 1);
