@@ -1,20 +1,59 @@
-use crate::{llvm_c::{LLVMBuildLoad2, LLVMBuildPtrToInt, LLVMBuilderRef, LLVMGetInitializer, LLVMValueRef}, MainData};
+use crate::{llvm_c::{LLVMBuildLoad2, LLVMBuildPtrToInt, LLVMBuildStore, LLVMBuilderRef, LLVMGetInitializer, LLVMValueRef}, MainData};
 
 #[derive(Clone, Debug)]
-pub enum BuiltValue {
+pub enum BuiltRValue {
 	NumericalValue(LLVMValueRef),
 	GlobalVariable(LLVMValueRef),
 	Function(LLVMValueRef),
 	AllocaVariable(LLVMValueRef),
 }
 
-impl BuiltValue {
+impl BuiltRValue {
 	pub fn get_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef) -> LLVMValueRef {
 		match self {
 			Self::NumericalValue(value) => *value,
 			Self::GlobalVariable(global_variable) => unsafe { LLVMGetInitializer(*global_variable) },
 			Self::Function(function_pointer) => unsafe { LLVMBuildPtrToInt(llvm_builder, *function_pointer, main_data.int_type, c"fn_ptr_to_int_temp".as_ptr() as *const u8) },
 			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildLoad2(llvm_builder, main_data.int_type, *alloca_variable, c"alloca_read_temp".as_ptr() as *const u8) },
+		}
+	}
+}
+
+
+#[derive(Clone, Debug)]
+pub enum BuiltLValue {
+	AllocaVariable(LLVMValueRef),
+}
+
+impl BuiltLValue {
+	pub fn get_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef) -> LLVMValueRef {
+		match self {
+			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildLoad2(llvm_builder, main_data.int_type, *alloca_variable, c"alloca_read_temp".as_ptr() as *const u8) },
+		}
+	}
+
+	pub fn set_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef, value: BuiltRValue) -> LLVMValueRef {
+		match self {
+			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildStore(llvm_builder, value.get_value(main_data, llvm_builder), *alloca_variable) },
+		}
+	}
+}
+
+#[derive(Clone, Debug)]
+pub enum BuiltLocalVariable {
+	AllocaVariable(LLVMValueRef),
+}
+
+impl BuiltLocalVariable {
+	pub fn as_l_value(&self, _main_data: &MainData, _llvm_builder: LLVMBuilderRef) -> BuiltLValue {
+		match self {
+			Self::AllocaVariable(alloca_variable) => BuiltLValue::AllocaVariable(*alloca_variable),
+		}
+	}
+
+	pub fn as_r_value(&self, _main_data: &MainData, _llvm_builder: LLVMBuilderRef) -> BuiltRValue {
+		match self {
+			Self::AllocaVariable(alloca_variable) => BuiltRValue::AllocaVariable(*alloca_variable),
 		}
 	}
 }

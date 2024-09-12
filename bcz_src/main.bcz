@@ -1,6 +1,7 @@
 myFunc = (a, b) {
-	(c) c
+	c = a + b;
+	c = c + 1;
+	c + PI_INT
 };
-a = myFunc;
-b = () {};
-c = {() {}} + 1;
+
+PI_INT = 3;

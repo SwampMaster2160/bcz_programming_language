@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltValue, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltLocalVariable, BuiltRValue}, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operator {
@@ -223,8 +223,8 @@ impl AstNode {
 
 	fn build_function_definition(
 		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
-		built_globals: &HashMap<Box<str>, BuiltValue>, name: &str,
-	) -> Result<BuiltValue, (Error, (usize, usize))> {
+		built_globals: &HashMap<Box<str>, BuiltRValue>, name: &str,
+	) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
 			start,
@@ -260,33 +260,39 @@ impl AstNode {
 			let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
 			let parameter_variable = unsafe { LLVMBuildAlloca(llvm_builder, main_data.int_type, parameter_name_c.as_ptr()) };
 			unsafe { LLVMBuildStore(llvm_builder, parameter_value, parameter_variable) };
-			function_parameter_variables.insert(parameter_name.clone(), BuiltValue::AllocaVariable(parameter_variable));
+			function_parameter_variables.insert(parameter_name.clone(), BuiltLocalVariable::AllocaVariable(parameter_variable));
 		}
 		let mut inner_local_variables = vec![function_parameter_variables];
 		// Build function body
 		let function_body_built = function_body.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut inner_local_variables, Some(basic_block))?;
 		unsafe { LLVMBuildRet(llvm_builder, function_body_built.get_value(main_data, llvm_builder)) };
 		// Return
-		Ok(BuiltValue::Function(function))
+		Ok(BuiltRValue::Function(function))
 	}
 
 	pub fn build_r_value(
-		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltValue>>,
+		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLocalVariable>>,
 		basic_block: Option<LLVMBasicBlockRef>,
-	) -> Result<BuiltValue, (Error, (usize, usize))> {
+	) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,
 			end: _,
 			variant,
 		} = self;
 		Ok(match variant {
-			AstNodeVariant::Constant(value) => BuiltValue::NumericalValue(unsafe {
+			AstNodeVariant::Constant(value) => BuiltRValue::NumericalValue(unsafe {
 				LLVMConstInt(main_data.int_type, *value as c_ulonglong, false as LLVMBool)
 			}),
-			AstNodeVariant::Identifier(name) => get_variable_by_name(built_globals, local_variables, &*name),
+			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, llvm_builder, built_globals, local_variables, &*name),
 			AstNodeVariant::Operator(operator, operands, is_assignment) => {
 				if *is_assignment {
-					return Err((Error::FeatureNotYetImplemented("local assignments".into()), self.start));
+					if operator.is_some() {
+						return Err((Error::FeatureNotYetImplemented("augmented assignments".into()), self.start));
+					}
+					let l_value = operands[0].build_l_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?;
+					let r_value = operands[1].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?;
+					l_value.set_value(main_data, llvm_builder, r_value.clone());
+					return Ok(r_value);
 				}
 				let operator = match operator {
 					Some(operator) => operator,
@@ -307,7 +313,7 @@ impl AstNode {
 							Operator::SignedTruncatedModulo => unsafe { LLVMBuildSRem(llvm_builder, left_value, right_value, c"stmod_temp".as_ptr() as *const u8) },
 							_ => unreachable!(),
 						};
-						BuiltValue::NumericalValue(result)
+						BuiltRValue::NumericalValue(result)
 					}
 					_ => return Err((Error::FeatureNotYetImplemented("operator".into()), self.start)),
 				}
@@ -322,7 +328,7 @@ impl AstNode {
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
 				if *is_result_undefined && block_expressions.is_empty() {
-					return Ok(BuiltValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }));
+					return Ok(BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }));
 				}
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("blocks in global scope".into()), self.start));
@@ -338,7 +344,7 @@ impl AstNode {
 				local_variables.pop();
 				// Return
 				match (is_result_undefined, last_built_expression) {
-					(true, _) | (false, None) => BuiltValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }),
+					(true, _) | (false, None) => BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }),
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
@@ -346,8 +352,35 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltValue>) ->
-		Result<BuiltValue, (Error, (usize, usize))> {
+	pub fn build_l_value(
+		&self, main_data: &mut MainData, _llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, _built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLocalVariable>>,
+		_basic_block: Option<LLVMBasicBlockRef>,
+	) -> Result<BuiltLValue, (Error, (usize, usize))> {
+		let Self {
+			start: _,
+			end: _,
+			variant,
+		} = self;
+		Ok(match variant {
+			AstNodeVariant::Identifier(name) => {
+				// Get local variable if it exists
+				for scope_level in local_variables.iter().rev() {
+					if let Some(variable) = scope_level.get(name) {
+						return Ok(variable.as_l_value(main_data, llvm_builder));
+					}
+				}
+				// Else create local variable
+				let variable_name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
+				let variable = unsafe { LLVMBuildAlloca(llvm_builder, main_data.int_type, variable_name_c.as_ptr()) };
+				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLocalVariable::AllocaVariable(variable));
+				BuiltLValue::AllocaVariable(variable)
+			}
+			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
+		})
+	}
+
+	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltRValue>) ->
+		Result<BuiltRValue, (Error, (usize, usize))> {
 		if matches!(self.variant, AstNodeVariant::FunctionDefinition(..)) {
 			let function = self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, name)?;
 			return Ok(function);
@@ -356,14 +389,15 @@ impl AstNode {
 		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut Vec::new(), None)?;
 		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name_c.as_ptr()) };
 		unsafe { LLVMSetInitializer(global, r_value.get_value(main_data, llvm_builder)) };
-		return Ok(BuiltValue::GlobalVariable(global));
+		return Ok(BuiltRValue::GlobalVariable(global));
 	}
 }
 
-fn get_variable_by_name(built_globals: &HashMap<Box<str>, BuiltValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltValue>>, name: &str) -> BuiltValue {
+fn get_variable_by_name(main_data: &MainData, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLocalVariable>>, name: &str)
+	-> BuiltRValue {
 	for scope_level in local_variables.iter().rev() {
-		if let Some(scope_level) = scope_level.get(name) {
-			return scope_level.clone();
+		if let Some(variable) = scope_level.get(name) {
+			return variable.as_r_value(main_data, llvm_builder);
 		}
 	}
 	built_globals[name].clone()

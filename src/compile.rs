@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{ast_node::AstNode, built_value::BuiltValue, error::Error, llvm_c::{LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, built_value::BuiltRValue, error::Error, llvm_c::{LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -127,7 +127,7 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 	// Create builder
 	let llvm_builder = unsafe { LLVMCreateBuilderInContext(main_data.llvm_context) };
 	// Build each global in rounds
-	let mut built_globals: HashMap<Box<str>, BuiltValue> = HashMap::new();
+	let mut built_globals: HashMap<Box<str>, BuiltRValue> = HashMap::new();
 	while !globals_and_dependencies.is_empty() {
 		// Build all globals this round in their dependencies are built
 		let mut globals_built_this_round = HashSet::new();
