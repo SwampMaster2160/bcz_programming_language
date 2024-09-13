@@ -15,6 +15,7 @@ mod token;
 mod ast_node;
 mod parse;
 mod built_value;
+mod file_build_data;
 
 pub struct MainData<'a> {
 	do_link: bool,
@@ -38,7 +39,6 @@ pub struct MainData<'a> {
 	operator_character_set: HashSet<char>,
 	char_to_operator_type_mapping: HashMap<char, OperatorType>,
 	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
-	//llvm_target: LLVMTargetRef,
 	llvm_target_machine: LLVMTargetMachineRef,
 }
 
@@ -66,7 +66,6 @@ impl<'a> MainData<'a> {
 			print_after_analyzer: false,
 			dump_llvm_module: false,
 			llvm_target_triple: CString::default(),
-			//llvm_target: null_mut(),
 			llvm_target_machine: null_mut(),
 		}
 	}

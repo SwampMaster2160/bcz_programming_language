@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operation {
@@ -258,10 +258,11 @@ impl AstNode {
 		Ok(())
 	}
 
-	fn build_function_definition(
-		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
-		built_globals: &HashMap<Box<str>, BuiltRValue>, name: &str,
-	) -> Result<BuiltRValue, (Error, (usize, usize))> {
+	//fn build_function_definition(
+	//	&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef,
+	//	built_globals: &HashMap<Box<str>, BuiltRValue>, name: &str,
+	//) -> Result<BuiltRValue, (Error, (usize, usize))> {
+	fn build_function_definition(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
 			start,
@@ -307,9 +308,12 @@ impl AstNode {
 		Ok(BuiltRValue::Function(function))
 	}
 
+	//pub fn build_r_value(
+	//	&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>,
+	//	basic_block: Option<LLVMBasicBlockRef>,
+	//) -> Result<BuiltRValue, (Error, (usize, usize))> {
 	pub fn build_r_value(
-		&self, main_data: &mut MainData, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, built_globals: &HashMap<Box<str>, BuiltRValue>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>,
-		basic_block: Option<LLVMBasicBlockRef>,
+		&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, basic_block: Option<LLVMBasicBlockRef>
 	) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		let Self {
 			start,
@@ -388,7 +392,9 @@ impl AstNode {
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
-			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
+			AstNodeVariant::FunctionCall(function, arguments) => return Err((Error::FeatureNotYetImplemented("function calls".into()), self.start)),
+			AstNodeVariant::String(text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
+			AstNodeVariant::Metadata(metadata, child) => return Err((Error::FeatureNotYetImplemented("metadata".into()), self.start)),
 		})
 	}
 
@@ -419,17 +425,25 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltRValue>) ->
-		Result<BuiltRValue, (Error, (usize, usize))> {
-		if matches!(self.variant, AstNodeVariant::FunctionDefinition(..)) {
-			let function = self.build_function_definition(main_data, llvm_module, llvm_builder, built_globals, name)?;
+	//pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltRValue>) ->
+	pub fn build_global_assignment(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
+		if self.is_function() {
+			let function = self.build_function_definition(main_data, file_build_data, name)?;
 			return Ok(function);
 		}
 		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
-		let r_value = self.build_r_value(main_data, llvm_module, llvm_builder, built_globals, &mut Vec::new(), None)?;
+		let r_value = self.build_r_value(main_data, file_build_data, &mut Vec::new(), None)?;
 		let global = unsafe { LLVMAddGlobal(llvm_module, main_data.int_type, name_c.as_ptr()) };
 		unsafe { LLVMSetInitializer(global, r_value.get_value(main_data, llvm_builder)) };
 		return Ok(BuiltRValue::GlobalVariable(global));
+	}
+
+	pub fn is_function(&self) -> bool {
+		match &self.variant {
+			AstNodeVariant::FunctionDefinition(..) => true,
+			AstNodeVariant::Metadata(metadata, child) => child.is_function(),
+			_ => false,
+		}
 	}
 }
 
