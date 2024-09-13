@@ -1,7 +1,1 @@
-myFunc = (a, b) {
-	c = a + b;
-	c = c + 1;
-	c + PI_INT
-};
-
-PI_INT = 3;
+a = -1 + 1;

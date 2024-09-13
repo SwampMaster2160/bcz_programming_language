@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMBuilderRef, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMModuleRef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operation {
@@ -342,6 +342,14 @@ impl AstNode {
 							Operation::SignedDivide => unsafe { LLVMBuildSDiv(llvm_builder, left_value, right_value, c"sdiv_temp".as_ptr() as *const u8) },
 							Operation::SignedTruncatedModulo => unsafe { LLVMBuildSRem(llvm_builder, left_value, right_value, c"stmod_temp".as_ptr() as *const u8) },
 							_ => unreachable!(),
+						};
+						BuiltRValue::NumericalValue(result)
+					}
+					Operation::IntegerNegate => {
+						let operand = operands[0].build_r_value(main_data, llvm_module, llvm_builder, built_globals, local_variables, basic_block)?.get_value(main_data, llvm_builder);
+						let result = match operation {
+							Operation::IntegerNegate => unsafe { LLVMBuildNeg(llvm_builder, operand, c"neg_temp".as_ptr() as *const u8) },
+							_ => unreachable!()
 						};
 						BuiltRValue::NumericalValue(result)
 					}
