@@ -44,6 +44,7 @@ pub enum Error {
 	GlobalLValueAssignment,
 	LValueFunctionCall,
 	LValueFunctionDefinition,
+	MultipleEntryPoints,
 }
 
 impl Display for Error {
@@ -90,6 +91,7 @@ impl Display for Error {
 			Error::GlobalLValueAssignment => write!(f, "global l-value assignment"),
 			Error::LValueFunctionCall => write!(f, "l-value function call"),
 			Error::LValueFunctionDefinition => write!(f, "l-value function definition"),
+			Error::MultipleEntryPoints => write!(f, "multiple entry points"),
 		}
 	}
 }

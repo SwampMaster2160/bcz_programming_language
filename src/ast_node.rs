@@ -267,7 +267,17 @@ impl AstNode {
 		} = self;
 		let (parameters, function_body) = match variant {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
-			_ => todo!(),
+			AstNodeVariant::Metadata(metadata, child) => match metadata {
+				Metadata::EntryPoint => {
+					let child_built = child.build_function_definition(main_data, file_build_data, name)?;
+					if file_build_data.entrypoint.is_some() {
+						return Err((Error::MultipleEntryPoints, *start));
+					}
+					file_build_data.entrypoint = Some(child_built.clone());
+					return Ok(child_built);
+				}
+			}
+			_ => unreachable!(),
 		};
 		// Create function parameter type
 		if parameters.len() > u16::MAX as usize {
@@ -385,13 +395,14 @@ impl AstNode {
 			}
 			AstNodeVariant::FunctionCall(_function, _arguments) => return Err((Error::FeatureNotYetImplemented("function calls".into()), self.start)),
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
-			AstNodeVariant::Metadata(_metadata, _child) => return Err((Error::FeatureNotYetImplemented("metadata".into()), self.start)),
+			AstNodeVariant::Metadata(metadata, _child) => match metadata {
+				Metadata::EntryPoint => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
+			}
 		})
 	}
 
-	pub fn build_l_value(
-		&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, _basic_block: Option<LLVMBasicBlockRef>,
-	) -> Result<BuiltLValue, (Error, (usize, usize))> {
+	pub fn build_l_value(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, _basic_block: Option<LLVMBasicBlockRef>)
+	-> Result<BuiltLValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,
 			end: _,
@@ -415,7 +426,6 @@ impl AstNode {
 		})
 	}
 
-	//pub fn build_global_assignment(&self, name: &str, llvm_module: LLVMModuleRef, llvm_builder: LLVMBuilderRef, main_data: &mut MainData, built_globals: &HashMap<Box<str>, BuiltRValue>) ->
 	pub fn build_global_assignment(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		if self.is_function() {
 			let function = self.build_function_definition(main_data, file_build_data, name)?;
@@ -439,8 +449,7 @@ impl AstNode {
 	}
 }
 
-fn get_variable_by_name(main_data: &MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, name: &str)
-	-> BuiltRValue {
+fn get_variable_by_name(main_data: &MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, name: &str) -> BuiltRValue {
 	for scope_level in local_variables.iter().rev() {
 		if let Some(variable) = scope_level.get(name) {
 			return variable.get_value(main_data, file_build_data.llvm_builder);

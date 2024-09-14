@@ -131,6 +131,7 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 		llvm_module,
 		llvm_builder,
 		built_globals: HashMap::new(),
+		entrypoint: None,
 	};
 	// Build each global in rounds
 	while !globals_and_dependencies.is_empty() {

@@ -1,4 +1,4 @@
-myFunc = (a, b) {
+myFunc = @entry_point (a, b) {
 	c = a + b;
 	c = c + 1;
 	c + PI_INT
