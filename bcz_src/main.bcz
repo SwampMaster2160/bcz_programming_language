@@ -1,7 +1,4 @@
 myFunc = @entry_point (a, b) {
-	c = a + b;
-	c = c + 1;
-	c + PI_INT
+	fn = (a, b) a + b;
+	fn(a, b)
 };
-
-PI_INT = 3;

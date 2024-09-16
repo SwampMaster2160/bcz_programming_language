@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{re
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
 
 #[derive(Debug)]
 pub enum Operation {
@@ -393,7 +393,36 @@ impl AstNode {
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
-			AstNodeVariant::FunctionCall(_function, _arguments) => return Err((Error::FeatureNotYetImplemented("function calls".into()), self.start)),
+			AstNodeVariant::FunctionCall(function, arguments) => {
+				if local_variables.is_empty() {
+					return Err((Error::FeatureNotYetImplemented("global function calls".into()), self.start))
+				}
+				// Build function body and arguments
+				let function_pointer_built = function.build_r_value(main_data, file_build_data, local_variables, basic_block)?.get_value(main_data, file_build_data.llvm_builder);
+				let mut arguments_built = Vec::with_capacity(arguments.len());
+				for argument in arguments {
+					arguments_built.push(argument.build_r_value(main_data, file_build_data, local_variables, basic_block)?.get_value(main_data, file_build_data.llvm_builder));
+				}
+				// Build types
+				let argument_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(arguments.len()).collect();
+				let function_type = unsafe { LLVMFunctionType(main_data.int_type, argument_types.as_ptr(), argument_types.len() as c_uint, false as LLVMBool) };
+				let function_pointer_type = unsafe { LLVMPointerType(function_type, 0) };
+				// Build function call
+				let function_pointer = unsafe {
+					LLVMBuildIntToPtr(file_build_data.llvm_builder, function_pointer_built, function_pointer_type, c"int_to_ptr_temp".as_ptr() as *const u8)
+				};
+				let built_function_call = unsafe {
+					LLVMBuildCall2(
+						file_build_data.llvm_builder,
+						function_type,
+						function_pointer,
+						arguments_built.as_ptr(),
+						arguments_built.len() as c_uint,
+						c"function_call_temp".as_ptr() as *const u8
+					)
+				};
+				BuiltRValue::NumericalValue(built_function_call)
+			}
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
 			AstNodeVariant::Metadata(metadata, _child) => match metadata {
 				Metadata::EntryPoint => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),

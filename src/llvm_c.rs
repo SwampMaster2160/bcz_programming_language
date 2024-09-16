@@ -44,6 +44,7 @@ extern "C" {
 	pub fn LLVMFunctionType(ReturnType: LLVMTypeRef, ParamTypes: *const LLVMTypeRef, ParamCount: c_uint, IsVarArg: LLVMBool) -> LLVMTypeRef;
 	// Core/Types/Sequential Types
 	pub fn LLVMArrayType2(ElementType: LLVMTypeRef, ElementCount: u64) -> LLVMTypeRef;
+	pub fn LLVMPointerType(ElementType: LLVMTypeRef, AddressSpace: c_uint) -> LLVMTypeRef;
 	// Core/Values/Constants
 	pub fn LLVMGetUndef(Ty: LLVMTypeRef) -> LLVMValueRef;
 	// Core/Values/Constants/Global Values
@@ -67,6 +68,7 @@ extern "C" {
 	pub fn LLVMDisposeBuilder(Builder: LLVMBuilderRef) -> c_void;
 	pub fn LLVMPositionBuilderAtEnd(Builder: LLVMBuilderRef, Block: LLVMBasicBlockRef) -> c_void;
 	pub fn LLVMBuildPtrToInt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildIntToPtr(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildCall2(B: LLVMBuilderRef, Ty: LLVMTypeRef, Fn: LLVMValueRef, Args: *const LLVMValueRef, NumArgs: c_uint, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildAdd(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildSub(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
