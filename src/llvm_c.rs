@@ -69,6 +69,9 @@ extern "C" {
 	pub fn LLVMPositionBuilderAtEnd(Builder: LLVMBuilderRef, Block: LLVMBasicBlockRef) -> c_void;
 	pub fn LLVMBuildPtrToInt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildIntToPtr(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildZExt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildSExt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildTrunc(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildCall2(B: LLVMBuilderRef, Ty: LLVMTypeRef, Fn: LLVMValueRef, Args: *const LLVMValueRef, NumArgs: c_uint, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildAdd(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
 	pub fn LLVMBuildSub(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;

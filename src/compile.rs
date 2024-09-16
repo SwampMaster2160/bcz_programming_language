@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::{collections::{HashMap, HashSet}, ffi::c_uint, fs::File, io::{BufRead, BufReader}, path::PathBuf, ptr::null};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMExternalLinkage, LLVMFunctionType, LLVMInt32TypeInContext, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMWin64CallConv}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -158,6 +158,48 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 		for name in globals_built_this_round.iter() {
 			globals_and_dependencies.remove(name);
 		}
+	}
+	// Build entry point
+	if let Some(wrapped_entry_point) = file_build_data.entrypoint {
+		// Get types of wrapper function
+		let int_32_type = unsafe { LLVMInt32TypeInContext(main_data.llvm_context) };
+		let entry_point_function_parameters = [main_data.int_type, main_data.int_type, main_data.int_type, int_32_type];
+		let entry_point_function_type = unsafe {
+			LLVMFunctionType(int_32_type, entry_point_function_parameters.as_ptr(), entry_point_function_parameters.len() as c_uint, false as LLVMBool)
+		};
+		// Get wrapped function
+		let wrapped_entry_point_function_pointer = wrapped_entry_point.get_value(main_data, llvm_builder);
+		let wrapped_entry_point_function_parameter_types = [main_data.int_type, main_data.int_type, main_data.int_type, main_data.int_type];
+		let wrapped_entry_point_function_type = unsafe {
+			LLVMFunctionType(
+				main_data.int_type,
+				wrapped_entry_point_function_parameter_types.as_ptr(),
+				wrapped_entry_point_function_parameter_types.len() as c_uint,
+				false as LLVMBool
+			)
+		};
+		let wrapped_entry_point_function_pointer_type = unsafe { LLVMPointerType(wrapped_entry_point_function_type, 0) };
+		let wrapped_entry_point_function_pointer = unsafe {
+			LLVMBuildIntToPtr(llvm_builder, wrapped_entry_point_function_pointer, wrapped_entry_point_function_pointer_type, c"int_to_fn_ptr_temp".as_ptr() as *const u8)
+		};
+		// Build wrapper function
+		// TODO: Non-Windows
+		let entry_point_function = unsafe { LLVMAddFunction(llvm_module, c"WinMain".as_ptr() as *const u8, entry_point_function_type) };
+		unsafe { LLVMSetLinkage(entry_point_function, LLVMExternalLinkage) };
+		unsafe { LLVMSetFunctionCallConv(entry_point_function, LLVMWin64CallConv) };
+		let entry_point_function_basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, entry_point_function, c"entry".as_ptr() as *const u8) };
+		unsafe { LLVMPositionBuilderAtEnd(llvm_builder, entry_point_function_basic_block) };
+		let built_function_call = unsafe {
+			LLVMBuildCall2(
+				llvm_builder,
+				wrapped_entry_point_function_type,
+				wrapped_entry_point_function_pointer,
+				null(),
+				0,
+				c"function_call_temp".as_ptr() as *const u8,
+			)
+		};
+		unsafe { LLVMBuildRet(llvm_builder, LLVMBuildTrunc(llvm_builder, built_function_call, int_32_type, c"trunc_cast_temp".as_ptr() as *const u8)) };
 	}
 	// Clean up and return
 	unsafe { LLVMDisposeBuilder(llvm_builder) };

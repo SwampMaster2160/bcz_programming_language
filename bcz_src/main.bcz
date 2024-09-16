@@ -1,4 +1,3 @@
-myFunc = @entry_point (a, b) {
-	fn = (a, b) a + b;
-	fn(a, b)
+main = @entry_point () {
+	420
 };

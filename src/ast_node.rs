@@ -397,6 +397,9 @@ impl AstNode {
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("global function calls".into()), self.start))
 				}
+				if arguments.len() > u16::MAX as usize {
+					return Err((Error::TooManyFunctionArguments, self.start))
+				}
 				// Build function body and arguments
 				let function_pointer_built = function.build_r_value(main_data, file_build_data, local_variables, basic_block)?.get_value(main_data, file_build_data.llvm_builder);
 				let mut arguments_built = Vec::with_capacity(arguments.len());
