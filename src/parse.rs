@@ -395,7 +395,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		// Get the type of metadata the keyword represents
 		let metadata = match keyword {
 			Keyword::EntryPoint => Metadata::EntryPoint,
-			//_ => continue,
+			Keyword::Link => Metadata::Link,
 		};
 		// Take child node
 		let child_node = match items_being_parsed.remove(index + 1) {

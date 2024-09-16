@@ -35,6 +35,7 @@ pub enum Operator {
 #[derive(Debug)]
 pub enum Metadata {
 	EntryPoint,
+	Link,
 }
 
 #[derive(Debug, EnumDiscriminants)]
@@ -258,7 +259,7 @@ impl AstNode {
 		Ok(())
 	}
 
-	fn build_function_definition(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
+	fn build_function_definition(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str, is_link_function: bool) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
 			start,
@@ -269,13 +270,14 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
 				Metadata::EntryPoint => {
-					let child_built = child.build_function_definition(main_data, file_build_data, name)?;
+					let child_built = child.build_function_definition(main_data, file_build_data, name, is_link_function)?;
 					if file_build_data.entrypoint.is_some() {
 						return Err((Error::MultipleEntryPoints, *start));
 					}
 					file_build_data.entrypoint = Some(child_built.clone());
 					return Ok(child_built);
 				}
+				Metadata::Link => return child.build_function_definition(main_data, file_build_data, name, true),
 			}
 			_ => unreachable!(),
 		};
@@ -283,6 +285,7 @@ impl AstNode {
 		if parameters.len() > u16::MAX as usize {
 			return Err((Error::TooManyFunctionParameters, *start));
 		}
+		// TODO: Link functions
 		let parameter_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(parameters.len()).collect();
 		let function_type = unsafe { LLVMFunctionType(main_data.int_type, parameter_types.as_ptr(), parameter_types.len() as c_uint, false as LLVMBool) };
 		// Build function value
@@ -321,6 +324,13 @@ impl AstNode {
 			end: _,
 			variant,
 		} = self;
+		if self.is_function() {
+			let out = self.build_function_definition(main_data, file_build_data, "unnamedFunction", false)?;
+			if let Some(basic_block) = basic_block {
+				unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder, basic_block) };
+			}
+			return Ok(out);
+		}
 		Ok(match variant {
 			AstNodeVariant::Constant(value) => BuiltRValue::NumericalValue(unsafe {
 				LLVMConstInt(main_data.int_type, *value as c_ulonglong, false as LLVMBool)
@@ -363,13 +373,7 @@ impl AstNode {
 				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("augmented assignments".into()), self.start)),
 				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("l-value assignments".into()), self.start)),
 			}
-			AstNodeVariant::FunctionDefinition(..) => {
-				let out = self.build_function_definition(main_data, file_build_data, "unnamedFunction")?;
-				if let Some(basic_block) = basic_block {
-					unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder, basic_block) };
-				}
-				out
-			}
+			AstNodeVariant::FunctionDefinition(..) => unreachable!(),
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
 				if *is_result_undefined && block_expressions.is_empty() {
@@ -428,7 +432,8 @@ impl AstNode {
 			}
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
 			AstNodeVariant::Metadata(metadata, _child) => match metadata {
-				Metadata::EntryPoint => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
+				Metadata::EntryPoint => unreachable!(),
+				Metadata::Link => unreachable!(),
 			}
 		})
 	}
@@ -460,7 +465,7 @@ impl AstNode {
 
 	pub fn build_global_assignment(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		if self.is_function() {
-			let function = self.build_function_definition(main_data, file_build_data, name)?;
+			let function = self.build_function_definition(main_data, file_build_data, name, false)?;
 			return Ok(function);
 		}
 		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
@@ -475,6 +480,7 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(..) => true,
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
 				Metadata::EntryPoint => child.is_function(),
+				Metadata::Link => child.is_function(),
 			}
 			_ => false,
 		}

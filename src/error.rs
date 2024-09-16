@@ -46,6 +46,8 @@ pub enum Error {
 	LValueFunctionDefinition,
 	MultipleEntryPoints,
 	TooManyFunctionArguments,
+	//EntryPointLValue,
+	//LinkLValue,
 }
 
 impl Display for Error {
@@ -94,6 +96,8 @@ impl Display for Error {
 			Error::LValueFunctionDefinition => write!(f, "l-value function definition"),
 			Error::MultipleEntryPoints => write!(f, "multiple entry points"),
 			Error::TooManyFunctionArguments => write!(f, "too many function arguments"),
+			//Error::EntryPointLValue => write!(f, "entry point l-value"),
+			//Error::LinkLValue => write!(f, "link l-value"),
 		}
 	}
 }

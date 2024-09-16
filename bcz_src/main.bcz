@@ -1,3 +1,5 @@
 main = @entry_point () {
 	420
 };
+
+Beep = @link (4, 4) -4;

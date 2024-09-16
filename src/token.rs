@@ -51,12 +51,14 @@ impl Separator {
 #[derive(EnumIter, Clone, Copy, Debug)]
 pub enum Keyword {
 	EntryPoint,
+	Link,
 }
 
 impl Keyword {
 	pub const fn get_symbol(self) -> &'static str {
 		match self {
 			Self::EntryPoint => "entry_point",
+			Self::Link => "link",
 		}
 	}
 
