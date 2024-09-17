@@ -2,9 +2,9 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMTypeRef, LLVMVoidTypeInContext, LLVMWin64CallConv}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMTypeRef, LLVMWin64CallConv}, MainData};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operation {
 	IntegerAdd,
 	FloatAdd,
@@ -24,7 +24,7 @@ pub enum Operation {
 	Dereference,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operator {
 	Assignment,
 	Normal(Operation),
@@ -32,13 +32,13 @@ pub enum Operator {
 	LValueAssignment,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Metadata {
 	EntryPoint,
 	Link,
 }
 
-#[derive(Debug, EnumDiscriminants)]
+#[derive(Debug, EnumDiscriminants, Clone)]
 pub enum AstNodeVariant {
 	/// A constant.
 	Constant(u64),
@@ -58,7 +58,7 @@ pub enum AstNodeVariant {
 	Metadata(Metadata, Box<AstNode>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AstNode {
 	pub variant: AstNodeVariant,
 	/// The line and column that this node starts at.
@@ -357,7 +357,7 @@ impl AstNode {
 					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
 					let argument = unsafe { LLVMGetParam(function, parameter_index as c_uint) };
 					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type) } as u8)) {
-						Ordering::Less => match wrapped_function_return_type_is_signed {
+						Ordering::Less => match is_signed {
 							false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, argument, parameter_type, c"z_extend_temp".as_ptr() as *const u8) },
 							true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, argument, parameter_type, c"s_extend_temp".as_ptr() as *const u8) },
 						}
@@ -573,7 +573,7 @@ impl AstNode {
 				let is_negative = (main_data.sign_bit_mask & *value) != 0;
 				let byte_width = match is_negative {
 					false => *value,
-					true => (*value ^ main_data.int_max_value) + 1,
+					true => (*value ^ main_data.int_max_value).wrapping_add(1),
 				};
 				(match byte_width {
 					//0 => unsafe { LLVMVoidTypeInContext(main_data.llvm_context) },
@@ -587,6 +587,60 @@ impl AstNode {
 			}
 			_ => return Err((Error::InvalidType, *start)),
 		})
+	}
+
+	pub fn const_evaluate(&mut self, main_data: &mut MainData, const_evaluated_globals: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>, variable_dependencies: &mut HashSet<Box<str>>, is_link_function: bool)
+	-> Result<(), (Error, (usize, usize))> {
+		let Self {
+			start,
+			end,
+			variant,
+		} = self;
+		match variant {
+			AstNodeVariant::Operator(operator, operands) => {
+				for operand in operands.iter_mut() {
+					operand.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+				}
+				match operator {
+					Operator::Normal(operation) => match operation {
+						Operation::IntegerNegate => if let AstNode { variant: AstNodeVariant::Constant(value), .. } = operands[0] {
+							let new_value = ((value ^ main_data.int_max_value).wrapping_add(1)) & main_data.int_max_value;
+							*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+						}
+						// TODO
+						_ => {}
+					}
+					// TODO
+					_ => {}
+				}
+			}
+			AstNodeVariant::FunctionDefinition(parameters, body) => {
+				body.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, false)?;
+				if is_link_function {
+					for parameter in parameters {
+						parameter.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, false)?;
+					}
+				}
+			}
+			AstNodeVariant::Metadata(metadata, child) => match metadata {
+				Metadata::EntryPoint => child.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?,
+				Metadata::Link => child.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, true)?,
+			}
+			AstNodeVariant::Block(sub_expressions, ..) => for sub_expression in sub_expressions {
+				sub_expression.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+			}
+			AstNodeVariant::Constant(..) => {}
+			AstNodeVariant::FunctionCall(function_pointer, arguments) => {
+				function_pointer.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+				for argument in arguments {
+					argument.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+				}
+			}
+			AstNodeVariant::String(..) => {}
+			// TODO
+			AstNodeVariant::Identifier(..) => {}
+		}
+		Ok(())
 	}
 }
 

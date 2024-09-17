@@ -30,6 +30,7 @@ enum CompilerOptionToken {
 	PrintTokens,
 	PrintAstNodes,
 	PrintAfterAnalyzer,
+	PrintAfterConstEvaluate,
 	DumpLlvmModule,
 }
 
@@ -48,6 +49,7 @@ impl CompilerOptionToken {
 			Self::PrintAstNodes => None,
 			Self::PrintAfterAnalyzer => None,
 			Self::DumpLlvmModule => None,
+			Self::PrintAfterConstEvaluate => None,
 		}
 	}
 
@@ -65,6 +67,7 @@ impl CompilerOptionToken {
 			Self::PrintAstNodes => Some("print-ast-nodes"),
 			Self::PrintAfterAnalyzer => Some("print-after-analyzer"),
 			Self::DumpLlvmModule => Some("dump-llvm-module"),
+			Self::PrintAfterConstEvaluate => Some("print-after-const-evaluate"),
 		}
 	}
 
@@ -82,6 +85,7 @@ impl CompilerOptionToken {
 			Self::PrintAstNodes => Some("Print AST nodes resulting from the parser"),
 			Self::PrintAfterAnalyzer => Some("Print AST nodes after the analyzer has run"),
 			Self::DumpLlvmModule => Some("Print the content of the built LLVM module"),
+			Self::PrintAfterConstEvaluate => Some("Print AST nodes after constant evaluation"),
 		}
 	}
 
@@ -172,6 +176,7 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 					CompilerOptionToken::PrintAstNodes => main_data.print_ast_nodes = true,
 					CompilerOptionToken::PrintAfterAnalyzer => main_data.print_after_analyzer = true,
 					CompilerOptionToken::DumpLlvmModule => main_data.dump_llvm_module = true,
+					CompilerOptionToken::PrintAfterConstEvaluate => main_data.print_after_const_evaluate = true,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {

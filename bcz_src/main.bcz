@@ -1,5 +1,6 @@
 main = @entry_point () {
-	Beep(100, 100)
+	Beep(100, 1000);
+	420
 };
 
-Beep = @link (4, 4) 4;
+Beep = @link (4, 4) -4;

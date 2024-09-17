@@ -68,6 +68,44 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			println!("{import_dependency}");
 		}
 	}
+	// Const evaluate globals
+	let mut globals_and_dependencies_after_const_evaluate: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
+	while globals_and_dependencies.len() > globals_and_dependencies_after_const_evaluate.len() {
+		let mut globals_have_been_const_evaluated_this_round = false;
+		'a: for (name, (global, variable_dependencies)) in globals_and_dependencies.iter_mut() {
+			// Make sure that the dependencies are const evaluated
+			if globals_and_dependencies_after_const_evaluate.contains_key(name) {
+				continue 'a;
+			}
+			for variable_dependency in variable_dependencies.iter() {
+				if !globals_and_dependencies_after_const_evaluate.contains_key(variable_dependency) {
+					continue 'a;
+				}
+			}
+			// Const evaluate
+			let mut new_global = global.clone();
+			let mut new_variable_dependencies = variable_dependencies.clone();
+			new_global.const_evaluate(main_data, &globals_and_dependencies_after_const_evaluate, &mut new_variable_dependencies, false)
+				.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
+			// Add to list
+			globals_and_dependencies_after_const_evaluate.insert(name.clone(), (new_global, new_variable_dependencies));
+			globals_have_been_const_evaluated_this_round = true;
+		}
+		// If we did not const evaluate anything this round, there is a cyclic dependency
+		if !globals_have_been_const_evaluated_this_round {
+			let error_pos = globals_and_dependencies.iter().next().unwrap().1.0.start;
+			return Err((Error::InvalidDependency, filepath.clone(), error_pos.0, error_pos.1));
+		}
+	}
+	drop(globals_and_dependencies);
+	// Print const evaluated globals if commanded to do so
+	if main_data.print_after_analyzer {
+		println!("Const evaluated globals of {}:", filepath.display());
+		for (name, (global, variable_dependencies)) in globals_and_dependencies_after_const_evaluate.iter() {
+			print!("{name} -> {:?} = ", variable_dependencies);
+			global.print_tree(0);
+		}
+	}
 	// TODO: compile import dependencies
 	// Build LLVM module
 	let mut module_name: Vec<u8> = match filepath.file_stem() {
@@ -79,7 +117,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}.bytes().collect();
 	module_name.push(0);
 	let llvm_module = unsafe { LLVMModuleCreateWithNameInContext(module_name.as_ptr(), main_data.llvm_context) };
-	build_llvm_module(main_data, llvm_module, globals_and_dependencies)
+	build_llvm_module(main_data, llvm_module, globals_and_dependencies_after_const_evaluate)
 		.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	// Dump module if commanded to do so
 	if main_data.dump_llvm_module {
