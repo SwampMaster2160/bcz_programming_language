@@ -51,6 +51,7 @@ pub enum Error {
 	LinkNotUsedOnFunction,
 	InvalidType,
 	InvalidTypeWidth,
+	UnableToWriteObject,
 }
 
 impl Display for Error {
@@ -102,6 +103,7 @@ impl Display for Error {
 			Error::LinkNotUsedOnFunction => write!(f, "link not used on function"),
 			Error::InvalidType => write!(f, "invalid type"),
 			Error::InvalidTypeWidth => write!(f, "invalid type width"),
+			Error::UnableToWriteObject => write!(f, "unable to write object"),
 			//Error::EntryPointLValue => write!(f, "entry point l-value"),
 			//Error::LinkLValue => write!(f, "link l-value"),
 		}

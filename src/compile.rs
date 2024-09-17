@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, ffi::c_uint, fs::File, io::{BufRead, BufReader}, path::PathBuf, ptr::null};
+use std::{collections::{HashMap, HashSet}, ffi::c_uint, fs::{create_dir_all, File}, io::{BufRead, BufReader}, iter::once, path::PathBuf, ptr::{null, null_mut}};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMExternalLinkage, LLVMFunctionType, LLVMInt32TypeInContext, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMWin64CallConv}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMExternalLinkage, LLVMFunctionType, LLVMInt32TypeInContext, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMObjectFile, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -124,6 +124,20 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		println!("LLVM IR of {}:", filepath.display());
 		unsafe { LLVMDumpModule(llvm_module) };
 	}
+	// Write .o file
+	let filepath_stem: PathBuf = filepath.file_stem().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.into();
+	let mut output_filepath = main_data.binary_path.clone();
+	output_filepath.push(match filepath_stem.strip_prefix(&main_data.source_path) {
+		Ok(relative) => relative,
+		Err(_) => &filepath_stem,
+	});
+	output_filepath.set_extension("o");
+	let directory: PathBuf = output_filepath.parent().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.into();
+	if !directory.exists() {
+		create_dir_all(directory).map_err(|_| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?;
+	}
+	let filepath_c: Box<[u8]> = output_filepath.as_os_str().to_str().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.bytes().chain(once(0)).collect();
+	unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module, filepath_c.as_ptr(), LLVMObjectFile, null_mut()) };
 	// Clean up
 	unsafe { LLVMDisposeModule(llvm_module) };
 	// Return
