@@ -52,7 +52,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	let mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
 	for (name, expression) in globals.into_iter() {
 		let mut variable_dependencies = HashSet::new();
-		expression.get_variable_dependencies(&mut variable_dependencies, &mut import_dependencies, &mut HashSet::new(), false)
+		expression.get_variable_dependencies(&mut variable_dependencies, &mut import_dependencies, &mut HashSet::new(), false, false)
 			.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 		globals_and_dependencies.insert(name, (expression, variable_dependencies));
 	}

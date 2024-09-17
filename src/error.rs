@@ -48,6 +48,9 @@ pub enum Error {
 	TooManyFunctionArguments,
 	//EntryPointLValue,
 	//LinkLValue,
+	LinkNotUsedOnFunction,
+	InvalidType,
+	InvalidTypeWidth,
 }
 
 impl Display for Error {
@@ -96,6 +99,9 @@ impl Display for Error {
 			Error::LValueFunctionDefinition => write!(f, "l-value function definition"),
 			Error::MultipleEntryPoints => write!(f, "multiple entry points"),
 			Error::TooManyFunctionArguments => write!(f, "too many function arguments"),
+			Error::LinkNotUsedOnFunction => write!(f, "link not used on function"),
+			Error::InvalidType => write!(f, "invalid type"),
+			Error::InvalidTypeWidth => write!(f, "invalid type width"),
 			//Error::EntryPointLValue => write!(f, "entry point l-value"),
 			//Error::LinkLValue => write!(f, "link l-value"),
 		}

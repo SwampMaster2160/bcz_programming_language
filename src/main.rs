@@ -34,6 +34,7 @@ pub struct MainData<'a> {
 	llvm_target_triple: CString,
 	int_bit_width: u8,
 	int_max_value: u64,
+	sign_bit_mask: u64,
 	char_to_separator_mapping: HashMap<char, Separator>,
 	str_to_operator_mapping: HashMap<&'static str, OperatorSymbol>,
 	operator_character_set: HashSet<char>,
@@ -58,6 +59,7 @@ impl<'a> MainData<'a> {
 			int_type: null_mut(),
 			int_bit_width: 0,
 			int_max_value: 0,
+			sign_bit_mask: 0,
 			char_to_separator_mapping: Separator::get_symbols_map(),
 			str_to_operator_mapping: OperatorSymbol::get_symbols_map(),
 			operator_character_set: OperatorSymbol::get_character_set(),
@@ -116,6 +118,7 @@ fn main() {
 	}
 	main_data.int_bit_width = int_type_width as u8;
 	main_data.int_max_value = ((1u128 << main_data.int_bit_width) - 1) as u64;
+	main_data.sign_bit_mask = main_data.int_max_value & !(main_data.int_max_value >> 1);
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
 		let absolute_filepath = main_data.source_path.join(filepath);

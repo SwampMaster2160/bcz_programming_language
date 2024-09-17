@@ -1,8 +1,8 @@
-use std::{collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{repeat, once}, mem::swap};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{once, repeat}, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildUDiv, LLVMBuildURem, LLVMConstInt, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetInitializer, LLVMTypeRef}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMTypeRef, LLVMVoidTypeInContext, LLVMWin64CallConv}, MainData};
 
 #[derive(Debug)]
 pub enum Operation {
@@ -178,17 +178,21 @@ impl AstNode {
 		&self, variable_dependencies: &mut HashSet<Box<str>>,
 		import_dependencies: &mut HashSet<Box<str>>,
 		local_variables: &mut HashSet<Box<str>>,
-		is_l_value: bool
+		is_l_value: bool,
+		is_link_function: bool,
 	) -> Result<(), (Error, (usize, usize))> {
 		let AstNode {
 			variant,
 			start,
 			end: _,
 		} = self;
+		if is_link_function && !matches!(variant, AstNodeVariant::FunctionDefinition(..) | AstNodeVariant::Metadata(..)) {
+			return Err((Error::LinkNotUsedOnFunction, *start))
+		}
 		match variant {
 			AstNodeVariant::Block(sub_expressions, _) => for expression in sub_expressions {
 				match is_l_value {
-					false => expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?,
+					false => expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
 					true => return Err((Error::FeatureNotYetImplemented("l-value blocks".into()), *start)),
 				};
 			}
@@ -197,9 +201,9 @@ impl AstNode {
 				if is_l_value {
 					return Err((Error::LValueFunctionCall, *start));
 				}
-				function.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
+				function.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false)?;
 				for argument in arguments {
-					argument.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
+					argument.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false)?;
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
@@ -207,12 +211,18 @@ impl AstNode {
 					return Err((Error::LValueFunctionDefinition, *start));
 				}
 				for parameter in parameters {
-					match &parameter.variant {
-						AstNodeVariant::Identifier(name) => local_variables.insert(name.clone()),
-						_ => return Err((Error::ExpectedIdentifier, *start)),
+					match (&parameter.variant, is_link_function) {
+						(AstNodeVariant::Identifier(name), false) => {
+							local_variables.insert(name.clone());
+						}
+						(_, false) => return Err((Error::ExpectedIdentifier, parameter.start)),
+						(_, true) => parameter.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
 					};
 				}
-				body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+				match is_link_function {
+					false => body.get_variable_dependencies(variable_dependencies, import_dependencies, &mut HashSet::new(), false, false)?,
+					true => body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
+				}
 			}
 			AstNodeVariant::Identifier(name) => match is_l_value {
 				false => if !local_variables.contains(name) {
@@ -222,18 +232,21 @@ impl AstNode {
 					local_variables.insert(name.clone());
 				}
 			}
-			AstNodeVariant::Metadata(_, child) => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?,
+			AstNodeVariant::Metadata(metadata, child) => match metadata {
+				Metadata::EntryPoint => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
+				Metadata::Link => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
+			},
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				Operator::Assignment => {
-					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
-					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
+					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 				}
 				Operator::Augmented(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo => {
-						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
-						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
+						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read => return Err((Error::FeatureNotYetImplemented("augmented unary operators".into()), *start)),
 				}
@@ -243,15 +256,15 @@ impl AstNode {
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate => for operand in operands {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
 					// Operators that only have l-values as operands
 					Operation::Read => for operand in operands {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 					}
 				}
 				Operator::LValueAssignment => for operand in operands {
-					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 				}
 			}
 			AstNodeVariant::String(..) => {}
@@ -285,34 +298,97 @@ impl AstNode {
 		if parameters.len() > u16::MAX as usize {
 			return Err((Error::TooManyFunctionParameters, *start));
 		}
-		// TODO: Link functions
 		let parameter_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(parameters.len()).collect();
 		let function_type = unsafe { LLVMFunctionType(main_data.int_type, parameter_types.as_ptr(), parameter_types.len() as c_uint, false as LLVMBool) };
 		// Build function value
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
-		let function = unsafe { LLVMAddFunction(file_build_data.llvm_module, name.as_ptr(), function_type) };
+		let name_bytes: Box<[u8]> = match is_link_function {
+			false => name.bytes().chain(once(0)).collect(),
+			true => "__bcz__link__".bytes().chain(name.bytes()).chain(once(0)).collect(),
+		};
+		let function = unsafe { LLVMAddFunction(file_build_data.llvm_module, name_bytes.as_ptr(), function_type) };
 		// Build function body
 		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, function, c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder, basic_block) };
-		// Create local scope with the scope that contains the function parameters
-		let mut function_parameter_variables = HashMap::new();
-		for (parameter_index, parameter) in parameters.iter().enumerate() {
-			// Get parameter name
-			let parameter_name = match &parameter.variant {
-				AstNodeVariant::Identifier(name) => name,
-				_ => return Err((Error::ExpectedIdentifier, parameter.start)),
-			};
-			// Add parameter to local scope
-			let parameter_value = unsafe { LLVMGetParam(function, parameter_index as c_uint) };
-			let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
-			let parameter_variable = unsafe { LLVMBuildAlloca(file_build_data.llvm_builder, main_data.int_type, parameter_name_c.as_ptr()) };
-			unsafe { LLVMBuildStore(file_build_data.llvm_builder, parameter_value, parameter_variable) };
-			function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
+		match is_link_function {
+			false => {
+				let mut function_parameter_variables = HashMap::new();
+				for (parameter_index, parameter) in parameters.iter().enumerate() {
+					// Get parameter name
+					let parameter_name = match &parameter.variant {
+						AstNodeVariant::Identifier(name) => name,
+						_ => return Err((Error::ExpectedIdentifier, parameter.start)),
+					};
+					// Add parameter to local scope
+					let parameter_value = unsafe { LLVMGetParam(function, parameter_index as c_uint) };
+					let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
+					let parameter_variable = unsafe { LLVMBuildAlloca(file_build_data.llvm_builder, main_data.int_type, parameter_name_c.as_ptr()) };
+					unsafe { LLVMBuildStore(file_build_data.llvm_builder, parameter_value, parameter_variable) };
+					function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
+				}
+				let mut inner_local_variables = vec![function_parameter_variables];
+				// Build function body
+				let function_body_built = function_body.build_r_value(main_data, file_build_data, &mut inner_local_variables, Some(basic_block))?;
+				unsafe { LLVMBuildRet(file_build_data.llvm_builder, function_body_built.get_value(main_data, file_build_data.llvm_builder)) };
+			}
+			true => {
+				// Get wrapped function type
+				let mut wrapped_function_parameter_types = Vec::with_capacity(parameters.len());
+				for parameter in parameters.iter() {
+					let (parameter_type, _) = parameter.type_from_width(main_data)?;
+					wrapped_function_parameter_types.push(parameter_type);
+				}
+				let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
+				let wrapped_function_type = unsafe {
+					LLVMFunctionType(
+						wrapped_function_return_type,
+						wrapped_function_parameter_types.as_ptr(),
+						wrapped_function_parameter_types.len() as c_uint,
+						false as LLVMBool
+					)
+				};
+				// Link to wrapped function
+				let wrapped_name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+				let wrapped_function = unsafe { LLVMAddFunction(file_build_data.llvm_module, wrapped_name.as_ptr(), wrapped_function_type) };
+				unsafe { LLVMSetLinkage(wrapped_function, LLVMDLLImportLinkage) };
+				unsafe { LLVMSetFunctionCallConv(wrapped_function, LLVMWin64CallConv) };
+				// Cast arguments to the types of the wrapped function parameters
+				let mut arguments = Vec::with_capacity(parameters.len());
+				for (parameter_index, parameter) in parameters.iter().enumerate() {
+					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
+					let argument = unsafe { LLVMGetParam(function, parameter_index as c_uint) };
+					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type) } as u8)) {
+						Ordering::Less => match wrapped_function_return_type_is_signed {
+							false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, argument, parameter_type, c"z_extend_temp".as_ptr() as *const u8) },
+							true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, argument, parameter_type, c"s_extend_temp".as_ptr() as *const u8) },
+						}
+						Ordering::Equal => argument,
+						Ordering::Greater => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, argument, parameter_type, c"trunc_temp".as_ptr() as *const u8) },
+					};
+					arguments.push(argument_converted);
+				}
+				// Call wrapped function
+				let call_result = unsafe {
+					LLVMBuildCall2(
+						file_build_data.llvm_builder,
+						wrapped_function_type,
+						wrapped_function,
+						arguments.as_ptr(),
+						arguments.len() as c_uint,
+						c"func_call_temp".as_ptr() as *const u8,
+					)
+				};
+				// Build return
+				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type) } as u8)) {
+					Ordering::Less => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, call_result, main_data.int_type, c"trunc_temp".as_ptr() as *const u8) },
+					Ordering::Equal => call_result,
+					Ordering::Greater => match wrapped_function_return_type_is_signed {
+						false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, call_result, main_data.int_type, c"z_extend_temp".as_ptr() as *const u8) },
+						true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, call_result, main_data.int_type, c"s_extend_temp".as_ptr() as *const u8) },
+					}
+				};
+				unsafe { LLVMBuildRet(file_build_data.llvm_builder, call_result_converted) };
+			}
 		}
-		let mut inner_local_variables = vec![function_parameter_variables];
-		// Build function body
-		let function_body_built = function_body.build_r_value(main_data, file_build_data, &mut inner_local_variables, Some(basic_block))?;
-		unsafe { LLVMBuildRet(file_build_data.llvm_builder, function_body_built.get_value(main_data, file_build_data.llvm_builder)) };
 		// Return
 		Ok(BuiltRValue::Function(function))
 	}
@@ -325,7 +401,7 @@ impl AstNode {
 			variant,
 		} = self;
 		if self.is_function() {
-			let out = self.build_function_definition(main_data, file_build_data, "unnamedFunction", false)?;
+			let out = self.build_function_definition(main_data, file_build_data, "__bcz__unnamedFunction", false)?;
 			if let Some(basic_block) = basic_block {
 				unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder, basic_block) };
 			}
@@ -484,6 +560,33 @@ impl AstNode {
 			}
 			_ => false,
 		}
+	}
+
+	pub fn type_from_width(&self, main_data: &mut MainData) -> Result<(LLVMTypeRef, bool), (Error, (usize, usize))> {
+		let Self {
+			start,
+			end: _,
+			variant,
+		} = self;
+		Ok(match variant {
+			AstNodeVariant::Constant(value) => {
+				let is_negative = (main_data.sign_bit_mask & *value) != 0;
+				let byte_width = match is_negative {
+					false => *value,
+					true => (*value ^ main_data.int_max_value) + 1,
+				};
+				(match byte_width {
+					//0 => unsafe { LLVMVoidTypeInContext(main_data.llvm_context) },
+					1 => unsafe { LLVMInt8TypeInContext(main_data.llvm_context) },
+					2 => unsafe { LLVMInt16TypeInContext(main_data.llvm_context) },
+					4 => unsafe { LLVMInt32TypeInContext(main_data.llvm_context) },
+					8 => unsafe { LLVMInt64TypeInContext(main_data.llvm_context) },
+					16 => unsafe { LLVMInt128TypeInContext(main_data.llvm_context) },
+					_ => return Err((Error::InvalidTypeWidth, *start)),
+				}, is_negative)
+			}
+			_ => return Err((Error::InvalidType, *start)),
+		})
 	}
 }
 
