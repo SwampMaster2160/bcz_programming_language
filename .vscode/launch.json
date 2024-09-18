@@ -12,14 +12,14 @@
 				"args": [
 					"build",
 					"--bin=bcz_programming_language",
-					"--package=bcz_programming_language"
+					"--package=bcz_programming_language",
 				],
 				"filter": {
 					"name": "bcz_programming_language",
 					"kind": "bin"
 				}
 			},
-			"args": ["-h", "main.bcz", "--print-tokens", "--print-ast-nodes", "--print-after-analyzer", "--dump-llvm-module"],
+			"args": ["-h", "main.bcz", "--print-tokens", "--print-ast-nodes", "--print-after-analyzer", "--dump-llvm-module", "-o", "exe_out.exe"],
 			"cwd": "${workspaceFolder}"
 		},
 		{

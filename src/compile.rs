@@ -138,6 +138,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	let filepath_c: Box<[u8]> = output_filepath.as_os_str().to_str().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.bytes().chain(once(0)).collect();
 	unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module, filepath_c.as_ptr(), LLVMObjectFile, null_mut()) };
+	main_data.object_files_to_link.push(output_filepath);
 	// Clean up
 	unsafe { LLVMDisposeModule(llvm_module) };
 	// Return
