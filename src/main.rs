@@ -17,31 +17,57 @@ mod parse;
 mod built_value;
 mod file_build_data;
 
+/// Info that applies while compiling all files.
 pub struct MainData<'a> {
+	/// Should the compiled .o files be linked to create a primary output file?
 	do_link: bool,
+	/// The path of the primary output file realitive to `binary_path`.
 	primary_output_file: Option<&'a str>,
+	/// A list of paths to source files to compile, paths are realitive to `source_path`.
 	filepaths_to_compile: Vec<&'a str>,
+	/// The working directory of the compiler.
 	compiler_working_directory: PathBuf,
+	/// The path of all source files to be compiled are realitive to this path.
 	source_path: PathBuf,
+	/// The path of all compiled output files are realitive to this path.
 	binary_path: PathBuf,
+	/// Should the tokens from each file be printed after tokenization of the file.
 	print_tokens: bool,
+	/// Should the AST nodes from each file be printed after parsing of the files tokens.
 	print_ast_nodes: bool,
+	/// Should the AST nodes from each global variable be printed after global variables have been separated out and their dependencies have been analyzed.
 	print_after_analyzer: bool,
+	/// Should the AST nodes from each global variable be printed after constant evaluation.
 	print_after_const_evaluate: bool,
+	/// Should the built LLVM module be printed for each file after being built.
 	dump_llvm_module: bool,
+	/// The context for LLVM functions.
 	llvm_context: LLVMContextRef,
+	/// The data layout fo the target machine.
 	llvm_data_layout: LLVMTargetDataRef,
+	/// The integer type for the target machine, should be big enough to hold a pointer.
 	int_type: LLVMTypeRef,
+	/// A C string that contains info about the target machine.
 	llvm_target_triple: CString,
+	/// How many bits width the target machine integer is.
 	int_bit_width: u8,
+	/// The max value of the target machine's integer.
 	int_max_value: u64,
+	/// This value has the bit set that is the sign bit on the target machine's integer type.
 	sign_bit_mask: u64,
+	/// Maps chars to separators.
 	char_to_separator_mapping: HashMap<char, Separator>,
+	/// Maps strings to operator bases.
 	str_to_operator_mapping: HashMap<&'static str, OperatorSymbol>,
+	/// The set of characters that are found in operators.
 	operator_character_set: HashSet<char>,
+	/// Maps chars to operator type modifiers.
 	char_to_operator_type_mapping: HashMap<char, OperatorType>,
+	/// Maps strings (whithout the '@' prefix) to keywords.
 	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
+	/// The target machine for LLVM.
 	llvm_target_machine: LLVMTargetMachineRef,
+	/// A list of object files that have been outputted as a result of compiling that should be linked to create a primary output file.
 	object_files_to_link: Vec<PathBuf>,
 }
 
@@ -133,7 +159,12 @@ fn main() {
 		}
 	}
 	// Link
-	if let Some(primary_output_file) = main_data.primary_output_file {
+	let primary_output_file = match (main_data.primary_output_file, main_data.do_link) {
+		(Some(primary_output_file), true) => Some(primary_output_file),
+		(None, true) => Some("out.exe"),
+		(_, false) => None,
+	};
+	if let Some(primary_output_file) = primary_output_file {
 		let primary_output_file_path = main_data.binary_path.join(primary_output_file);
 		let mut command = Command::new("gcc");
 		for object_file in main_data.object_files_to_link.iter() {
