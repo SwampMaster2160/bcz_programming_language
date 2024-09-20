@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{built_value::BuiltRValue, llvm_c::{LLVMBuilderRef, LLVMModuleRef}};
+use crate::{built_value::BuiltRValue, llvm::llvm_c::{LLVMBuilderRef, LLVMModuleRef}};
 
 pub struct FileBuildData {
 	pub llvm_module: LLVMModuleRef,

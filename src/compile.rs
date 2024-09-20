@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, ffi::c_uint, fs::{create_dir_all, File}, io::{BufRead, BufReader}, iter::once, path::PathBuf, ptr::{null, null_mut}};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMDumpModule, LLVMExternalLinkage, LLVMFunctionType, LLVMInt32TypeInContext, LLVMModuleCreateWithNameInContext, LLVMModuleRef, LLVMObjectFile, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBool, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDumpModule, LLVMExternalLinkage, LLVMFunctionType, LLVMInt32TypeInContext, LLVMObjectFile, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, module::Module}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -108,21 +108,20 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	// TODO: compile import dependencies
 	// Build LLVM module
-	let mut module_name: Vec<u8> = match filepath.file_stem() {
+	let module_name = match filepath.file_stem() {
 		None => "invalid_name",
 		Some(stem) => match stem.to_str() {
 			None => "invalid_name",
 			Some(stem) => stem,
 		}
-	}.bytes().collect();
-	module_name.push(0);
-	let llvm_module = unsafe { LLVMModuleCreateWithNameInContext(module_name.as_ptr(), main_data.llvm_context) };
-	build_llvm_module(main_data, llvm_module, globals_and_dependencies_after_const_evaluate)
+	};
+	let llvm_module = main_data.llvm_context.new_module(module_name);
+	build_llvm_module(main_data, &llvm_module, globals_and_dependencies_after_const_evaluate)
 		.map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	// Dump module if commanded to do so
 	if main_data.dump_llvm_module {
 		println!("LLVM IR of {}:", filepath.display());
-		unsafe { LLVMDumpModule(llvm_module) };
+		unsafe { LLVMDumpModule(llvm_module.get_ref()) };
 	}
 	// Write .o file
 	let filepath_stem: PathBuf = filepath.file_stem().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.into();
@@ -137,10 +136,10 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		create_dir_all(directory).map_err(|_| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?;
 	}
 	let filepath_c: Box<[u8]> = output_filepath.as_os_str().to_str().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.bytes().chain(once(0)).collect();
-	unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module, filepath_c.as_ptr(), LLVMObjectFile, null_mut()) };
+	unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module.get_ref(), filepath_c.as_ptr(), LLVMObjectFile, null_mut()) };
 	main_data.object_files_to_link.push(output_filepath);
 	// Clean up
-	unsafe { LLVMDisposeModule(llvm_module) };
+	//unsafe { LLVMDisposeModule(llvm_module) };
 	// Return
 	Ok(())
 }
@@ -173,15 +172,15 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 	Ok(())
 }
 
-fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
+fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
 	// Set up module
-	unsafe { LLVMSetTarget(llvm_module, main_data.llvm_target_triple.as_ptr() as *const u8) };
-	unsafe { LLVMSetModuleDataLayout(llvm_module, main_data.llvm_data_layout) };
+	unsafe { LLVMSetTarget(llvm_module.get_ref(), main_data.llvm_target_triple.as_ptr() as *const u8) };
+	unsafe { LLVMSetModuleDataLayout(llvm_module.get_ref(), main_data.llvm_data_layout) };
 	// Create data struct for builder
-	let llvm_builder = unsafe { LLVMCreateBuilderInContext(main_data.llvm_context) };
+	let llvm_builder = unsafe { LLVMCreateBuilderInContext(main_data.llvm_context.get_ref()) };
 	//let mut built_globals: HashMap<Box<str>, BuiltRValue> = HashMap::new();
 	let mut file_build_data = FileBuildData {
-		llvm_module,
+		llvm_module: llvm_module.get_ref(),
 		llvm_builder,
 		built_globals: HashMap::new(),
 		entrypoint: None,
@@ -215,7 +214,7 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 	// Build entry point
 	if let Some(wrapped_entry_point) = file_build_data.entrypoint {
 		// Get types of wrapper function
-		let int_32_type = unsafe { LLVMInt32TypeInContext(main_data.llvm_context) };
+		let int_32_type = unsafe { LLVMInt32TypeInContext(main_data.llvm_context.get_ref()) };
 		let entry_point_function_parameters = [main_data.int_type, main_data.int_type, main_data.int_type, int_32_type];
 		let entry_point_function_type = unsafe {
 			LLVMFunctionType(int_32_type, entry_point_function_parameters.as_ptr(), entry_point_function_parameters.len() as c_uint, false as LLVMBool)
@@ -237,10 +236,10 @@ fn build_llvm_module(main_data: &mut MainData, llvm_module: LLVMModuleRef, mut g
 		};
 		// Build wrapper function
 		// TODO: Non-Windows
-		let entry_point_function = unsafe { LLVMAddFunction(llvm_module, c"WinMain".as_ptr() as *const u8, entry_point_function_type) };
+		let entry_point_function = unsafe { LLVMAddFunction(llvm_module.get_ref(), c"WinMain".as_ptr() as *const u8, entry_point_function_type) };
 		unsafe { LLVMSetLinkage(entry_point_function, LLVMExternalLinkage) };
 		unsafe { LLVMSetFunctionCallConv(entry_point_function, LLVMWin64CallConv) };
-		let entry_point_function_basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, entry_point_function, c"entry".as_ptr() as *const u8) };
+		let entry_point_function_basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context.get_ref(), entry_point_function, c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(llvm_builder, entry_point_function_basic_block) };
 		let built_function_call = unsafe {
 			LLVMBuildCall2(

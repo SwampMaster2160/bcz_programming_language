@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMTypeRef, LLVMWin64CallConv}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMTypeRef, LLVMWin64CallConv}, llvm_type::Type}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -272,7 +272,7 @@ impl AstNode {
 		Ok(())
 	}
 
-	fn build_function_definition(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str, is_link_function: bool) -> Result<BuiltRValue, (Error, (usize, usize))> {
+	fn build_function_definition(&self, main_data: &MainData, file_build_data: &mut FileBuildData, name: &str, is_link_function: bool) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
 			start,
@@ -307,7 +307,7 @@ impl AstNode {
 		};
 		let function = unsafe { LLVMAddFunction(file_build_data.llvm_module, name_bytes.as_ptr(), function_type) };
 		// Build function body
-		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context, function, c"entry".as_ptr() as *const u8) };
+		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context.get_ref(), function, c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder, basic_block) };
 		match is_link_function {
 			false => {
@@ -335,12 +335,12 @@ impl AstNode {
 				let mut wrapped_function_parameter_types = Vec::with_capacity(parameters.len());
 				for parameter in parameters.iter() {
 					let (parameter_type, _) = parameter.type_from_width(main_data)?;
-					wrapped_function_parameter_types.push(parameter_type);
+					wrapped_function_parameter_types.push(parameter_type.get_ref());
 				}
 				let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
 				let wrapped_function_type = unsafe {
 					LLVMFunctionType(
-						wrapped_function_return_type,
+						wrapped_function_return_type.get_ref(),
 						wrapped_function_parameter_types.as_ptr(),
 						wrapped_function_parameter_types.len() as c_uint,
 						false as LLVMBool
@@ -356,13 +356,13 @@ impl AstNode {
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
 					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
 					let argument = unsafe { LLVMGetParam(function, parameter_index as c_uint) };
-					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type) } as u8)) {
+					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type.get_ref()) } as u8)) {
 						Ordering::Less => match is_signed {
-							false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, argument, parameter_type, c"z_extend_temp".as_ptr() as *const u8) },
-							true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, argument, parameter_type, c"s_extend_temp".as_ptr() as *const u8) },
+							false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, argument, parameter_type.get_ref(), c"z_extend_temp".as_ptr() as *const u8) },
+							true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, argument, parameter_type.get_ref(), c"s_extend_temp".as_ptr() as *const u8) },
 						}
 						Ordering::Equal => argument,
-						Ordering::Greater => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, argument, parameter_type, c"trunc_temp".as_ptr() as *const u8) },
+						Ordering::Greater => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, argument, parameter_type.get_ref(), c"trunc_temp".as_ptr() as *const u8) },
 					};
 					arguments.push(argument_converted);
 				}
@@ -378,7 +378,7 @@ impl AstNode {
 					)
 				};
 				// Build return
-				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type) } as u8)) {
+				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
 					Ordering::Less => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, call_result, main_data.int_type, c"trunc_temp".as_ptr() as *const u8) },
 					Ordering::Equal => call_result,
 					Ordering::Greater => match wrapped_function_return_type_is_signed {
@@ -393,7 +393,7 @@ impl AstNode {
 		Ok(BuiltRValue::Function(function))
 	}
 
-	pub fn build_r_value(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_r_value(&self, main_data: &MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, basic_block: Option<LLVMBasicBlockRef>)
 	-> Result<BuiltRValue, (Error, (usize, usize))> {
 		let Self {
 			start,
@@ -514,7 +514,7 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_l_value(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, _basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_l_value(&self, main_data: &MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, _basic_block: Option<LLVMBasicBlockRef>)
 	-> Result<BuiltLValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,
@@ -539,7 +539,7 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_global_assignment(&self, main_data: &mut MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
+	pub fn build_global_assignment(&self, main_data: &MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<BuiltRValue, (Error, (usize, usize))> {
 		if self.is_function() {
 			let function = self.build_function_definition(main_data, file_build_data, name, false)?;
 			return Ok(function);
@@ -562,7 +562,7 @@ impl AstNode {
 		}
 	}
 
-	pub fn type_from_width(&self, main_data: &mut MainData) -> Result<(LLVMTypeRef, bool), (Error, (usize, usize))> {
+	pub fn type_from_width(&self, main_data: &MainData) -> Result<(Type, bool), (Error, (usize, usize))> {
 		let Self {
 			start,
 			end: _,
@@ -577,11 +577,11 @@ impl AstNode {
 				};
 				(match byte_width {
 					//0 => unsafe { LLVMVoidTypeInContext(main_data.llvm_context) },
-					1 => unsafe { LLVMInt8TypeInContext(main_data.llvm_context) },
-					2 => unsafe { LLVMInt16TypeInContext(main_data.llvm_context) },
-					4 => unsafe { LLVMInt32TypeInContext(main_data.llvm_context) },
-					8 => unsafe { LLVMInt64TypeInContext(main_data.llvm_context) },
-					16 => unsafe { LLVMInt128TypeInContext(main_data.llvm_context) },
+					1 => main_data.llvm_context.int_8_type(),
+					2 => main_data.llvm_context.int_16_type(),
+					4 => main_data.llvm_context.int_32_type(),
+					8 => main_data.llvm_context.int_64_type(),
+					16 => main_data.llvm_context.int_128_type(),
 					_ => return Err((Error::InvalidTypeWidth, *start)),
 				}, is_negative)
 			}

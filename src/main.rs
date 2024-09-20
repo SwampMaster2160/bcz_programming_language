@@ -2,12 +2,11 @@ use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, ffi::CStrin
 
 use compile::compile_file;
 use compiler_arguments::process_arguments;
-use llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef, LLVMTypeRef
-};
+use llvm::{context::Context, llvm_c::{
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef, LLVMTypeRef
+}};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
-mod llvm_c;
 mod compiler_arguments;
 mod error;
 mod compile;
@@ -16,6 +15,7 @@ mod ast_node;
 mod parse;
 mod built_value;
 mod file_build_data;
+pub mod llvm;
 
 /// Info that applies while compiling all files.
 pub struct MainData<'a> {
@@ -42,7 +42,7 @@ pub struct MainData<'a> {
 	/// Should the built LLVM module be printed for each file after being built.
 	dump_llvm_module: bool,
 	/// The context for LLVM functions.
-	llvm_context: LLVMContextRef,
+	llvm_context: Context,
 	/// The data layout fo the target machine.
 	llvm_data_layout: LLVMTargetDataRef,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
@@ -83,7 +83,7 @@ impl<'a> MainData<'a> {
 			print_tokens: false,
 			print_ast_nodes: false,
 			print_after_const_evaluate: false,
-			llvm_context: unsafe { LLVMContextCreate() },
+			llvm_context: Context::new(),
 			llvm_data_layout: null_mut(),
 			int_type: null_mut(),
 			int_bit_width: 0,
@@ -140,7 +140,7 @@ fn main() {
 	};
 	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(main_data.llvm_target_machine) };
 	// Get info about machine being compiled for
-	main_data.int_type = unsafe { LLVMIntPtrTypeInContext(main_data.llvm_context, main_data.llvm_data_layout) };
+	main_data.int_type = unsafe { LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout) };
 	let int_type_width = unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, main_data.int_type) };
 	if int_type_width > 64 {
 		println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
@@ -174,6 +174,4 @@ fn main() {
 		command.arg(primary_output_file_path);
 		command.output().ok();
 	}
-	// Clean up
-	unsafe { LLVMContextDispose(main_data.llvm_context) };
 }
