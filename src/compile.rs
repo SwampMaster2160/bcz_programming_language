@@ -136,10 +136,11 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		create_dir_all(directory).map_err(|_| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?;
 	}
 	let filepath_c: Box<[u8]> = output_filepath.as_os_str().to_str().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.bytes().chain(once(0)).collect();
-	unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module.get_ref(), filepath_c.as_ptr(), LLVMObjectFile, null_mut()) };
+	let result = unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module.get_ref(), filepath_c.as_ptr(), LLVMObjectFile, null_mut()) } != 0;
+	if result {
+		return Err((Error::UnableToWriteObject, filepath.clone(), 0, 0));
+	}
 	main_data.object_files_to_link.push(output_filepath);
-	// Clean up
-	//unsafe { LLVMDisposeModule(llvm_module) };
 	// Return
 	Ok(())
 }
