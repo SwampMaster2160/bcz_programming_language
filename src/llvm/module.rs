@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, mem::ManuallyDrop};
 
-use super::llvm_c::{LLVMDisposeModule, LLVMModuleRef};
+use super::llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef};
 
 pub struct Module<'a> {
 	module_ref: LLVMModuleRef,
@@ -28,6 +28,10 @@ impl<'a> Module<'a> {
 	#[inline]
 	pub fn take_ref(self) -> LLVMModuleRef {
 		ManuallyDrop::new(self).module_ref
+	}
+
+	pub fn dump(&self) {
+		unsafe { LLVMDumpModule(self.module_ref) };
 	}
 }
 
