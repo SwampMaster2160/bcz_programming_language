@@ -30,6 +30,7 @@ impl<'a> Module<'a> {
 		ManuallyDrop::new(self).module_ref
 	}
 
+	#[inline]
 	pub fn dump(&self) {
 		unsafe { LLVMDumpModule(self.module_ref) };
 	}
