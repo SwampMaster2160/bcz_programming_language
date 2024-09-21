@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMTypeRef, LLVMWin64CallConv}, llvm_type::Type}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -298,14 +298,14 @@ impl AstNode {
 		if parameters.len() > u16::MAX as usize {
 			return Err((Error::TooManyFunctionParameters, *start));
 		}
-		let parameter_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(parameters.len()).collect();
-		let function_type = unsafe { LLVMFunctionType(main_data.int_type, parameter_types.as_ptr(), parameter_types.len() as c_uint, false as LLVMBool) };
+		let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
+		let function_type = main_data.int_type.function_type(&*parameter_types, false);
 		// Build function value
 		let name_bytes: Box<[u8]> = match is_link_function {
 			false => name.bytes().chain(once(0)).collect(),
 			true => "__bcz__link__".bytes().chain(name.bytes()).chain(once(0)).collect(),
 		};
-		let function = unsafe { LLVMAddFunction(file_build_data.llvm_module, name_bytes.as_ptr(), function_type) };
+		let function = unsafe { LLVMAddFunction(file_build_data.llvm_module.get_ref(), name_bytes.as_ptr(), function_type.get_ref()) };
 		// Build function body
 		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context.get_ref(), function, c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder, basic_block) };
@@ -321,7 +321,7 @@ impl AstNode {
 					// Add parameter to local scope
 					let parameter_value = unsafe { LLVMGetParam(function, parameter_index as c_uint) };
 					let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
-					let parameter_variable = unsafe { LLVMBuildAlloca(file_build_data.llvm_builder, main_data.int_type, parameter_name_c.as_ptr()) };
+					let parameter_variable = unsafe { LLVMBuildAlloca(file_build_data.llvm_builder, main_data.int_type.get_ref(), parameter_name_c.as_ptr()) };
 					unsafe { LLVMBuildStore(file_build_data.llvm_builder, parameter_value, parameter_variable) };
 					function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
 				}
@@ -348,7 +348,7 @@ impl AstNode {
 				};
 				// Link to wrapped function
 				let wrapped_name: Box<[u8]> = name.bytes().chain(once(0)).collect();
-				let wrapped_function = unsafe { LLVMAddFunction(file_build_data.llvm_module, wrapped_name.as_ptr(), wrapped_function_type) };
+				let wrapped_function = unsafe { LLVMAddFunction(file_build_data.llvm_module.get_ref(), wrapped_name.as_ptr(), wrapped_function_type) };
 				unsafe { LLVMSetLinkage(wrapped_function, LLVMDLLImportLinkage) };
 				unsafe { LLVMSetFunctionCallConv(wrapped_function, LLVMWin64CallConv) };
 				// Cast arguments to the types of the wrapped function parameters
@@ -379,11 +379,11 @@ impl AstNode {
 				};
 				// Build return
 				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
-					Ordering::Less => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, call_result, main_data.int_type, c"trunc_temp".as_ptr() as *const u8) },
+					Ordering::Less => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder, call_result, main_data.int_type.get_ref(), c"trunc_temp".as_ptr() as *const u8) },
 					Ordering::Equal => call_result,
 					Ordering::Greater => match wrapped_function_return_type_is_signed {
-						false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, call_result, main_data.int_type, c"z_extend_temp".as_ptr() as *const u8) },
-						true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, call_result, main_data.int_type, c"s_extend_temp".as_ptr() as *const u8) },
+						false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder, call_result, main_data.int_type.get_ref(), c"z_extend_temp".as_ptr() as *const u8) },
+						true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder, call_result, main_data.int_type.get_ref(), c"s_extend_temp".as_ptr() as *const u8) },
 					}
 				};
 				unsafe { LLVMBuildRet(file_build_data.llvm_builder, call_result_converted) };
@@ -409,7 +409,7 @@ impl AstNode {
 		}
 		Ok(match variant {
 			AstNodeVariant::Constant(value) => BuiltRValue::NumericalValue(unsafe {
-				LLVMConstInt(main_data.int_type, *value as c_ulonglong, false as LLVMBool)
+				LLVMConstInt(main_data.int_type.get_ref(), *value as c_ulonglong, false as LLVMBool)
 			}),
 			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, local_variables, &*name),
 			AstNodeVariant::Operator(operator, operands) => match operator {
@@ -453,7 +453,7 @@ impl AstNode {
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
 				if *is_result_undefined && block_expressions.is_empty() {
-					return Ok(BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }));
+					return Ok(BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type.get_ref()) }));
 				}
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("blocks in global scope".into()), self.start));
@@ -469,7 +469,7 @@ impl AstNode {
 				local_variables.pop();
 				// Return
 				match (is_result_undefined, last_built_expression) {
-					(true, _) | (false, None) => BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type) }),
+					(true, _) | (false, None) => BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type.get_ref()) }),
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
@@ -487,9 +487,9 @@ impl AstNode {
 					arguments_built.push(argument.build_r_value(main_data, file_build_data, local_variables, basic_block)?.get_value(main_data, file_build_data.llvm_builder));
 				}
 				// Build types
-				let argument_types: Box<[LLVMTypeRef]> = repeat(main_data.int_type).take(arguments.len()).collect();
-				let function_type = unsafe { LLVMFunctionType(main_data.int_type, argument_types.as_ptr(), argument_types.len() as c_uint, false as LLVMBool) };
-				let function_pointer_type = unsafe { LLVMPointerType(function_type, 0) };
+				let argument_types: Box<[Type]> = repeat(main_data.int_type).take(arguments.len()).collect();
+				let function_type = main_data.int_type.function_type(&*argument_types, false);
+				let function_pointer_type = unsafe { LLVMPointerType(function_type.get_ref(), 0) };
 				// Build function call
 				let function_pointer = unsafe {
 					LLVMBuildIntToPtr(file_build_data.llvm_builder, function_pointer_built, function_pointer_type, c"int_to_ptr_temp".as_ptr() as *const u8)
@@ -497,7 +497,7 @@ impl AstNode {
 				let built_function_call = unsafe {
 					LLVMBuildCall2(
 						file_build_data.llvm_builder,
-						function_type,
+						function_type.get_ref(),
 						function_pointer,
 						arguments_built.as_ptr(),
 						arguments_built.len() as c_uint,
@@ -531,7 +531,7 @@ impl AstNode {
 				}
 				// Else create local variable
 				let variable_name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
-				let variable = unsafe { LLVMBuildAlloca(file_build_data.llvm_builder, main_data.int_type, variable_name_c.as_ptr()) };
+				let variable = unsafe { LLVMBuildAlloca(file_build_data.llvm_builder, main_data.int_type.get_ref(), variable_name_c.as_ptr()) };
 				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLValue::AllocaVariable(variable));
 				BuiltLValue::AllocaVariable(variable)
 			}
@@ -546,7 +546,7 @@ impl AstNode {
 		}
 		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let r_value = self.build_r_value(main_data, file_build_data, &mut Vec::new(), None)?;
-		let global = unsafe { LLVMAddGlobal(file_build_data.llvm_module, main_data.int_type, name_c.as_ptr()) };
+		let global = unsafe { LLVMAddGlobal(file_build_data.llvm_module.get_ref(), main_data.int_type.get_ref(), name_c.as_ptr()) };
 		unsafe { LLVMSetInitializer(global, r_value.get_value(main_data, file_build_data.llvm_builder)) };
 		return Ok(BuiltRValue::GlobalVariable(global));
 	}

@@ -3,8 +3,8 @@ use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, ffi::CStrin
 use compile::compile_file;
 use compiler_arguments::process_arguments;
 use llvm::{context::Context, llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef, LLVMTypeRef
-}};
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef
+}, llvm_type::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;
@@ -46,7 +46,7 @@ pub struct MainData<'a> {
 	/// The data layout fo the target machine.
 	llvm_data_layout: LLVMTargetDataRef,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
-	int_type: LLVMTypeRef,
+	int_type: Type,
 	/// A C string that contains info about the target machine.
 	llvm_target_triple: CString,
 	/// How many bits width the target machine integer is.
@@ -73,6 +73,7 @@ pub struct MainData<'a> {
 
 impl<'a> MainData<'a> {
 	pub fn new() -> Self {
+		let context = Context::new();
 		Self {
 			do_link: true,
 			primary_output_file: None,
@@ -83,9 +84,9 @@ impl<'a> MainData<'a> {
 			print_tokens: false,
 			print_ast_nodes: false,
 			print_after_const_evaluate: false,
-			llvm_context: Context::new(),
+			int_type: context.void_type(),
+			llvm_context: context,
 			llvm_data_layout: null_mut(),
-			int_type: null_mut(),
 			int_bit_width: 0,
 			int_max_value: 0,
 			sign_bit_mask: 0,
@@ -140,8 +141,8 @@ fn main() {
 	};
 	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(main_data.llvm_target_machine) };
 	// Get info about machine being compiled for
-	main_data.int_type = unsafe { LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout) };
-	let int_type_width = unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, main_data.int_type) };
+	main_data.int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout)) };
+	let int_type_width = unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, main_data.int_type.get_ref()) };
 	if int_type_width > 64 {
 		println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
 		return;
