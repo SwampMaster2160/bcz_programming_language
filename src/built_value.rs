@@ -1,4 +1,4 @@
-use crate::{llvm::llvm_c::{LLVMBuildLoad2, LLVMBuildPtrToInt, LLVMBuildStore, LLVMBuilderRef, LLVMGetInitializer, LLVMValueRef}, MainData};
+use crate::{llvm::{llvm_c::{LLVMBuildLoad2, LLVMBuildPtrToInt, LLVMBuildStore, LLVMBuilderRef, LLVMGetInitializer, LLVMValueRef}, traits::WrappedReference}, MainData};
 
 #[derive(Clone, Debug)]
 pub enum BuiltRValue {

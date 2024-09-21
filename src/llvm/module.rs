@@ -1,34 +1,30 @@
 use std::{marker::PhantomData, mem::ManuallyDrop};
 
-use super::llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef};
+use super::{llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef}, traits::WrappedReference};
 
 pub struct Module<'a> {
 	module_ref: LLVMModuleRef,
 	phantom_data: PhantomData<&'a ()>,
 }
 
-impl<'a> Module<'a> {
-	/// Create a new module from a reference.
-	///
-	/// # Safety
-	///
-	/// The module reference must be valid.
+impl<'a> WrappedReference<LLVMModuleRef> for Module<'a> {
 	#[inline]
-	pub unsafe fn from_ref(module_ref: LLVMModuleRef) -> Self {
-		Self { module_ref, phantom_data: PhantomData::default() }
-	}
-
-	/// Get the module reference.
-	#[inline]
-	pub fn get_ref(&self) -> LLVMModuleRef {
+	fn get_ref(&self) -> LLVMModuleRef {
 		self.module_ref
 	}
 
-	/// Take the module reference.
 	#[inline]
-	pub fn take_ref(self) -> LLVMModuleRef {
+	unsafe fn from_ref(raw_ref: LLVMModuleRef) -> Self {
+		Self { module_ref: raw_ref, phantom_data: PhantomData::default() }
+	}
+
+	#[inline]
+	fn take_ref(self) -> LLVMModuleRef {
 		ManuallyDrop::new(self).module_ref
 	}
+}
+
+impl<'a> Module<'a> {
 
 	#[inline]
 	pub fn dump(&self) {

@@ -1,6 +1,6 @@
 use std::{iter::once, mem::ManuallyDrop};
 
-use super::{llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext}, llvm_type::Type, module::Module};
+use super::{llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext}, llvm_type::Type, module::Module, traits::WrappedReference};
 
 #[allow(non_upper_case_globals)]
 static mut context_exists_in_this_thread: bool = false;
@@ -9,29 +9,24 @@ pub struct Context {
 	context_ref: LLVMContextRef,
 }
 
-impl Context {
-	/// Get the raw LLVM context reference used for LLVM-C functions.
+impl WrappedReference<LLVMContextRef> for Context {
 	#[inline]
-	pub fn get_ref(&self) -> LLVMContextRef {
+	fn get_ref(&self) -> LLVMContextRef {
 		self.context_ref
 	}
 
-	/// Destroy the `Context` object by taking the raw LLVM context reference used for LLVM-C functions and do not dispose of the raw reference.
 	#[inline]
-	pub fn take_ref(self) -> LLVMContextRef {
+	unsafe fn from_ref(raw_ref: LLVMContextRef) -> Self {
+		Self { context_ref: raw_ref }
+	}
+
+	#[inline]
+	fn take_ref(self) -> LLVMContextRef {
 		ManuallyDrop::new(self).context_ref
 	}
+}
 
-	/// Construct a `Context` object from a raw LLVM context reference.
-	///
-	/// # Safety
-	///
-	/// The raw context reference must be valid.
-	#[inline]
-	pub unsafe fn from_ref(context_ref: LLVMContextRef) -> Self {
-		Self { context_ref }
-	}
-
+impl Context {
 	/// Create an LLVM context for this thread.
 	///
 	/// # Safety

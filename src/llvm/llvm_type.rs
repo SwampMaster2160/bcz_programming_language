@@ -1,29 +1,30 @@
-use std::{ffi::c_uint, mem::transmute};
+use std::{ffi::c_uint, mem::{transmute, ManuallyDrop}};
 
-use super::llvm_c::{LLVMBool, LLVMFunctionType, LLVMTypeRef};
+use super::{llvm_c::{LLVMBool, LLVMFunctionType, LLVMGetUndef, LLVMTypeRef}, traits::WrappedReference};
 
 #[derive(Clone, Copy, Hash)]
 pub struct Type {
 	type_ref: LLVMTypeRef,
 }
 
-impl Type {
-	/// Create a new type from a reference.
-	///
-	/// # Safety
-	///
-	/// The type reference must be valid.
+impl WrappedReference<LLVMTypeRef> for Type {
 	#[inline]
-	pub unsafe fn from_ref(type_ref: LLVMTypeRef) -> Self {
-		Self { type_ref }
-	}
-
-	/// Get the type reference.
-	#[inline]
-	pub fn get_ref(self) -> LLVMTypeRef {
+	fn get_ref(&self) -> LLVMTypeRef {
 		self.type_ref
 	}
 
+	#[inline]
+	unsafe fn from_ref(raw_ref: LLVMTypeRef) -> Self {
+		Self { type_ref: raw_ref }
+	}
+
+	#[inline]
+	fn take_ref(self) -> LLVMTypeRef {
+		ManuallyDrop::new(self).type_ref
+	}
+}
+
+impl Type {
 	/// Create a function type with `self` as the return type.
 	///
 	/// # Panics
@@ -39,9 +40,9 @@ impl Type {
 		}
 	}
 
-	// /// Create an undefined value of this type.
-	//#[inline]
-	//pub fn undefined(self) -> Self {
-	//	unsafe { Self::from_ref(LLVMGetUndef(self.get_ref())) }
-	//}
+	/// Create an undefined value of this type.
+	#[inline]
+	pub fn undefined(self) -> Self {
+		unsafe { Self::from_ref(LLVMGetUndef(self.get_ref())) }
+	}
 }

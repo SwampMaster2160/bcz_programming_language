@@ -4,7 +4,7 @@ use compile::compile_file;
 use compiler_arguments::process_arguments;
 use llvm::{context::Context, llvm_c::{
 	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef
-}, llvm_type::Type};
+}, llvm_type::Type, traits::WrappedReference};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;

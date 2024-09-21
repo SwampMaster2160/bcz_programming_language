@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMGetUndef, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type}, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -453,7 +453,7 @@ impl AstNode {
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
 				if *is_result_undefined && block_expressions.is_empty() {
-					return Ok(BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type.get_ref()) }));
+					return Ok(BuiltRValue::NumericalValue(main_data.int_type.undefined().get_ref()));
 				}
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("blocks in global scope".into()), self.start));
@@ -469,7 +469,7 @@ impl AstNode {
 				local_variables.pop();
 				// Return
 				match (is_result_undefined, last_built_expression) {
-					(true, _) | (false, None) => BuiltRValue::NumericalValue(unsafe { LLVMGetUndef(main_data.int_type.get_ref()) }),
+					(true, _) | (false, None) => BuiltRValue::NumericalValue(main_data.int_type.undefined().get_ref()),
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
