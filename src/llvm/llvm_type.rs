@@ -1,6 +1,6 @@
 use std::{ffi::c_uint, mem::{transmute, ManuallyDrop}};
 
-use super::{llvm_c::{LLVMBool, LLVMFunctionType, LLVMGetUndef, LLVMTypeRef}, traits::WrappedReference};
+use super::{llvm_c::{LLVMBool, LLVMFunctionType, LLVMGetTypeKind, LLVMGetUndef, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference};
 
 #[derive(Clone, Copy, Hash)]
 pub struct Type {
@@ -43,6 +43,15 @@ impl Type {
 	/// Create an undefined value of this type.
 	#[inline]
 	pub fn undefined(self) -> Self {
+		if unsafe { LLVMGetTypeKind(self.get_ref()) } != LLVMTypeKind::LLVMIntegerTypeKind {
+			panic!("Cannot create an undefined value of this type");
+		}
+		unsafe { self.undefined_unchecked() }
+	}
+
+	/// Create an undefined value of this type.
+	#[inline]
+	pub unsafe fn undefined_unchecked(self) -> Self {
 		unsafe { Self::from_ref(LLVMGetUndef(self.get_ref())) }
 	}
 }

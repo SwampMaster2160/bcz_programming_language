@@ -31,6 +31,8 @@ extern "C" {
 	pub fn LLVMDumpModule(M: LLVMModuleRef) -> c_void;
 	pub fn LLVMSetTarget(M: LLVMModuleRef, Triple: *const u8) -> c_void;
 	pub fn LLVMAddFunction(M: LLVMModuleRef, Name: *const u8, FunctionTy: LLVMTypeRef) -> LLVMValueRef;
+	// Core/Types
+	pub fn LLVMGetTypeKind(Ty: LLVMTypeRef) -> LLVMTypeKind;
 	// Core/Types/Integer Types
 	pub fn LLVMInt1TypeInContext(C: LLVMContextRef) -> LLVMTypeRef;
 	pub fn LLVMInt8TypeInContext(C: LLVMContextRef) -> LLVMTypeRef;
@@ -104,6 +106,7 @@ extern "C" {
 	) -> LLVMBool;
 	pub fn LLVMSizeOfTypeInBits(TD: LLVMTargetDataRef, Ty: LLVMTypeRef) -> c_ulonglong;
 }
+
 #[allow(non_upper_case_globals)]
 pub const LLVMCodeGenLevelDefault: LLVMCodeGenOptLevel = 2;
 #[allow(non_upper_case_globals)]
@@ -117,4 +120,30 @@ pub const LLVMExternalLinkage: LLVMLinkage = 0;
 #[allow(non_upper_case_globals)]
 pub const LLVMWin64CallConv: c_uint = 79;
 #[allow(non_upper_case_globals)]
-pub const LLVMObjectFile: LLVMCodeGenFileType = 1; 
+pub const LLVMObjectFile: LLVMCodeGenFileType = 1;
+
+#[repr(C)]
+#[allow(non_camel_case_types)]
+#[derive(PartialEq, Eq)]
+pub enum LLVMTypeKind {
+	LLVMVoidTypeKind = 0,
+	LLVMHalfTypeKind = 1,
+	LLVMFloatTypeKind = 2,
+	LLVMDoubleTypeKind = 3,
+	LLVMX86_FP80TypeKind = 4,
+	LLVMFP128TypeKind = 5,
+	LLVMPPC_FP128TypeKind = 6,
+	LLVMLabelTypeKind = 7,
+	LLVMIntegerTypeKind = 8,
+	LLVMFunctionTypeKind = 9,
+	LLVMStructTypeKind = 10,
+	LLVMArrayTypeKind = 11,
+	LLVMPointerTypeKind = 12,
+	LLVMVectorTypeKind = 13,
+	LLVMMetadataTypeKind = 14,
+	LLVMTokenTypeKind = 16,
+	LLVMScalableVectorTypeKind = 17,
+	LLVMBFloatTypeKind = 18,
+	LLVMX86_AMXTypeKind = 19,
+	LLVMTargetExtTypeKind = 20,
+}
