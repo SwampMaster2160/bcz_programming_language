@@ -38,4 +38,10 @@ impl Type {
 			Self::from_ref(LLVMFunctionType(self.get_ref(), transmute(parameter_types.as_ptr()), parameter_types.len() as c_uint, is_variable_argument as LLVMBool))
 		}
 	}
+
+	// /// Create an undefined value of this type.
+	//#[inline]
+	//pub fn undefined(self) -> Self {
+	//	unsafe { Self::from_ref(LLVMGetUndef(self.get_ref())) }
+	//}
 }
