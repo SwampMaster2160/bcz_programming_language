@@ -30,10 +30,18 @@ impl Type {
 	/// # Panics
 	///
 	/// Panics if the number of parameters exceeds `c_uint::MAX`.
-	#[inline]
 	pub fn function_type(self, parameter_types: &[Self], is_variable_argument: bool) -> Self {
 		if parameter_types.len() > c_uint::MAX as usize {
 			panic!("Too many parameters");
+		}
+		// TODO: See what types this is valid for
+		if !self.is_normal() {
+			panic!("Invalid parameter type");
+		}
+		for parameter_type in parameter_types {
+			if !parameter_type.is_normal(){
+				panic!("Invalid parameter type");
+			}
 		}
 		unsafe {
 			Self::from_ref(LLVMFunctionType(self.get_ref(), transmute(parameter_types.as_ptr()), parameter_types.len() as c_uint, is_variable_argument as LLVMBool))
@@ -43,7 +51,8 @@ impl Type {
 	/// Create an undefined value of this type.
 	#[inline]
 	pub fn undefined(self) -> Self {
-		if unsafe { LLVMGetTypeKind(self.get_ref()) } != LLVMTypeKind::LLVMIntegerTypeKind {
+		// TODO: See what types this is valid for
+		if !self.is_normal() {
 			panic!("Cannot create an undefined value of this type");
 		}
 		unsafe { self.undefined_unchecked() }
@@ -53,5 +62,12 @@ impl Type {
 	#[inline]
 	pub unsafe fn undefined_unchecked(self) -> Self {
 		unsafe { Self::from_ref(LLVMGetUndef(self.get_ref())) }
+	}
+
+	#[inline]
+	fn is_normal(self) -> bool {
+		!matches!(unsafe { LLVMGetTypeKind(self.get_ref()) },
+			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind | LLVMTypeKind::LLVMTargetExtTypeKind | LLVMTypeKind::LLVMTokenTypeKind
+		)
 	}
 }
