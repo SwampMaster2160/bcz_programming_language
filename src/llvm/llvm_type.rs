@@ -66,8 +66,14 @@ impl Type {
 
 	#[inline]
 	fn is_normal(self) -> bool {
-		!matches!(unsafe { LLVMGetTypeKind(self.get_ref()) },
-			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind | LLVMTypeKind::LLVMTargetExtTypeKind | LLVMTypeKind::LLVMTokenTypeKind
+		!matches!(
+			self.type_kind(),
+			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind | LLVMTypeKind::LLVMTargetExtTypeKind | LLVMTypeKind::LLVMTokenTypeKind,
 		)
+	}
+
+	#[inline]
+	pub(crate) fn type_kind(&self) -> LLVMTypeKind {
+		unsafe { LLVMGetTypeKind(self.get_ref()) }
 	}
 }

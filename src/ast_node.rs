@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -272,7 +272,8 @@ impl AstNode {
 		Ok(())
 	}
 
-	fn build_function_definition<'a>(&'a self, main_data: &MainData, file_build_data: &mut FileBuildData, name: &str, is_link_function: bool) -> Result<Value<'a>, (Error, (usize, usize))> {
+	fn build_function_definition<'a>(&'a self, main_data: &MainData, file_build_data: &mut FileBuildData, name: &str, is_link_function: bool, is_entry_point: bool)
+	-> Result<Value<'a>, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
 			start,
@@ -282,15 +283,8 @@ impl AstNode {
 		let (parameters, function_body) = match variant {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => {
-					let child_built = child.build_function_definition(main_data, file_build_data, name, is_link_function)?;
-					if file_build_data.entrypoint.is_some() {
-						return Err((Error::MultipleEntryPoints, *start));
-					}
-					file_build_data.entrypoint = Some(unsafe { Value::from_ref(LLVMBuildIntToPtr(file_build_data.llvm_builder.get_ref(), child_built.get_ref(), main_data.int_type.get_ref(), c"fn_ptr_to_int".as_ptr() as *const u8)) });
-					return Ok(child_built);
-				}
-				Metadata::Link => return child.build_function_definition(main_data, file_build_data, name, true),
+				Metadata::EntryPoint => return child.build_function_definition(main_data, file_build_data, name, is_link_function, true),
+				Metadata::Link => return child.build_function_definition(main_data, file_build_data, name, true, is_entry_point),
 			}
 			_ => unreachable!(),
 		};
@@ -390,7 +384,14 @@ impl AstNode {
 			}
 		}
 		// Return
-		Ok(unsafe { Value::from_ref(LLVMBuildPtrToInt(file_build_data.llvm_builder.get_ref(), function.get_ref(), main_data.int_type.get_ref(), c"fn_ptr_to_int".as_ptr() as *const u8)) })
+		let result = function.build_ptr_to_int(&file_build_data.llvm_builder, main_data.int_type, "fn_ptr_to_int");
+		if is_entry_point {
+			if file_build_data.entrypoint.is_some() {
+				return Err((Error::MultipleEntryPoints, *start));
+			}
+			file_build_data.entrypoint = Some(result.clone())
+		}
+		Ok(result)
 	}
 
 	pub fn build_r_value(&self, main_data: &MainData, file_build_data: &mut FileBuildData, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue>>, basic_block: Option<LLVMBasicBlockRef>)
@@ -401,7 +402,7 @@ impl AstNode {
 			variant,
 		} = self;
 		if self.is_function() {
-			let out = self.build_function_definition(main_data, file_build_data, "__bcz__unnamedFunction", false)?;
+			let out = self.build_function_definition(main_data, file_build_data, "__bcz__unnamedFunction", false, false)?;
 			if let Some(basic_block) = basic_block {
 				unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder.get_ref(), basic_block) };
 			}
@@ -487,22 +488,20 @@ impl AstNode {
 				// Build types
 				let argument_types: Box<[Type]> = repeat(main_data.int_type).take(arguments.len()).collect();
 				let function_type = main_data.int_type.function_type(&*argument_types, false);
-				let function_pointer_type = unsafe { LLVMPointerType(function_type.get_ref(), 0) };
+				let function_pointer_type = unsafe { Type::from_ref(LLVMPointerType(function_type.get_ref(), 0)) };
 				// Build function call
-				let function_pointer = unsafe {
-					LLVMBuildIntToPtr(file_build_data.llvm_builder.get_ref(), function_pointer_built.get_ref(), function_pointer_type, c"int_to_ptr_temp".as_ptr() as *const u8)
-				};
+				let function_pointer = function_pointer_built.build_int_to_ptr(&file_build_data.llvm_builder, function_pointer_type, "int_to_ptr_temp");
 				let built_function_call = unsafe {
-					LLVMBuildCall2(
+					Value::from_ref(LLVMBuildCall2(
 						file_build_data.llvm_builder.get_ref(),
 						function_type.get_ref(),
-						function_pointer,
+						function_pointer.get_ref(),
 						transmute(arguments_built.as_ptr()),
 						arguments_built.len() as c_uint,
 						c"function_call_temp".as_ptr() as *const u8
-					)
+					))
 				};
-				unsafe { Value::from_ref(LLVMBuildPtrToInt(file_build_data.llvm_builder.get_ref(), built_function_call, main_data.int_type.get_ref(), c"int_to_ptr_temp".as_ptr() as *const u8)) }
+				built_function_call
 			}
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
 			AstNodeVariant::Metadata(metadata, _child) => match metadata {
@@ -539,7 +538,7 @@ impl AstNode {
 
 	pub fn build_global_assignment(&self, main_data: &MainData, file_build_data: &mut FileBuildData, name: &str) -> Result<Value, (Error, (usize, usize))> {
 		if self.is_function() {
-			let function = self.build_function_definition(main_data, file_build_data, name, false)?;
+			let function = self.build_function_definition(main_data, file_build_data, name, false, false)?;
 			return Ok(function);
 		}
 		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();

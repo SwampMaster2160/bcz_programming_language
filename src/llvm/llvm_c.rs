@@ -63,6 +63,9 @@ extern "C" {
 	pub fn LLVMGetParam(Fn: LLVMValueRef, Index: c_uint) -> LLVMValueRef;
 	// Core/Values/Constants/Scalar constants
 	pub fn LLVMConstInt(IntTy: LLVMTypeRef, N: c_ulonglong, SignExtend: LLVMBool) -> LLVMValueRef;
+	// Core/Values/General APIs
+	pub fn LLVMGetValueKind(Val: LLVMValueRef) -> LLVMValueKind;
+	pub fn LLVMTypeOf(Val: LLVMValueRef) -> LLVMTypeRef;
 	// Core/Basic Block
 	pub fn LLVMAppendBasicBlockInContext(C: LLVMContextRef, Fn: LLVMValueRef, Name: *const u8) -> LLVMBasicBlockRef;
 	// Instruction Builders
@@ -124,7 +127,7 @@ pub const LLVMObjectFile: LLVMCodeGenFileType = 1;
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum LLVMTypeKind {
 	LLVMVoidTypeKind = 0,
 	LLVMHalfTypeKind = 1,
@@ -146,4 +149,42 @@ pub enum LLVMTypeKind {
 	LLVMBFloatTypeKind = 18,
 	LLVMX86_AMXTypeKind = 19,
 	LLVMTargetExtTypeKind = 20,
+}
+
+#[repr(C)]
+#[allow(non_camel_case_types)]
+#[derive(PartialEq, Eq, Debug)]
+pub enum LLVMValueKind {
+	LLVMArgumentValueKind,
+	LLVMBasicBlockValueKind,
+	LLVMMemoryUseValueKind,
+	LLVMMemoryDefValueKind,
+	LLVMMemoryPhiValueKind,
+
+	LLVMFunctionValueKind,
+	LLVMGlobalAliasValueKind,
+	LLVMGlobalIFuncValueKind,
+	LLVMGlobalVariableValueKind,
+	LLVMBlockAddressValueKind,
+	LLVMConstantExprValueKind,
+	LLVMConstantArrayValueKind,
+	LLVMConstantStructValueKind,
+	LLVMConstantVectorValueKind,
+
+	LLVMUndefValueValueKind,
+	LLVMConstantAggregateZeroValueKind,
+	LLVMConstantDataArrayValueKind,
+	LLVMConstantDataVectorValueKind,
+	LLVMConstantIntValueKind,
+	LLVMConstantFPValueKind,
+	LLVMConstantPointerNullValueKind,
+	LLVMConstantTokenNoneValueKind,
+
+	LLVMMetadataAsValueValueKind,
+	LLVMInlineAsmValueKind,
+
+	LLVMInstructionValueKind,
+	LLVMPoisonValueValueKind,
+	LLVMConstantTargetNoneValueKind,
+	LLVMConstantPtrAuthValueKind,
 }
