@@ -1,6 +1,6 @@
 use std::{iter::once, mem::ManuallyDrop};
 
-use super::{llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext}, llvm_type::Type, module::Module, traits::WrappedReference};
+use super::{builder::Builder, llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext}, llvm_type::Type, module::Module, traits::WrappedReference};
 
 #[allow(non_upper_case_globals)]
 static mut context_exists_in_this_thread: bool = false;
@@ -90,6 +90,11 @@ impl Context {
 	#[inline]
 	pub fn int_128_type(&self) -> Type {
 		unsafe { Type::from_ref(LLVMInt128TypeInContext(self.context_ref)) }
+	}
+
+	#[inline]
+	pub fn new_builder<'a>(&'a self) -> Builder<'a> {
+		unsafe { Builder::from_ref(LLVMCreateBuilderInContext(self.context_ref)) }
 	}
 }
 
