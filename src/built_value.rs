@@ -1,40 +1,20 @@
-use crate::{llvm::{llvm_c::{LLVMBuildLoad2, LLVMBuildPtrToInt, LLVMBuildStore, LLVMBuilderRef, LLVMGetInitializer, LLVMValueRef}, traits::WrappedReference}, MainData};
+use crate::{llvm::{llvm_c::{LLVMBuildLoad2, LLVMBuildStore, LLVMBuilderRef}, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Clone, Debug)]
-pub enum BuiltRValue {
-	NumericalValue(LLVMValueRef),
-	GlobalVariable(LLVMValueRef),
-	Function(LLVMValueRef),
-	AllocaVariable(LLVMValueRef),
+pub enum BuiltLValue<'a> {
+	AllocaVariable(Value<'a>),
 }
 
-impl BuiltRValue {
-	pub fn get_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef) -> LLVMValueRef {
+impl<'a> BuiltLValue<'a> {
+	pub fn get_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef) -> Value<'static> {
 		match self {
-			Self::NumericalValue(value) => *value,
-			Self::GlobalVariable(global_variable) => unsafe { LLVMGetInitializer(*global_variable) },
-			Self::Function(function_pointer) => unsafe { LLVMBuildPtrToInt(llvm_builder, *function_pointer, main_data.int_type.get_ref(), c"fn_ptr_to_int_temp".as_ptr() as *const u8) },
-			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildLoad2(llvm_builder, main_data.int_type.get_ref(), *alloca_variable, c"alloca_read_temp".as_ptr() as *const u8) },
-		}
-	}
-}
-
-
-#[derive(Clone, Debug)]
-pub enum BuiltLValue {
-	AllocaVariable(LLVMValueRef),
-}
-
-impl BuiltLValue {
-	pub fn get_value(&self, _main_data: &MainData, _llvm_builder: LLVMBuilderRef) -> BuiltRValue {
-		match self {
-			Self::AllocaVariable(alloca_variable) => BuiltRValue::AllocaVariable(*alloca_variable),
+			Self::AllocaVariable(alloca_variable) => unsafe { Value::from_ref(LLVMBuildLoad2(llvm_builder, main_data.int_type.get_ref(), alloca_variable.get_ref(), c"alloca_read_temp".as_ptr() as *const u8)) },
 		}
 	}
 
-	pub fn set_value(&self, main_data: &MainData, llvm_builder: LLVMBuilderRef, value: BuiltRValue) -> LLVMValueRef {
+	pub fn set_value(&self, _main_data: &MainData, llvm_builder: LLVMBuilderRef, value: Value) -> Value {
 		match self {
-			Self::AllocaVariable(alloca_variable) => unsafe { LLVMBuildStore(llvm_builder, value.get_value(main_data, llvm_builder), *alloca_variable) },
+			Self::AllocaVariable(alloca_variable) => unsafe { Value::from_ref(LLVMBuildStore(llvm_builder, value.get_ref(), alloca_variable.get_ref())) },
 		}
 	}
 }

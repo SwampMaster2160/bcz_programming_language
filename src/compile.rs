@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, iter::once, path::PathBuf, ptr::{null, null_mut}};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMExternalLinkage, LLVMObjectFile, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, module::Module, traits::WrappedReference}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildRet, LLVMBuildTrunc, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMExternalLinkage, LLVMObjectFile, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, module::Module, traits::WrappedReference, value::Value}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -200,7 +200,9 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 			// Build
 			let built_result = global.build_global_assignment(main_data, &mut file_build_data, name)?;
 			// Add to list
-			file_build_data.built_globals.insert(name.clone(), built_result);
+			file_build_data.built_globals.insert(name.clone(), unsafe {
+				Value::from_ref(built_result.get_ref())
+			});
 			globals_built_this_round.insert(name.clone());
 		}
 		// If we did not compile anything this round, there is a cyclic dependency
@@ -219,7 +221,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 		let entry_point_function_parameters = [main_data.int_type, main_data.int_type, main_data.int_type, int_32_type];
 		let entry_point_function_type = int_32_type.function_type(&entry_point_function_parameters, false);
 		// Get wrapped function
-		let wrapped_entry_point_function_pointer = wrapped_entry_point.get_value(main_data, llvm_builder);
+		let wrapped_entry_point_function_pointer = wrapped_entry_point.get_ref();
 		let wrapped_entry_point_function_parameter_types = [main_data.int_type, main_data.int_type, main_data.int_type, main_data.int_type];
 		let wrapped_entry_point_function_type = main_data.int_type.function_type(&wrapped_entry_point_function_parameter_types, false);
 		let wrapped_entry_point_function_pointer_type = unsafe { LLVMPointerType(wrapped_entry_point_function_type.get_ref(), 0) };

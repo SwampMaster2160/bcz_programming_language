@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{built_value::BuiltRValue, llvm::{llvm_c::LLVMBuilderRef, module::Module}};
+use crate::llvm::{llvm_c::LLVMBuilderRef, module::Module, value::Value};
 
 pub struct FileBuildData<'a> {
 	pub llvm_module: &'a Module<'a>,
 	pub llvm_builder: LLVMBuilderRef,
-	pub built_globals: HashMap<Box<str>, BuiltRValue>,
-	pub entrypoint: Option<BuiltRValue>,
+	pub built_globals: HashMap<Box<str>, Value<'a>>,
+	pub entrypoint: Option<Value<'a>>,
 }

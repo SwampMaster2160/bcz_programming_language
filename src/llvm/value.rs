@@ -2,6 +2,7 @@ use std::{marker::PhantomData, mem::ManuallyDrop};
 
 use super::{llvm_c::LLVMValueRef, traits::WrappedReference};
 
+#[derive(Clone, Debug)]
 pub struct Value<'a> {
 	value_ref: LLVMValueRef,
 	phantom_data: PhantomData<&'a ()>,

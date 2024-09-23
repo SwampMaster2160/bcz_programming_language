@@ -1,6 +1,6 @@
 use std::{ffi::c_uint, mem::{transmute, ManuallyDrop}};
 
-use super::{llvm_c::{LLVMBool, LLVMFunctionType, LLVMGetTypeKind, LLVMGetUndef, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference};
+use super::{llvm_c::{LLVMBool, LLVMFunctionType, LLVMGetTypeKind, LLVMGetUndef, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
 #[derive(Clone, Copy, Hash)]
 pub struct Type {
@@ -50,7 +50,7 @@ impl Type {
 
 	/// Create an undefined value of this type.
 	#[inline]
-	pub fn undefined(self) -> Self {
+	pub fn undefined(self) -> Value<'static> {
 		// TODO: See what types this is valid for
 		if !self.is_normal() {
 			panic!("Cannot create an undefined value of this type");
@@ -60,8 +60,8 @@ impl Type {
 
 	/// Create an undefined value of this type.
 	#[inline]
-	pub unsafe fn undefined_unchecked(self) -> Self {
-		unsafe { Self::from_ref(LLVMGetUndef(self.get_ref())) }
+	pub unsafe fn undefined_unchecked(self) -> Value<'static> {
+		unsafe { Value::from_ref(LLVMGetUndef(self.get_ref())) }
 	}
 
 	#[inline]
