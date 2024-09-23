@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAdd, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildMul, LLVMBuildNeg, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMConstInt, LLVMDLLImportLinkage, LLVMFunctionType, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -329,58 +329,51 @@ impl AstNode {
 				let mut wrapped_function_parameter_types = Vec::with_capacity(parameters.len());
 				for parameter in parameters.iter() {
 					let (parameter_type, _) = parameter.type_from_width(main_data)?;
-					wrapped_function_parameter_types.push(parameter_type.get_ref());
+					wrapped_function_parameter_types.push(parameter_type);
 				}
 				let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
-				let wrapped_function_type = unsafe {
-					LLVMFunctionType(
-						wrapped_function_return_type.get_ref(),
-						wrapped_function_parameter_types.as_ptr(),
-						wrapped_function_parameter_types.len() as c_uint,
-						false as LLVMBool
-					)
-				};
+				let wrapped_function_type = wrapped_function_return_type.function_type(wrapped_function_parameter_types.as_slice(), false);
 				// Link to wrapped function
 				let wrapped_name: Box<[u8]> = name.bytes().chain(once(0)).collect();
-				let wrapped_function = unsafe { LLVMAddFunction(file_build_data.llvm_module.get_ref(), wrapped_name.as_ptr(), wrapped_function_type) };
+				let wrapped_function = unsafe { LLVMAddFunction(file_build_data.llvm_module.get_ref(), wrapped_name.as_ptr(), wrapped_function_type.get_ref()) };
 				unsafe { LLVMSetLinkage(wrapped_function, LLVMDLLImportLinkage) };
 				unsafe { LLVMSetFunctionCallConv(wrapped_function, LLVMWin64CallConv) };
 				// Cast arguments to the types of the wrapped function parameters
 				let mut arguments = Vec::with_capacity(parameters.len());
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
 					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
-					let argument = unsafe { LLVMGetParam(function.get_ref(), parameter_index as c_uint) };
+					let argument = unsafe { Value::from_ref(LLVMGetParam(function.get_ref(), parameter_index as c_uint)) };
 					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type.get_ref()) } as u8)) {
 						Ordering::Less => match is_signed {
-							false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder.get_ref(), argument, parameter_type.get_ref(), c"z_extend_temp".as_ptr() as *const u8) },
-							true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder.get_ref(), argument, parameter_type.get_ref(), c"s_extend_temp".as_ptr() as *const u8) },
+							false => argument.build_zero_extend(&file_build_data.llvm_builder, parameter_type, "z_extend_temp"),
+							true => argument.build_sign_extend(&file_build_data.llvm_builder, parameter_type, "s_extend_temp"),
 						}
 						Ordering::Equal => argument,
-						Ordering::Greater => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder.get_ref(), argument, parameter_type.get_ref(), c"trunc_temp".as_ptr() as *const u8) },
+						Ordering::Greater => argument.build_truncate(&file_build_data.llvm_builder, parameter_type, "truncate_temp"),
 					};
 					arguments.push(argument_converted);
 				}
 				// Call wrapped function
 				let call_result = unsafe {
-					LLVMBuildCall2(
+					Value::from_ref(LLVMBuildCall2(
 						file_build_data.llvm_builder.get_ref(),
-						wrapped_function_type,
+						wrapped_function_type.get_ref(),
 						wrapped_function,
-						arguments.as_ptr(),
+						transmute(arguments.as_ptr()),
 						arguments.len() as c_uint,
 						c"func_call_temp".as_ptr() as *const u8,
-					)
+					))
 				};
 				// Build return
 				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
-					Ordering::Less => unsafe { LLVMBuildTrunc(file_build_data.llvm_builder.get_ref(), call_result, main_data.int_type.get_ref(), c"trunc_temp".as_ptr() as *const u8) },
+					Ordering::Less => call_result.build_truncate(&file_build_data.llvm_builder, main_data.int_type, "truncate_temp"),
 					Ordering::Equal => call_result,
 					Ordering::Greater => match wrapped_function_return_type_is_signed {
-						false => unsafe { LLVMBuildZExt(file_build_data.llvm_builder.get_ref(), call_result, main_data.int_type.get_ref(), c"z_extend_temp".as_ptr() as *const u8) },
-						true => unsafe { LLVMBuildSExt(file_build_data.llvm_builder.get_ref(), call_result, main_data.int_type.get_ref(), c"s_extend_temp".as_ptr() as *const u8) },
+						false => call_result.build_zero_extend(&file_build_data.llvm_builder, main_data.int_type, "zero_extend_temp"),
+						true => call_result.build_sign_extend(&file_build_data.llvm_builder, main_data.int_type, "sign_extend_temp"),
 					}
 				};
-				unsafe { LLVMBuildRet(file_build_data.llvm_builder.get_ref(), call_result_converted) };
+				unsafe { LLVMBuildRet(file_build_data.llvm_builder.get_ref(), call_result_converted.get_ref()) };
 			}
 		}
 		// Return
@@ -424,13 +417,13 @@ impl AstNode {
 						let left_value = operands[0].build_r_value(main_data, file_build_data, local_variables, basic_block)?;
 						let right_value = operands[1].build_r_value(main_data, file_build_data, local_variables, basic_block)?;
 						let result = match operation {
-							Operation::IntegerAdd => unsafe { Value::from_ref(LLVMBuildAdd(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"add_temp".as_ptr() as *const u8)) },
-							Operation::IntegerSubtract => unsafe { Value::from_ref(LLVMBuildSub(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"sub_temp".as_ptr() as *const u8)) },
-							Operation::IntegerMultiply => unsafe { Value::from_ref(LLVMBuildMul(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"mul_temp".as_ptr() as *const u8)) },
-							Operation::UnsignedDivide => unsafe { Value::from_ref(LLVMBuildUDiv(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"udiv_temp".as_ptr() as *const u8)) },
-							Operation::UnsignedModulo => unsafe { Value::from_ref(LLVMBuildURem(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"umod_temp".as_ptr() as *const u8)) },
-							Operation::SignedDivide => unsafe { Value::from_ref(LLVMBuildSDiv(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"sdiv_temp".as_ptr() as *const u8)) },
-							Operation::SignedTruncatedModulo => unsafe { Value::from_ref(LLVMBuildSRem(file_build_data.llvm_builder.get_ref(), left_value.get_ref(), right_value.get_ref(), c"stmod_temp".as_ptr() as *const u8)) },
+							Operation::IntegerAdd => left_value.build_add(&right_value, &file_build_data.llvm_builder, "add_temp"),
+							Operation::IntegerSubtract => left_value.build_sub(&right_value, &file_build_data.llvm_builder, "sub_temp"),
+							Operation::IntegerMultiply => left_value.build_mult(&right_value, &file_build_data.llvm_builder, "mult_temp"),
+							Operation::UnsignedDivide => left_value.build_unsigned_div(&right_value, &file_build_data.llvm_builder, "udiv_temp"),
+							Operation::UnsignedModulo => left_value.build_unsigned_modulo(&right_value, &file_build_data.llvm_builder, "umod_temp"),
+							Operation::SignedDivide => left_value.build_signed_div(&right_value, &file_build_data.llvm_builder, "sdiv_temp"),
+							Operation::SignedTruncatedModulo => left_value.build_signed_truncated_modulo(&right_value, &file_build_data.llvm_builder, "stmod_temp"),
 							_ => unreachable!(),
 						};
 						result
@@ -438,7 +431,7 @@ impl AstNode {
 					Operation::IntegerNegate => {
 						let operand = operands[0].build_r_value(main_data, file_build_data, local_variables, basic_block)?;
 						let result = match operation {
-							Operation::IntegerNegate => unsafe { Value::from_ref(LLVMBuildNeg(file_build_data.llvm_builder.get_ref(), operand.get_ref(), c"neg_temp".as_ptr() as *const u8)) },
+							Operation::IntegerNegate => operand.build_negate(&file_build_data.llvm_builder, "neg_temp"),
 							_ => unreachable!()
 						};
 						result
