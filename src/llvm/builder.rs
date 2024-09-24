@@ -2,6 +2,7 @@ use std::{marker::PhantomData, mem::ManuallyDrop};
 
 use super::{llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder}, traits::WrappedReference};
 
+#[repr(transparent)]
 pub struct Builder<'a> {
 	builder_ref: LLVMBuilderRef,
 	phantom_data: PhantomData<&'a ()>

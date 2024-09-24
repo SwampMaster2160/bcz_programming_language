@@ -1,8 +1,9 @@
-use std::{ffi::c_uint, mem::{transmute, ManuallyDrop}};
+use std::{ffi::c_uint, iter::repeat, mem::{transmute, ManuallyDrop, MaybeUninit}};
 
-use super::{llvm_c::{LLVMBool, LLVMFunctionType, LLVMGetTypeKind, LLVMGetUndef, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
+use super::{llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
 #[derive(Clone, Copy, Hash)]
+#[repr(transparent)]
 pub struct Type {
 	type_ref: LLVMTypeRef,
 }
@@ -75,5 +76,33 @@ impl Type {
 	#[inline]
 	pub(crate) fn type_kind(&self) -> LLVMTypeKind {
 		unsafe { LLVMGetTypeKind(self.get_ref()) }
+	}
+
+	pub fn parameter_count(&self) -> usize {
+		match self.type_kind() {
+			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { LLVMCountParamTypes(self.get_ref()) as usize },
+			other => panic!("Type is not a function type: {:?}", other),
+		}
+	}
+
+	pub fn get_return_type(&self) -> Type {
+		match self.type_kind() {
+			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { Type::from_ref(LLVMGetReturnType(self.get_ref())) },
+			other => panic!("Type is not a function type: {:?}", other),
+		}
+	}
+
+	pub fn is_variadic(&self) -> bool {
+		match self.type_kind() {
+			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { LLVMIsFunctionVarArg(self.get_ref()) != 0 },
+			other => panic!("Type is not a function type: {:?}", other),
+		}
+	}
+
+	pub fn parameter_types(&self) -> Box<[Type]> {
+		let parameter_count = self.parameter_count();
+		let mut parameters: Box<[MaybeUninit<Type>]> = repeat(MaybeUninit::uninit()).take(parameter_count).collect();
+		unsafe { LLVMGetParamTypes(self.type_ref, transmute(parameters.as_mut_ptr())) };
+		unsafe { transmute(parameters) }
 	}
 }

@@ -44,6 +44,10 @@ extern "C" {
 	pub fn LLVMVoidTypeInContext(C: LLVMContextRef) -> LLVMTypeRef;
 	// Core/Types/Function Types
 	pub fn LLVMFunctionType(ReturnType: LLVMTypeRef, ParamTypes: *const LLVMTypeRef, ParamCount: c_uint, IsVarArg: LLVMBool) -> LLVMTypeRef;
+	pub fn LLVMCountParamTypes(FunctionTy: LLVMTypeRef) -> c_uint;
+	pub fn LLVMGetReturnType(FunctionTy: LLVMTypeRef) -> LLVMTypeRef;
+	pub fn LLVMIsFunctionVarArg(FunctionTy: LLVMTypeRef) -> LLVMBool;
+	pub fn LLVMGetParamTypes(FunctionTy: LLVMTypeRef, Dest: *mut LLVMTypeRef) -> c_void;
 	// Core/Types/Sequential Types
 	pub fn LLVMArrayType2(ElementType: LLVMTypeRef, ElementCount: u64) -> LLVMTypeRef;
 	pub fn LLVMPointerType(ElementType: LLVMTypeRef, AddressSpace: c_uint) -> LLVMTypeRef;

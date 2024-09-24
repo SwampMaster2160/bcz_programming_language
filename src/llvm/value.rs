@@ -3,6 +3,7 @@ use std::{iter::once, marker::PhantomData, mem::ManuallyDrop};
 use super::{builder::Builder, llvm_c::{LLVMBuildAdd, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMTypeKind, LLVMTypeOf, LLVMValueRef}, llvm_type::Type, traits::WrappedReference};
 
 #[derive(Clone, Debug)]
+#[repr(transparent)]
 pub struct Value<'a> {
 	value_ref: LLVMValueRef,
 	phantom_data: PhantomData<&'a ()>,
@@ -200,6 +201,8 @@ impl<'a> Value<'a> {
 		}
 		unsafe { Self::from_ref(LLVMBuildNeg(builder.get_ref(), self.value_ref, name.as_ptr())) }
 	}
+
+	//pub fn build_call(&self, builder: &Builder, name: &str)
 
 	//pub fn build_return(&self, builder: &Builder) -> Value<'a> {
 	//	let input_type_kind = self.get_type().type_kind();

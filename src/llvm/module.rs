@@ -2,6 +2,7 @@ use std::{marker::PhantomData, mem::ManuallyDrop};
 
 use super::{llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef}, traits::WrappedReference};
 
+#[repr(transparent)]
 pub struct Module<'a> {
 	module_ref: LLVMModuleRef,
 	phantom_data: PhantomData<&'a ()>,

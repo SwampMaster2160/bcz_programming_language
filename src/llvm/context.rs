@@ -5,6 +5,7 @@ use super::{builder::Builder, llvm_c::{LLVMContextCreate, LLVMContextDispose, LL
 #[allow(non_upper_case_globals)]
 static mut context_exists_in_this_thread: bool = false;
 
+#[repr(transparent)]
 pub struct Context {
 	context_ref: LLVMContextRef,
 }
