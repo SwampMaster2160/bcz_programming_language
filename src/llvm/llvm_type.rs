@@ -1,4 +1,4 @@
-use std::{ffi::c_uint, iter::repeat, mem::{transmute, ManuallyDrop, MaybeUninit}};
+use std::{ffi::c_uint, iter::repeat, mem::{transmute, MaybeUninit}};
 
 use super::{llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
@@ -8,21 +8,8 @@ pub struct Type {
 	type_ref: LLVMTypeRef,
 }
 
-impl WrappedReference<LLVMTypeRef> for Type {
-	#[inline]
-	fn get_ref(&self) -> LLVMTypeRef {
-		self.type_ref
-	}
-
-	#[inline]
-	unsafe fn from_ref(raw_ref: LLVMTypeRef) -> Self {
-		Self { type_ref: raw_ref }
-	}
-
-	#[inline]
-	fn take_ref(self) -> LLVMTypeRef {
-		ManuallyDrop::new(self).type_ref
-	}
+unsafe impl WrappedReference for Type {
+	type RefType = LLVMTypeRef;
 }
 
 impl Type {

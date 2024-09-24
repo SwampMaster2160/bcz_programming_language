@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, mem::ManuallyDrop};
+use std::marker::PhantomData;
 
 use super::{llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef}, traits::WrappedReference};
 
@@ -8,21 +8,8 @@ pub struct Module<'a> {
 	phantom_data: PhantomData<&'a ()>,
 }
 
-impl<'a> WrappedReference<LLVMModuleRef> for Module<'a> {
-	#[inline]
-	fn get_ref(&self) -> LLVMModuleRef {
-		self.module_ref
-	}
-
-	#[inline]
-	unsafe fn from_ref(raw_ref: LLVMModuleRef) -> Self {
-		Self { module_ref: raw_ref, phantom_data: PhantomData::default() }
-	}
-
-	#[inline]
-	fn take_ref(self) -> LLVMModuleRef {
-		ManuallyDrop::new(self).module_ref
-	}
+unsafe impl<'a> WrappedReference for Module<'a> {
+	type RefType = LLVMModuleRef;
 }
 
 impl<'a> Module<'a> {

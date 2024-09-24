@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, mem::ManuallyDrop};
+use std::marker::PhantomData;
 
 use super::{llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder}, traits::WrappedReference};
 
@@ -8,18 +8,8 @@ pub struct Builder<'a> {
 	phantom_data: PhantomData<&'a ()>
 }
 
-impl<'a> WrappedReference<LLVMBuilderRef> for Builder<'a> {
-	fn get_ref(&self) -> LLVMBuilderRef {
-		self.builder_ref
-	}
-
-	unsafe fn from_ref(raw_ref: LLVMBuilderRef) -> Self {
-		Self { builder_ref: raw_ref, phantom_data: PhantomData }
-	}
-
-	fn take_ref(self) -> LLVMBuilderRef {
-		ManuallyDrop::new(self).builder_ref
-	}
+unsafe impl<'a> WrappedReference for Builder<'a> {
+	type RefType = LLVMBuilderRef;
 }
 
 impl<'a> Drop for Builder<'a> {

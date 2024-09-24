@@ -1,4 +1,4 @@
-use std::{iter::once, mem::ManuallyDrop};
+use std::iter::once;
 
 use super::{builder::Builder, llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext}, llvm_type::Type, module::Module, traits::WrappedReference};
 
@@ -10,21 +10,8 @@ pub struct Context {
 	context_ref: LLVMContextRef,
 }
 
-impl WrappedReference<LLVMContextRef> for Context {
-	#[inline]
-	fn get_ref(&self) -> LLVMContextRef {
-		self.context_ref
-	}
-
-	#[inline]
-	unsafe fn from_ref(raw_ref: LLVMContextRef) -> Self {
-		Self { context_ref: raw_ref }
-	}
-
-	#[inline]
-	fn take_ref(self) -> LLVMContextRef {
-		ManuallyDrop::new(self).context_ref
-	}
+unsafe impl WrappedReference for Context {
+	type RefType = LLVMContextRef;
 }
 
 impl Context {
