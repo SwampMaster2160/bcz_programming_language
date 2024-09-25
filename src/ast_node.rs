@@ -272,7 +272,7 @@ impl AstNode {
 		Ok(())
 	}
 
-	fn build_function_definition<'a>(&'a self, main_data: &'a MainData, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &Builder, name: &str, is_link_function: bool, is_entry_point: bool)
+	fn build_function_definition<'a>(&'a self, main_data: &'a MainData, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder, name: &str, is_link_function: bool, is_entry_point: bool)
 	-> Result<Value<'a, 'a>, (Error, (usize, usize))> {
 		// Unpack function definition node
 		let Self {
@@ -388,7 +388,7 @@ impl AstNode {
 		Ok(result)
 	}
 
-	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &Builder, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<LLVMBasicBlockRef>)
 	-> Result<Value, (Error, (usize, usize))> {
 		let Self {
 			start,
@@ -531,7 +531,7 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_global_assignment<'a>(&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &Builder<'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str)
+	pub fn build_global_assignment<'a>(&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str)
 	-> Result<Value, (Error, (usize, usize))> {
 		if self.is_function() {
 			let function = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
