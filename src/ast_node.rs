@@ -1,8 +1,8 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{once, repeat}, mem::{swap, transmute}};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{once, repeat}, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildCall2, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -335,9 +335,9 @@ impl AstNode {
 				let wrapped_function_type = wrapped_function_return_type.function_type(wrapped_function_parameter_types.as_slice(), false);
 				// Link to wrapped function
 				let wrapped_name: Box<[u8]> = name.bytes().chain(once(0)).collect();
-				let wrapped_function = unsafe { LLVMAddFunction(file_build_data.llvm_module.get_ref(), wrapped_name.as_ptr(), wrapped_function_type.get_ref()) };
-				unsafe { LLVMSetLinkage(wrapped_function, LLVMDLLImportLinkage) };
-				unsafe { LLVMSetFunctionCallConv(wrapped_function, LLVMWin64CallConv) };
+				let wrapped_function = unsafe { Value::from_ref(LLVMAddFunction(file_build_data.llvm_module.get_ref(), wrapped_name.as_ptr(), wrapped_function_type.get_ref())) };
+				unsafe { LLVMSetLinkage(wrapped_function.get_ref(), LLVMDLLImportLinkage) };
+				unsafe { LLVMSetFunctionCallConv(wrapped_function.get_ref(), LLVMWin64CallConv) };
 				// Cast arguments to the types of the wrapped function parameters
 				let mut arguments = Vec::with_capacity(parameters.len());
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
@@ -354,16 +354,17 @@ impl AstNode {
 					arguments.push(argument_converted);
 				}
 				// Call wrapped function
-				let call_result = unsafe {
-					Value::from_ref(LLVMBuildCall2(
-						file_build_data.llvm_builder.get_ref(),
-						wrapped_function_type.get_ref(),
-						wrapped_function,
-						transmute(arguments.as_ptr()),
-						arguments.len() as c_uint,
-						c"func_call_temp".as_ptr() as *const u8,
-					))
-				};
+				let call_result = unsafe { wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, &file_build_data.llvm_builder, name) };
+				//let call_result = unsafe {
+				//	Value::from_ref(LLVMBuildCall2(
+				//		file_build_data.llvm_builder.get_ref(),
+				//		wrapped_function_type.get_ref(),
+				//		wrapped_function,
+				//		transmute(arguments.as_ptr()),
+				//		arguments.len() as c_uint,
+				//		c"func_call_temp".as_ptr() as *const u8,
+				//	))
+				//};
 				// Build return
 				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
 					Ordering::Less => call_result.build_truncate(&file_build_data.llvm_builder, main_data.int_type, "truncate_temp"),
@@ -484,16 +485,17 @@ impl AstNode {
 				let function_pointer_type = unsafe { Type::from_ref(LLVMPointerType(function_type.get_ref(), 0)) };
 				// Build function call
 				let function_pointer = function_pointer_built.build_int_to_ptr(&file_build_data.llvm_builder, function_pointer_type, "int_to_ptr_temp");
-				let built_function_call = unsafe {
-					Value::from_ref(LLVMBuildCall2(
-						file_build_data.llvm_builder.get_ref(),
-						function_type.get_ref(),
-						function_pointer.get_ref(),
-						transmute(arguments_built.as_ptr()),
-						arguments_built.len() as c_uint,
-						c"function_call_temp".as_ptr() as *const u8
-					))
-				};
+				let built_function_call = unsafe { function_pointer.build_call(arguments_built.as_slice(), function_type, &file_build_data.llvm_builder, "function_call_temp") };
+				//let built_function_call = unsafe {
+				//	Value::from_ref(LLVMBuildCall2(
+				//		file_build_data.llvm_builder.get_ref(),
+				//		function_type.get_ref(),
+				//		function_pointer.get_ref(),
+				//		transmute(arguments_built.as_ptr()),
+				//		arguments_built.len() as c_uint,
+				//		c"function_call_temp".as_ptr() as *const u8
+				//	))
+				//};
 				built_function_call
 			}
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),

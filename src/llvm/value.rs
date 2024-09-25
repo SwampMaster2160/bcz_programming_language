@@ -1,6 +1,6 @@
-use std::{iter::once, marker::PhantomData};
+use std::{ffi::c_uint, iter::once, marker::PhantomData, mem::transmute};
 
-use super::{builder::Builder, llvm_c::{LLVMBuildAdd, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMTypeKind, LLVMTypeOf, LLVMValueRef}, llvm_type::Type, traits::WrappedReference};
+use super::{builder::Builder, llvm_c::{LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMTypeKind, LLVMTypeOf, LLVMValueRef}, llvm_type::Type, traits::WrappedReference};
 
 #[derive(Clone, Debug)]
 #[repr(transparent)]
@@ -189,7 +189,32 @@ impl<'a> Value<'a> {
 		unsafe { Self::from_ref(LLVMBuildNeg(builder.get_ref(), self.value_ref, name.as_ptr())) }
 	}
 
-	//pub fn build_call(&self, builder: &Builder, name: &str)
+	/// Call a function with `self` as the function value/pointer.
+	///
+	/// # Safety
+	///
+	/// The `self` must represent a function pointer to a function with type `function_type`, this is not checked.
+	pub unsafe fn build_call<'b>(&'a self, arguments: &[Value<'b>], function_type: Type, builder: &Builder, name: &str) -> Value<'b> {
+		let argument_count_c: c_uint = match arguments.len().try_into() {
+			Ok(count) => count,
+			Err(_) => panic!("Too many arguments"),
+		};
+		if function_type.parameter_count() != arguments.len() {
+			panic!("Type mismatch");
+		}
+		for (index, parameter) in function_type.parameter_types().iter().enumerate() {
+			if *parameter != arguments[index].get_type() {
+				panic!("Type mismatch");
+			}
+		}
+		//if self.get_type() != function_type {
+		//	panic!("Function call for value of type {:?} but call type of {:?}", self.get_type(), function_type);
+		//}
+		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		unsafe {
+			Value::from_ref(LLVMBuildCall2(builder.get_ref(), function_type.get_ref(), self.value_ref, transmute(arguments.as_ptr()), argument_count_c, name.as_ptr()))
+		}
+	}
 
 	//pub fn build_return(&self, builder: &Builder) -> Value<'a> {
 	//	let input_type_kind = self.get_type().type_kind();

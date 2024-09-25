@@ -51,6 +51,7 @@ extern "C" {
 	// Core/Types/Sequential Types
 	pub fn LLVMArrayType2(ElementType: LLVMTypeRef, ElementCount: u64) -> LLVMTypeRef;
 	pub fn LLVMPointerType(ElementType: LLVMTypeRef, AddressSpace: c_uint) -> LLVMTypeRef;
+	pub fn LLVMGetElementType(Ty: LLVMTypeRef) -> LLVMTypeRef;
 	// Core/Values/Constants
 	pub fn LLVMGetUndef(Ty: LLVMTypeRef) -> LLVMValueRef;
 	// Core/Values/Constants/Global Values

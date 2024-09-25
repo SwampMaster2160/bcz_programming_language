@@ -1,8 +1,8 @@
-use std::{ffi::c_uint, iter::repeat, mem::{transmute, MaybeUninit}};
+use std::{ffi::c_uint, fmt::Debug, iter::repeat, mem::{transmute, MaybeUninit}};
 
 use super::{llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
-#[derive(Clone, Copy, Hash)]
+#[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct Type {
 	type_ref: LLVMTypeRef,
@@ -91,5 +91,11 @@ impl Type {
 		let mut parameters: Box<[MaybeUninit<Type>]> = repeat(MaybeUninit::uninit()).take(parameter_count).collect();
 		unsafe { LLVMGetParamTypes(self.type_ref, transmute(parameters.as_mut_ptr())) };
 		unsafe { transmute(parameters) }
+	}
+}
+
+impl Debug for Type {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.type_kind().fmt(f)
 	}
 }
