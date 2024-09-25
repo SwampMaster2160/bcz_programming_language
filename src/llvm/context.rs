@@ -46,37 +46,37 @@ impl Context {
 	}
 
 	#[inline]
-	pub fn void_type(&self) -> Type {
+	pub fn void_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMVoidTypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_1_type(&self) -> Type {
+	pub fn int_1_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMInt1TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_8_type(&self) -> Type {
+	pub fn int_8_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMInt8TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_16_type(&self) -> Type {
+	pub fn int_16_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMInt16TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_32_type(&self) -> Type {
+	pub fn int_32_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMInt32TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_64_type(&self) -> Type {
+	pub fn int_64_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMInt64TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_128_type(&self) -> Type {
+	pub fn int_128_type<'a>(&'a self) -> Type<'a> {
 		unsafe { Type::from_ref(LLVMInt128TypeInContext(self.context_ref)) }
 	}
 

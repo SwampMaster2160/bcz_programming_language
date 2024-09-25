@@ -173,14 +173,15 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 	Ok(())
 }
 
-fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
+fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
 	// Set up module
 	unsafe { LLVMSetTarget(llvm_module.get_ref(), main_data.llvm_target_triple.as_ptr() as *const u8) };
 	unsafe { LLVMSetModuleDataLayout(llvm_module.get_ref(), main_data.llvm_data_layout) };
 	// Create data struct for builder
+	let llvm_builder = main_data.llvm_context.new_builder();
 	let mut file_build_data = FileBuildData {
-		llvm_module,
-		llvm_builder: main_data.llvm_context.new_builder(), //unsafe { Builder::from_ref(llvm_builder) },
+		//llvm_module,
+		//llvm_builder: main_data.llvm_context.new_builder(), //unsafe { Builder::from_ref(llvm_builder) },
 		built_globals: HashMap::new(),
 		entrypoint: None,
 	};
@@ -191,10 +192,14 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 	//println!("{:?}", function_type);
 	//println!("{:?}", function_type.parameter_types());
 	// Build each global in rounds
-	while !globals_and_dependencies.is_empty() {
+	let mut globals_built = HashSet::new();
+	while globals_and_dependencies.len() > globals_built.len() {
 		// Build all globals this round in their dependencies are built
 		let mut globals_built_this_round = HashSet::new();
 		'a: for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
+			if globals_built.contains(name) {
+				continue 'a;
+			}
 			// Make sure that the dependencies are built
 			for variable_dependency in variable_dependencies.iter() {
 				if !file_build_data.built_globals.contains_key(variable_dependency) {
@@ -202,7 +207,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 				}
 			}
 			// Build
-			let built_result = global.build_global_assignment(main_data, &mut file_build_data, name)?;
+			let built_result = global.build_global_assignment(main_data, llvm_module, &llvm_builder, &mut file_build_data, name)?;
 			// Add to list
 			file_build_data.built_globals.insert(name.clone(), unsafe {
 				Value::from_ref(built_result.get_ref())
@@ -215,7 +220,8 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 		}
 		// Remove built globals from the to build list
 		for name in globals_built_this_round.iter() {
-			globals_and_dependencies.remove(name);
+			globals_built.insert(name.clone());
+			//globals_and_dependencies.remove(name);
 		}
 	}
 	// Build entry point
@@ -227,15 +233,15 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 		// Get wrapped function
 		let wrapped_entry_point_function_type = main_data.int_type.function_type(&[], false);
 		let wrapped_entry_point_function_pointer_type = unsafe { Type::from_ref(LLVMPointerType(wrapped_entry_point_function_type.get_ref(), 0)) };
-		let wrapped_entry_point_function_pointer = wrapped_entry_point.build_int_to_ptr(&file_build_data.llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
+		let wrapped_entry_point_function_pointer = wrapped_entry_point.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
 		// Build wrapper function
 		// TODO: Non-Windows
 		let entry_point_function = unsafe { LLVMAddFunction(llvm_module.get_ref(), c"WinMain".as_ptr() as *const u8, entry_point_function_type.get_ref()) };
 		unsafe { LLVMSetLinkage(entry_point_function, LLVMExternalLinkage) };
 		unsafe { LLVMSetFunctionCallConv(entry_point_function, LLVMWin64CallConv) };
 		let entry_point_function_basic_block: *mut std::ffi::c_void = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context.get_ref(), entry_point_function, c"entry".as_ptr() as *const u8) };
-		unsafe { LLVMPositionBuilderAtEnd(file_build_data.llvm_builder.get_ref(), entry_point_function_basic_block) };
-		let built_function_call = unsafe { wrapped_entry_point_function_pointer.build_call(&[], wrapped_entry_point_function_type, &file_build_data.llvm_builder, "function_call_temp") };
+		unsafe { LLVMPositionBuilderAtEnd(llvm_builder.get_ref(), entry_point_function_basic_block) };
+		let built_function_call = unsafe { wrapped_entry_point_function_pointer.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp") };
 		//let built_function_call = unsafe {
 		//	LLVMBuildCall2(
 		//		file_build_data.llvm_builder.get_ref(),
@@ -246,7 +252,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, mut globals_and
 		//		c"function_call_temp".as_ptr() as *const u8,
 		//	)
 		//};
-		unsafe { LLVMBuildRet(file_build_data.llvm_builder.get_ref(), LLVMBuildTrunc(file_build_data.llvm_builder.get_ref(), built_function_call.get_ref(), int_32_type.get_ref(), c"trunc_cast_temp".as_ptr() as *const u8)) };
+		unsafe { LLVMBuildRet(llvm_builder.get_ref(), LLVMBuildTrunc(llvm_builder.get_ref(), built_function_call.get_ref(), int_32_type.get_ref(), c"trunc_cast_temp".as_ptr() as *const u8)) };
 	}
 	// Clean up and return
 	//unsafe { LLVMDisposeBuilder(llvm_builder) };

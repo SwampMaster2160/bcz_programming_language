@@ -1,18 +1,19 @@
-use std::{ffi::c_uint, fmt::Debug, iter::repeat, mem::{transmute, MaybeUninit}};
+use std::{ffi::c_uint, fmt::Debug, iter::repeat, marker::PhantomData, mem::{transmute, MaybeUninit}};
 
-use super::{llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
+use super::{context::Context, llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
 #[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]
-pub struct Type {
+pub struct Type<'a> {
 	type_ref: LLVMTypeRef,
+	phantom_data: PhantomData<&'a Context>
 }
 
-unsafe impl WrappedReference for Type {
+unsafe impl<'a> WrappedReference for Type<'a> {
 	type RefType = LLVMTypeRef;
 }
 
-impl Type {
+impl<'a> Type<'a> {
 	/// Create a function type with `self` as the return type.
 	///
 	/// # Panics
@@ -38,7 +39,7 @@ impl Type {
 
 	/// Create an undefined value of this type.
 	#[inline]
-	pub fn undefined(self) -> Value<'static> {
+	pub fn undefined(self) -> Value<'a, 'a> {
 		// TODO: See what types this is valid for
 		if !self.is_normal() {
 			panic!("Cannot create an undefined value of this type");
@@ -48,7 +49,7 @@ impl Type {
 
 	/// Create an undefined value of this type.
 	#[inline]
-	pub unsafe fn undefined_unchecked(self) -> Value<'static> {
+	pub unsafe fn undefined_unchecked(self) -> Value<'a, 'a> {
 		unsafe { Value::from_ref(LLVMGetUndef(self.get_ref())) }
 	}
 
@@ -72,7 +73,7 @@ impl Type {
 		}
 	}
 
-	pub fn get_return_type(&self) -> Type {
+	pub fn get_return_type(&self) -> Self {
 		match self.type_kind() {
 			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { Type::from_ref(LLVMGetReturnType(self.get_ref())) },
 			other => panic!("Type is not a function type: {:?}", other),
@@ -86,7 +87,7 @@ impl Type {
 		}
 	}
 
-	pub fn parameter_types(&self) -> Box<[Type]> {
+	pub fn parameter_types(&self) -> Box<[Self]> {
 		let parameter_count = self.parameter_count();
 		let mut parameters: Box<[MaybeUninit<Type>]> = repeat(MaybeUninit::uninit()).take(parameter_count).collect();
 		unsafe { LLVMGetParamTypes(self.type_ref, transmute(parameters.as_mut_ptr())) };
@@ -94,7 +95,7 @@ impl Type {
 	}
 }
 
-impl Debug for Type {
+impl<'a> Debug for Type<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.type_kind().fmt(f)
 	}

@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
 
-use super::{llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder}, traits::WrappedReference};
+use super::{context::Context, llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder}, traits::WrappedReference};
 
 #[repr(transparent)]
 pub struct Builder<'a> {
 	builder_ref: LLVMBuilderRef,
-	phantom_data: PhantomData<&'a ()>
+	phantom_data: PhantomData<&'a Context>
 }
 
 unsafe impl<'a> WrappedReference for Builder<'a> {

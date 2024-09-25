@@ -46,7 +46,7 @@ pub struct MainData<'a> {
 	/// The data layout fo the target machine.
 	llvm_data_layout: LLVMTargetDataRef,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
-	int_type: Type,
+	int_type: Type<'a>,
 	/// A C string that contains info about the target machine.
 	llvm_target_triple: CString,
 	/// How many bits width the target machine integer is.
@@ -75,6 +75,7 @@ impl<'a> MainData<'a> {
 	pub fn new() -> Self {
 		let context = Context::new();
 		Self {
+			llvm_context: context,
 			do_link: true,
 			primary_output_file: None,
 			filepaths_to_compile: Vec::new(),
@@ -84,8 +85,7 @@ impl<'a> MainData<'a> {
 			print_tokens: false,
 			print_ast_nodes: false,
 			print_after_const_evaluate: false,
-			int_type: context.void_type(),
-			llvm_context: context,
+			int_type: unsafe { Type::from_ref(null_mut()) },
 			llvm_data_layout: null_mut(),
 			int_bit_width: 0,
 			int_max_value: 0,

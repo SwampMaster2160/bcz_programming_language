@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
 
-use super::{llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef}, traits::WrappedReference};
+use super::{context::Context, llvm_c::{LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef}, traits::WrappedReference};
 
 #[repr(transparent)]
 pub struct Module<'a> {
 	module_ref: LLVMModuleRef,
-	phantom_data: PhantomData<&'a ()>,
+	phantom_data: PhantomData<&'a Context>,
 }
 
 unsafe impl<'a> WrappedReference for Module<'a> {
