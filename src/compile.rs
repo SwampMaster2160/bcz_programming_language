@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, iter::once, path::PathBuf, ptr::null_mut};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildRet, LLVMBuildTrunc, LLVMExternalLinkage, LLVMObjectFile, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildRet, LLVMBuildTrunc, LLVMExternalLinkage, LLVMObjectFile, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMWin64CallConv}, module::Module, traits::WrappedReference, value::Value}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -185,12 +185,6 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		built_globals: HashMap::new(),
 		entrypoint: None,
 	};
-	// Test
-	//let function_type = main_data.int_type.function_type(&[main_data.int_type, main_data.int_type], false);
-	//let function_type = unsafe { Type::from_ref(LLVMPointerType(function_type.get_ref(), 0)) };
-	//let function_type = unsafe { Type::from_ref(LLVMGetElementType(function_type.get_ref())) };
-	//println!("{:?}", function_type);
-	//println!("{:?}", function_type.parameter_types());
 	// Build each global in rounds
 	let mut globals_built = HashSet::new();
 	while globals_and_dependencies.len() > globals_built.len() {
@@ -232,7 +226,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		let entry_point_function_type = int_32_type.function_type(&entry_point_function_parameters, false);
 		// Get wrapped function
 		let wrapped_entry_point_function_type = main_data.int_type.function_type(&[], false);
-		let wrapped_entry_point_function_pointer_type = unsafe { Type::from_ref(LLVMPointerType(wrapped_entry_point_function_type.get_ref(), 0)) };
+		let wrapped_entry_point_function_pointer_type = wrapped_entry_point_function_type.pointer_to();
 		let wrapped_entry_point_function_pointer = wrapped_entry_point.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
 		// Build wrapper function
 		// TODO: Non-Windows

@@ -1,6 +1,6 @@
 use std::{ffi::c_uint, fmt::Debug, iter::repeat, marker::PhantomData, mem::{transmute, MaybeUninit}};
 
-use super::{context::Context, llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
+use super::{context::Context, llvm_c::{LLVMBool, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
 #[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]
@@ -54,7 +54,7 @@ impl<'a> Type<'a> {
 	}
 
 	#[inline]
-	fn is_normal(self) -> bool {
+	pub(crate) fn is_normal(self) -> bool {
 		!matches!(
 			self.type_kind(),
 			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind | LLVMTypeKind::LLVMTargetExtTypeKind | LLVMTypeKind::LLVMTokenTypeKind,
@@ -62,36 +62,41 @@ impl<'a> Type<'a> {
 	}
 
 	#[inline]
-	pub(crate) fn type_kind(&self) -> LLVMTypeKind {
+	pub(crate) fn type_kind(self) -> LLVMTypeKind {
 		unsafe { LLVMGetTypeKind(self.get_ref()) }
 	}
 
-	pub fn parameter_count(&self) -> usize {
+	pub fn parameter_count(self) -> usize {
 		match self.type_kind() {
 			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { LLVMCountParamTypes(self.get_ref()) as usize },
 			other => panic!("Type is not a function type: {:?}", other),
 		}
 	}
 
-	pub fn get_return_type(&self) -> Self {
+	pub fn get_return_type(self) -> Self {
 		match self.type_kind() {
 			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { Type::from_ref(LLVMGetReturnType(self.get_ref())) },
 			other => panic!("Type is not a function type: {:?}", other),
 		}
 	}
 
-	pub fn is_variadic(&self) -> bool {
+	pub fn is_variadic(self) -> bool {
 		match self.type_kind() {
 			LLVMTypeKind::LLVMFunctionTypeKind => unsafe { LLVMIsFunctionVarArg(self.get_ref()) != 0 },
 			other => panic!("Type is not a function type: {:?}", other),
 		}
 	}
 
-	pub fn parameter_types(&self) -> Box<[Self]> {
+	pub fn parameter_types(self) -> Box<[Self]> {
 		let parameter_count = self.parameter_count();
 		let mut parameters: Box<[MaybeUninit<Type>]> = repeat(MaybeUninit::uninit()).take(parameter_count).collect();
 		unsafe { LLVMGetParamTypes(self.type_ref, transmute(parameters.as_mut_ptr())) };
 		unsafe { transmute(parameters) }
+	}
+
+	#[inline]
+	pub fn pointer_to(self) -> Self {
+		unsafe { Type::from_ref(LLVMPointerType(self.type_ref, 0)) }
 	}
 }
 

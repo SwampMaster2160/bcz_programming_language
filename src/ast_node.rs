@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulongl
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMGetParam, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMGetParam, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -355,16 +355,6 @@ impl AstNode {
 				}
 				// Call wrapped function
 				let call_result = unsafe { wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name) };
-				//let call_result = unsafe {
-				//	Value::from_ref(LLVMBuildCall2(
-				//		file_build_data.llvm_builder.get_ref(),
-				//		wrapped_function_type.get_ref(),
-				//		wrapped_function,
-				//		transmute(arguments.as_ptr()),
-				//		arguments.len() as c_uint,
-				//		c"func_call_temp".as_ptr() as *const u8,
-				//	))
-				//};
 				// Build return
 				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
 					Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
@@ -482,20 +472,10 @@ impl AstNode {
 				// Build types
 				let argument_types: Box<[Type]> = repeat(main_data.int_type).take(arguments.len()).collect();
 				let function_type = main_data.int_type.function_type(&*argument_types, false);
-				let function_pointer_type = unsafe { Type::from_ref(LLVMPointerType(function_type.get_ref(), 0)) };
+				let function_pointer_type = function_type.pointer_to();
 				// Build function call
 				let function_pointer = function_pointer_built.build_int_to_ptr(llvm_builder, function_pointer_type, "int_to_ptr_temp");
 				let built_function_call = unsafe { function_pointer.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp") };
-				//let built_function_call = unsafe {
-				//	Value::from_ref(LLVMBuildCall2(
-				//		file_build_data.llvm_builder.get_ref(),
-				//		function_type.get_ref(),
-				//		function_pointer.get_ref(),
-				//		transmute(arguments_built.as_ptr()),
-				//		arguments_built.len() as c_uint,
-				//		c"function_call_temp".as_ptr() as *const u8
-				//	))
-				//};
 				built_function_call
 			}
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
@@ -537,9 +517,8 @@ impl AstNode {
 			let function = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
 			return Ok(function);
 		}
-		let name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut Vec::new(), None)?;
-		let global = unsafe { Value::from_ref(LLVMAddGlobal(llvm_module.get_ref(), main_data.int_type.get_ref(), name_c.as_ptr())) };
+		let global = llvm_module.add_global(main_data.int_type, name);
 		unsafe { LLVMSetInitializer(global.get_ref(), r_value.get_ref()) };
 		return Ok(r_value);
 	}
