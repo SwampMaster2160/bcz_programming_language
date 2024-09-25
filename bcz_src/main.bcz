@@ -1,7 +1,13 @@
+B = 5;
+
 main = @entry_point () {
 	Beep(100, 1000);
-	a = 2;
-	420 + a
+	a = 2 + B;
+	420 + aFn(a, 2)
+};
+
+aFn = (a, b) {
+	a + b
 };
 
 Beep = @link (4, 4) -4;

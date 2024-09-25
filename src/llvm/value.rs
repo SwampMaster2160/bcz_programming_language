@@ -1,8 +1,8 @@
-use std::{ffi::c_uint, iter::once, marker::PhantomData, mem::transmute};
+use std::{ffi::c_uint, fmt::{Debug, Formatter, Write}, iter::once, marker::PhantomData, mem::transmute};
 
-use super::{builder::Builder, context::Context, llvm_c::{LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMTypeKind, LLVMTypeOf, LLVMValueRef}, llvm_type::Type, module::Module, traits::WrappedReference};
+use super::{builder::Builder, context::Context, llvm_c::{LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMSetInitializer, LLVMTypeKind, LLVMTypeOf, LLVMValueKind, LLVMValueRef}, llvm_type::Type, module::Module, traits::WrappedReference};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct Value<'c, 'm> {
 	value_ref: LLVMValueRef,
@@ -15,10 +15,10 @@ unsafe impl<'c, 'm> WrappedReference for Value<'c, 'm> {
 }
 
 impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
-	//#[inline]
-	//fn value_kind(&self) -> LLVMValueKind {
-	//	unsafe { LLVMGetValueKind(self.value_ref) }
-	//}
+	#[inline]
+	fn value_kind(&self) -> LLVMValueKind {
+		unsafe { LLVMGetValueKind(self.value_ref) }
+	}
 
 	#[inline]
 	pub fn get_type(&self) -> Type<'c> {
@@ -217,6 +217,32 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		}
 	}
 
+	/// # Safety
+	///
+	/// The `self` value must be a global variable that holds a value of the same type as `set_to`.
+	pub unsafe fn set_initializer(&self, set_to: &Self) {
+		match (self.value_kind(), self.get_type().type_kind()) {
+			(LLVMValueKind::LLVMGlobalVariableValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
+			_ => panic!("Type mismatch")
+		}
+		unsafe { LLVMSetInitializer(self.value_ref, set_to.value_ref) };
+	}
+
+	pub fn get_parameter(&self, index: usize) -> Self {
+		if index >= self.count_parameters() {
+			panic!("Index out of bounds");
+		}
+		unsafe { Self::from_ref(LLVMGetParam(self.value_ref, index as c_uint)) }
+	}
+
+	pub fn count_parameters(&self) -> usize {
+		match (self.value_kind(), self.get_type().type_kind()) {
+			(LLVMValueKind::LLVMFunctionValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
+			_ => panic!("Invalid input value {self:?}, should be function")
+		}
+		unsafe { LLVMCountParams(self.value_ref) as usize }
+	}
+
 	//pub fn build_return(&self, builder: &Builder) -> Value<'a> {
 	//	let input_type_kind = self.get_type().type_kind();
 	//	if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
@@ -224,4 +250,12 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 	//	}
 	//	unsafe { Self::from_ref(LLVMBuildRet(builder.get_ref(), self.value_ref)) }
 	//}
+}
+
+impl<'c, 'm> Debug for Value<'c, 'm> {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		self.get_type().fmt(f)?;
+		f.write_char('/')?;
+		self.value_kind().fmt(f)
+	}
 }

@@ -66,6 +66,7 @@ extern "C" {
 	pub fn LLVMSetFunctionCallConv(Fn: LLVMValueRef, CC: c_uint) -> c_void;
 	// Core/Values/Constants/Function values/Function Parameters
 	pub fn LLVMGetParam(Fn: LLVMValueRef, Index: c_uint) -> LLVMValueRef;
+	pub fn LLVMCountParams(Fn: LLVMValueRef) -> c_uint;
 	// Core/Values/Constants/Scalar constants
 	pub fn LLVMConstInt(IntTy: LLVMTypeRef, N: c_ulonglong, SignExtend: LLVMBool) -> LLVMValueRef;
 	// Core/Values/General APIs

@@ -1,8 +1,8 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::{c_uint, c_ulonglong}, iter::{once, repeat}, mem::swap};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, ffi::c_ulonglong, iter::{once, repeat}, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMGetParam, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBool, LLVMBuildAlloca, LLVMBuildRet, LLVMBuildStore, LLVMConstInt, LLVMDLLImportLinkage, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -210,18 +210,25 @@ impl AstNode {
 				if is_l_value {
 					return Err((Error::LValueFunctionDefinition, *start));
 				}
-				for parameter in parameters {
-					match (&parameter.variant, is_link_function) {
-						(AstNodeVariant::Identifier(name), false) => {
-							local_variables.insert(name.clone());
-						}
-						(_, false) => return Err((Error::ExpectedIdentifier, parameter.start)),
-						(_, true) => parameter.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
-					};
-				}
 				match is_link_function {
-					false => body.get_variable_dependencies(variable_dependencies, import_dependencies, &mut HashSet::new(), false, false)?,
-					true => body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
+					false => {
+						let mut local_variables = HashSet::new();
+						for parameter in parameters {
+							match &parameter.variant {
+								AstNodeVariant::Identifier(name) => {
+									local_variables.insert(name.clone());
+								}
+								_ => return Err((Error::ExpectedIdentifier, parameter.start)),
+							}
+						}
+						body.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables, false, false)?;
+					}
+					true => {
+						for parameter in parameters {
+							parameter.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
+						}
+						body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
+					}
 				}
 			}
 			AstNodeVariant::Identifier(name) => match is_l_value {
@@ -313,7 +320,7 @@ impl AstNode {
 						_ => return Err((Error::ExpectedIdentifier, parameter.start)),
 					};
 					// Add parameter to local scope
-					let parameter_value = unsafe { Value::from_ref(LLVMGetParam(function.get_ref(), parameter_index as c_uint)) };
+					let parameter_value = function.get_parameter(parameter_index);
 					let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
 					let parameter_variable = unsafe { Value::from_ref(LLVMBuildAlloca(llvm_builder.get_ref(), main_data.int_type.get_ref(), parameter_name_c.as_ptr())) };
 					unsafe { LLVMBuildStore(llvm_builder.get_ref(), parameter_value.get_ref(), parameter_variable.get_ref()) };
@@ -342,7 +349,7 @@ impl AstNode {
 				let mut arguments = Vec::with_capacity(parameters.len());
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
 					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
-					let argument = unsafe { Value::from_ref(LLVMGetParam(function.get_ref(), parameter_index as c_uint)) };
+					let argument = function.get_parameter(parameter_index);
 					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type.get_ref()) } as u8)) {
 						Ordering::Less => match is_signed {
 							false => argument.build_zero_extend(llvm_builder, parameter_type, "z_extend_temp"),
@@ -519,7 +526,7 @@ impl AstNode {
 		}
 		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut Vec::new(), None)?;
 		let global = llvm_module.add_global(main_data.int_type, name);
-		unsafe { LLVMSetInitializer(global.get_ref(), r_value.get_ref()) };
+		unsafe { global.set_initializer(&r_value) };
 		return Ok(r_value);
 	}
 
