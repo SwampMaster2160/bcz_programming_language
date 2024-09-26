@@ -1,6 +1,6 @@
 use std::{iter::once, marker::PhantomData};
 
-use super::{context::Context, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMTypeKind}, types::Type, traits::WrappedReference, value::Value};
+use super::{context::Context, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMTypeKind}, target_data::TargetData, traits::WrappedReference, types::Type, value::Value};
 
 #[repr(transparent)]
 pub struct Module<'c> {
@@ -34,6 +34,10 @@ impl<'c> Module<'c> {
 		}
 		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		unsafe { Value::from_ref(LLVMAddFunction(self.module_ref, name.as_ptr(), function_type.get_ref())) }
+	}
+
+	pub fn set_data_layout(&self, data_layout: &TargetData) {
+		unsafe { LLVMSetModuleDataLayout(self.module_ref, data_layout.get_ref()) };
 	}
 }
 
