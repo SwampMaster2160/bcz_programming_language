@@ -3,8 +3,8 @@ use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, ffi::CStrin
 use compile::compile_file;
 use compiler_arguments::process_arguments;
 use llvm::{context::Context, llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMSizeOfTypeInBits, LLVMTargetDataRef, LLVMTargetMachineRef, LLVMTargetRef
-}, llvm_type::Type, traits::WrappedReference};
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetMachineRef, LLVMTargetRef
+}, target_data::TargetData, traits::WrappedReference, types::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;
@@ -44,7 +44,7 @@ pub struct MainData<'a> {
 	/// The context for LLVM functions.
 	llvm_context: Context,
 	/// The data layout fo the target machine.
-	llvm_data_layout: LLVMTargetDataRef,
+	llvm_data_layout: TargetData,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
 	int_type: Type<'a>,
 	/// A C string that contains info about the target machine.
@@ -86,7 +86,7 @@ impl<'a> MainData<'a> {
 			print_ast_nodes: false,
 			print_after_const_evaluate: false,
 			int_type: unsafe { Type::from_ref(null_mut()) },
-			llvm_data_layout: null_mut(),
+			llvm_data_layout: unsafe { TargetData::from_ref(null_mut()) },
 			int_bit_width: 0,
 			int_max_value: 0,
 			sign_bit_mask: 0,
@@ -139,10 +139,10 @@ fn main() {
 			LLVMCodeModelDefault,
 		)
 	};
-	main_data.llvm_data_layout = unsafe { LLVMCreateTargetDataLayout(main_data.llvm_target_machine) };
+	main_data.llvm_data_layout = unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(main_data.llvm_target_machine)) };
 	// Get info about machine being compiled for
-	main_data.int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout)) };
-	let int_type_width = unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, main_data.int_type.get_ref()) };
+	main_data.int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout.get_ref())) };
+	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {
 		println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
 		return;

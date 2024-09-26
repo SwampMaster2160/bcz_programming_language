@@ -1,6 +1,6 @@
 use std::{ffi::c_uint, fmt::{Debug, Formatter, Write}, iter::once, marker::PhantomData, mem::transmute};
 
-use super::{builder::Builder, context::Context, llvm_c::{LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMSetInitializer, LLVMTypeKind, LLVMTypeOf, LLVMValueKind, LLVMValueRef}, llvm_type::Type, module::Module, traits::WrappedReference};
+use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMLinkage, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMTypeKind, LLVMTypeOf, LLVMValueKind, LLVMValueRef}, module::Module, traits::WrappedReference, types::Type};
 
 #[derive(Clone)]
 #[repr(transparent)]
@@ -272,6 +272,32 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 			panic!("Invalid type of return value: {self_type:?}");
 		}
 		unsafe { Self::from_ref(LLVMBuildRet(builder.get_ref(), self.value_ref)) }
+	}
+
+	/// `self` is the function to append the basic block to.
+	pub fn append_basic_block(&self, context: &'c Context, name: &str) -> BasicBlock<'c, 'm> {
+		match (self.value_kind(), self.get_type().type_kind()) {
+			(LLVMValueKind::LLVMFunctionValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
+			_ => panic!("Invalid input value {self:?}, should be function")
+		}
+		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		unsafe { BasicBlock::from_ref(LLVMAppendBasicBlockInContext(context.get_ref(), self.value_ref, name.as_ptr())) }
+	}
+
+	pub fn set_linkage(&self, linkage: Linkage) {
+		match (self.value_kind(), self.get_type().type_kind()) {
+			(LLVMValueKind::LLVMGlobalVariableValueKind | LLVMValueKind::LLVMFunctionValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
+			_ => panic!("Invalid input value {self:?}, should be global variable/function")
+		}
+		unsafe { LLVMSetLinkage(self.value_ref, linkage as LLVMLinkage) };
+	}
+
+	pub fn set_calling_convention(&self, calling_convention: CallingConvention) {
+		match (self.value_kind(), self.get_type().type_kind()) {
+			(LLVMValueKind::LLVMFunctionValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
+			_ => panic!("Invalid input value {self:?}, should be function")
+		}
+		unsafe { LLVMSetFunctionCallConv(self.value_ref, calling_convention as c_uint) };
 	}
 }
 

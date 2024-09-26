@@ -2,7 +2,7 @@ use std::{ffi::c_uint, fmt::Debug, iter::{once, repeat}, marker::PhantomData, me
 
 use crate::llvm::llvm_c::LLVMBuildAlloca;
 
-use super::{builder::Builder, context::Context, llvm_c::{LLVMBool, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
+use super::{builder::Builder, context::Context, llvm_c::{LLVMBool, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef}, target_data::TargetData, traits::WrappedReference, value::Value};
 
 #[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]
@@ -115,6 +115,13 @@ impl<'a> Type<'a> {
 		}
 		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		unsafe { Value::from_ref(LLVMBuildAlloca(builder.get_ref(), self.type_ref, name.as_ptr())) }
+	}
+
+	pub fn size_in_bits(&self, target_data: &TargetData) -> u128 {
+		if !self.is_normal() {
+			panic!("Invalid type");
+		}
+		unsafe { LLVMSizeOfTypeInBits(target_data.get_ref(), self.type_ref).try_into().unwrap() }
 	}
 }
 

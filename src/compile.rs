@@ -176,7 +176,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
 	// Set up module
 	unsafe { LLVMSetTarget(llvm_module.get_ref(), main_data.llvm_target_triple.as_ptr() as *const u8) };
-	unsafe { LLVMSetModuleDataLayout(llvm_module.get_ref(), main_data.llvm_data_layout) };
+	unsafe { LLVMSetModuleDataLayout(llvm_module.get_ref(), main_data.llvm_data_layout.get_ref()) };
 	// Create data struct for builder
 	let llvm_builder = main_data.llvm_context.new_builder();
 	let mut file_build_data = FileBuildData {

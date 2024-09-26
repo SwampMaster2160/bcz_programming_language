@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::swa
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMDLLImportLinkage, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{basic_block::BasicBlock, builder::Builder, enums::{CallingConvention, Linkage}, module::Module, types::Type, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -308,8 +308,8 @@ impl AstNode {
 		};
 		let function = llvm_module.add_function(function_type, &*mangled_name);
 		// Build function body
-		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context.get_ref(), function.get_ref(), c"entry".as_ptr() as *const u8) };
-		unsafe { LLVMPositionBuilderAtEnd(llvm_builder.get_ref(), basic_block) };
+		let basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
+		llvm_builder.position_at_end(&basic_block);
 		match is_link_function {
 			false => {
 				let mut function_parameter_variables = HashMap::new();
@@ -327,7 +327,7 @@ impl AstNode {
 				}
 				let mut inner_local_variables: Vec<HashMap<Box<str>, BuiltLValue<'a>>> = vec![function_parameter_variables];
 				// Build function body
-				let function_body_built: Value<'a, 'a> = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_local_variables, Some(basic_block))?;
+				let function_body_built: Value<'a, 'a> = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_local_variables, Some(&basic_block))?;
 				function_body_built.build_return(llvm_builder);
 			}
 			true => {
@@ -341,14 +341,14 @@ impl AstNode {
 				let wrapped_function_type = wrapped_function_return_type.function_type(wrapped_function_parameter_types.as_slice(), false);
 				// Link to wrapped function
 				let wrapped_function = llvm_module.add_function(wrapped_function_type, name);
-				unsafe { LLVMSetLinkage(wrapped_function.get_ref(), LLVMDLLImportLinkage) };
-				unsafe { LLVMSetFunctionCallConv(wrapped_function.get_ref(), LLVMWin64CallConv) };
+				wrapped_function.set_linkage(Linkage::DLLImport);
+				wrapped_function.set_calling_convention(CallingConvention::Win64);
 				// Cast arguments to the types of the wrapped function parameters
 				let mut arguments = Vec::with_capacity(parameters.len());
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
 					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
 					let argument = function.get_parameter(parameter_index);
-					let argument_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, parameter_type.get_ref()) } as u8)) {
+						let argument_converted = match main_data.int_bit_width.cmp(&(parameter_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 						Ordering::Less => match is_signed {
 							false => argument.build_zero_extend(llvm_builder, parameter_type, "z_extend_temp"),
 							true => argument.build_sign_extend(llvm_builder, parameter_type, "s_extend_temp"),
@@ -361,7 +361,7 @@ impl AstNode {
 				// Call wrapped function
 				let call_result = wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name);
 				// Build return
-				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
+				let call_result_converted = match main_data.int_bit_width.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 					Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
 					Ordering::Equal => call_result,
 					Ordering::Greater => match wrapped_function_return_type_is_signed {
@@ -383,7 +383,7 @@ impl AstNode {
 		Ok(result)
 	}
 
-	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<&BasicBlock>)
 	-> Result<Value, (Error, (usize, usize))> {
 		let Self {
 			start,
@@ -393,7 +393,7 @@ impl AstNode {
 		if self.is_function() {
 			let out: Value<'a, 'a> = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false)?;
 			if let Some(basic_block) = basic_block {
-				unsafe { LLVMPositionBuilderAtEnd(llvm_builder.get_ref(), basic_block) };
+				llvm_builder.position_at_end(basic_block);
 			}
 			return Ok(out);
 		}
@@ -491,7 +491,7 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_l_value<'a>(&'a self, main_data: &MainData<'a>, _file_build_data: &mut FileBuildData, _llvm_module: &Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, _basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_l_value<'a>(&'a self, main_data: &MainData<'a>, _file_build_data: &mut FileBuildData, _llvm_module: &Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, _basic_block: Option<&BasicBlock>)
 	-> Result<BuiltLValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,

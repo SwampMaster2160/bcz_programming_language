@@ -1,6 +1,6 @@
 use std::{iter::once, marker::PhantomData};
 
-use super::{context::Context, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMTypeKind}, llvm_type::Type, traits::WrappedReference, value::Value};
+use super::{context::Context, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMTypeKind}, types::Type, traits::WrappedReference, value::Value};
 
 #[repr(transparent)]
 pub struct Module<'c> {
