@@ -1,4 +1,4 @@
-use crate::{llvm::{builder::Builder, llvm_c::{LLVMBuildLoad2, LLVMBuildStore}, traits::WrappedReference, value::Value}, MainData};
+use crate::{llvm::{builder::Builder, value::Value}, MainData};
 
 #[derive(Clone, Debug)]
 pub enum BuiltLValue<'a> {
@@ -6,15 +6,15 @@ pub enum BuiltLValue<'a> {
 }
 
 impl<'a> BuiltLValue<'a> {
-	pub fn get_value(&self, main_data: &MainData, llvm_builder: &Builder) -> Value<'a, 'a> {
+	pub fn get_value(&self, main_data: &MainData<'a>, llvm_builder: &Builder<'a>) -> Value<'a, 'a> {
 		match self {
-			Self::AllocaVariable(alloca_variable) => unsafe { Value::from_ref(LLVMBuildLoad2(llvm_builder.get_ref(), main_data.int_type.get_ref(), alloca_variable.get_ref(), c"alloca_read_temp".as_ptr() as *const u8)) },
+			Self::AllocaVariable(alloca_variable) => alloca_variable.build_load(main_data.int_type, llvm_builder, "alloca_read_temp"),
 		}
 	}
 
-	pub fn set_value(&self, _main_data: &MainData, llvm_builder: &Builder, value: Value) -> Value {
+	pub fn set_value(&self, _main_data: &MainData, llvm_builder: &Builder<'a>, value: &Value<'a, 'a>) -> Value {
 		match self {
-			Self::AllocaVariable(alloca_variable) => unsafe { Value::from_ref(LLVMBuildStore(llvm_builder.get_ref(), value.get_ref(), alloca_variable.get_ref())) },
+			Self::AllocaVariable(alloca_variable) => alloca_variable.build_store(value, llvm_builder),
 		}
 	}
 }

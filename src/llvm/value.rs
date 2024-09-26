@@ -1,6 +1,6 @@
 use std::{ffi::c_uint, fmt::{Debug, Formatter, Write}, iter::once, marker::PhantomData, mem::transmute};
 
-use super::{builder::Builder, context::Context, llvm_c::{LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMSetInitializer, LLVMTypeKind, LLVMTypeOf, LLVMValueKind, LLVMValueRef}, llvm_type::Type, module::Module, traits::WrappedReference};
+use super::{builder::Builder, context::Context, llvm_c::{LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMSetInitializer, LLVMTypeKind, LLVMTypeOf, LLVMValueKind, LLVMValueRef}, llvm_type::Type, module::Module, traits::WrappedReference};
 
 #[derive(Clone)]
 #[repr(transparent)]
@@ -216,14 +216,16 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 			Value::from_ref(LLVMBuildCall2(builder.get_ref(), function_type.get_ref(), self.value_ref, transmute(arguments.as_ptr()), argument_count_c, name.as_ptr()))
 		}
 	}
-
-	/// # Safety
-	///
-	/// The `self` value must be a global variable that holds a value of the same type as `set_to`.
-	pub unsafe fn set_initializer(&self, set_to: &Self) {
-		match (self.value_kind(), self.get_type().type_kind()) {
+	
+	pub fn set_initializer(&self, set_to: &Self) {
+		let self_type = self.get_type();
+		let set_to_type = set_to.get_type();
+		match (self.value_kind(), self_type.type_kind()) {
 			(LLVMValueKind::LLVMGlobalVariableValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
 			_ => panic!("Type mismatch")
+		}
+		if self_type != set_to_type.pointer_to() {
+			panic!("Initilize of type {set_to_type:?} to location of type {self_type:?}");
 		}
 		unsafe { LLVMSetInitializer(self.value_ref, set_to.value_ref) };
 	}
@@ -241,6 +243,27 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 			_ => panic!("Invalid input value {self:?}, should be function")
 		}
 		unsafe { LLVMCountParams(self.value_ref) as usize }
+	}
+
+	pub fn build_load(&self, load_type: Type<'c>, builder: &Builder<'c>, name: &str) -> Self {
+		if !load_type.is_normal() {
+			panic!("Invalid load type {load_type:?}");
+		}
+		let self_type = self.get_type();
+		if load_type.pointer_to() != self_type {
+			panic!("Load of type {load_type:?} from location of type {self_type:?}");
+		}
+		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		unsafe { Self::from_ref(LLVMBuildLoad2(builder.get_ref(), load_type.get_ref(), self.value_ref, name.as_ptr())) }
+	}
+
+	pub fn build_store(&self, value_to_store: &Self, builder: &Builder<'c>) -> Self {
+		let value_to_store_type = value_to_store.get_type();
+		let self_type = self.get_type();
+		if self_type != value_to_store_type.pointer_to() {
+			panic!("Store of type {value_to_store_type:?} to location of type {self_type:?}");
+		}
+		unsafe { Self::from_ref(LLVMBuildStore(builder.get_ref(), value_to_store.value_ref, self.value_ref)) }
 	}
 
 	//pub fn build_return(&self, builder: &Builder) -> Value<'a> {
