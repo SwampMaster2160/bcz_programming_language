@@ -1,8 +1,8 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::{once, repeat}, mem::swap};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::swap};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMBuildAlloca, LLVMBuildRet, LLVMDLLImportLinkage, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{builder::Builder, llvm_c::{LLVMAppendBasicBlockInContext, LLVMBasicBlockRef, LLVMDLLImportLinkage, LLVMPositionBuilderAtEnd, LLVMSetFunctionCallConv, LLVMSetLinkage, LLVMSizeOfTypeInBits, LLVMWin64CallConv}, llvm_type::Type, module::Module, traits::WrappedReference, value::Value}, MainData};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -302,11 +302,11 @@ impl AstNode {
 		let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
 		let function_type = main_data.int_type.function_type(&*parameter_types, false);
 		// Build function value
-		let name_bytes: Box<[u8]> = match is_link_function {
-			false => name.bytes().chain(once(0)).collect(),
-			true => "__bcz__link__".bytes().chain(name.bytes()).chain(once(0)).collect(),
+		let mangled_name: Box<str> = match is_link_function {
+			false => name.into(),
+			true => "__bcz__link__".chars().chain(name.chars()).collect(),
 		};
-		let function = unsafe { Value::from_ref(LLVMAddFunction(llvm_module.get_ref(), name_bytes.as_ptr(), function_type.get_ref())) };
+		let function = llvm_module.add_function(function_type, &*mangled_name);
 		// Build function body
 		let basic_block = unsafe { LLVMAppendBasicBlockInContext(main_data.llvm_context.get_ref(), function.get_ref(), c"entry".as_ptr() as *const u8) };
 		unsafe { LLVMPositionBuilderAtEnd(llvm_builder.get_ref(), basic_block) };
@@ -321,15 +321,14 @@ impl AstNode {
 					};
 					// Add parameter to local scope
 					let parameter_value = function.get_parameter(parameter_index);
-					let parameter_name_c: Box<[u8]> = parameter_name.bytes().chain(once(0)).collect();
-					let parameter_variable = unsafe { Value::from_ref(LLVMBuildAlloca(llvm_builder.get_ref(), main_data.int_type.get_ref(), parameter_name_c.as_ptr())) };
+					let parameter_variable = main_data.int_type.build_alloca(&llvm_builder, parameter_name);
 					parameter_variable.build_store(&parameter_value, llvm_builder);
 					function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
 				}
 				let mut inner_local_variables: Vec<HashMap<Box<str>, BuiltLValue<'a>>> = vec![function_parameter_variables];
 				// Build function body
 				let function_body_built: Value<'a, 'a> = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_local_variables, Some(basic_block))?;
-				unsafe { LLVMBuildRet(llvm_builder.get_ref(), function_body_built.get_ref()) };
+				function_body_built.build_return(llvm_builder);
 			}
 			true => {
 				// Get wrapped function type
@@ -341,8 +340,7 @@ impl AstNode {
 				let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
 				let wrapped_function_type = wrapped_function_return_type.function_type(wrapped_function_parameter_types.as_slice(), false);
 				// Link to wrapped function
-				let wrapped_name: Box<[u8]> = name.bytes().chain(once(0)).collect();
-				let wrapped_function = unsafe { Value::from_ref(LLVMAddFunction(llvm_module.get_ref(), wrapped_name.as_ptr(), wrapped_function_type.get_ref())) };
+				let wrapped_function = llvm_module.add_function(wrapped_function_type, name);
 				unsafe { LLVMSetLinkage(wrapped_function.get_ref(), LLVMDLLImportLinkage) };
 				unsafe { LLVMSetFunctionCallConv(wrapped_function.get_ref(), LLVMWin64CallConv) };
 				// Cast arguments to the types of the wrapped function parameters
@@ -361,7 +359,7 @@ impl AstNode {
 					arguments.push(argument_converted);
 				}
 				// Call wrapped function
-				let call_result = unsafe { wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name) };
+				let call_result = wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name);
 				// Build return
 				let call_result_converted = match main_data.int_bit_width.cmp(&(unsafe { LLVMSizeOfTypeInBits(main_data.llvm_data_layout, wrapped_function_return_type.get_ref()) } as u8)) {
 					Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
@@ -371,7 +369,7 @@ impl AstNode {
 						true => call_result.build_sign_extend(llvm_builder, main_data.int_type, "sign_extend_temp"),
 					}
 				};
-				unsafe { LLVMBuildRet(llvm_builder.get_ref(), call_result_converted.get_ref()) };
+				call_result_converted.build_return(llvm_builder);
 			}
 		}
 		// Return
@@ -385,7 +383,7 @@ impl AstNode {
 		Ok(result)
 	}
 
-	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder<'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<LLVMBasicBlockRef>)
 	-> Result<Value, (Error, (usize, usize))> {
 		let Self {
 			start,
@@ -482,7 +480,7 @@ impl AstNode {
 				let function_pointer_type = function_type.pointer_to();
 				// Build function call
 				let function_pointer = function_pointer_built.build_int_to_ptr(llvm_builder, function_pointer_type, "int_to_ptr_temp");
-				let built_function_call = unsafe { function_pointer.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp") };
+				let built_function_call = function_pointer.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp");
 				built_function_call
 			}
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
@@ -493,7 +491,7 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_l_value<'a>(&'a self, main_data: &MainData, _file_build_data: &mut FileBuildData, _llvm_module: &Module, llvm_builder: &Builder, local_variables: &'a mut Vec<HashMap<Box<str>, BuiltLValue>>, _basic_block: Option<LLVMBasicBlockRef>)
+	pub fn build_l_value<'a>(&'a self, main_data: &MainData<'a>, _file_build_data: &mut FileBuildData, _llvm_module: &Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, _basic_block: Option<LLVMBasicBlockRef>)
 	-> Result<BuiltLValue, (Error, (usize, usize))> {
 		let Self {
 			start: _,
@@ -509,8 +507,7 @@ impl AstNode {
 					}
 				}
 				// Else create local variable
-				let variable_name_c: Box<[u8]> = name.bytes().chain(once(0)).collect();
-				let variable = unsafe { Value::from_ref(LLVMBuildAlloca(llvm_builder.get_ref(), main_data.int_type.get_ref(), variable_name_c.as_ptr())) };
+				let variable: Value<'a, 'a> = main_data.int_type.build_alloca(llvm_builder, &**name);
 				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLValue::AllocaVariable(variable.clone()));
 				BuiltLValue::AllocaVariable(variable)
 			}
@@ -518,7 +515,7 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_global_assignment<'a>(&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str)
+	pub fn build_global_assignment<'a>(&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str)
 	-> Result<Value, (Error, (usize, usize))> {
 		if self.is_function() {
 			let function = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
@@ -555,7 +552,6 @@ impl AstNode {
 					true => (*value ^ main_data.int_max_value).wrapping_add(1),
 				};
 				(match byte_width {
-					//0 => unsafe { LLVMVoidTypeInContext(main_data.llvm_context) },
 					1 => main_data.llvm_context.int_8_type(),
 					2 => main_data.llvm_context.int_16_type(),
 					4 => main_data.llvm_context.int_32_type(),
@@ -623,7 +619,7 @@ impl AstNode {
 	}
 }
 
-fn get_variable_by_name<'a>(main_data: &MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_builder: &Builder<'a>, local_variables: &Vec<HashMap<Box<str>, BuiltLValue<'a>>>, name: &str) -> Value<'a, 'a> {
+fn get_variable_by_name<'a>(main_data: &MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_builder: &Builder<'a, 'a>, local_variables: &Vec<HashMap<Box<str>, BuiltLValue<'a>>>, name: &str) -> Value<'a, 'a> {
 	for scope_level in local_variables.iter().rev() {
 		if let Some(variable) = scope_level.get(name) {
 			return variable.get_value(main_data, llvm_builder);

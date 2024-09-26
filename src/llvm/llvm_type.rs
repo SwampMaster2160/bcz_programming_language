@@ -1,6 +1,8 @@
-use std::{ffi::c_uint, fmt::Debug, iter::repeat, marker::PhantomData, mem::{transmute, MaybeUninit}};
+use std::{ffi::c_uint, fmt::Debug, iter::{once, repeat}, marker::PhantomData, mem::{transmute, MaybeUninit}};
 
-use super::{context::Context, llvm_c::{LLVMBool, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
+use crate::llvm::llvm_c::LLVMBuildAlloca;
+
+use super::{builder::Builder, context::Context, llvm_c::{LLVMBool, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMTypeKind, LLVMTypeRef}, traits::WrappedReference, value::Value};
 
 #[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]
@@ -105,6 +107,14 @@ impl<'a> Type<'a> {
 			other => panic!("Type is not an integer type: {other:?}"),
 		}
 		unsafe { Value::from_ref(LLVMConstInt(self.type_ref, value.try_into().unwrap(), sign_extend as LLVMBool)) }
+	}
+
+	pub fn build_alloca<'m>(self, builder: &Builder<'a, 'm>, name: &str) -> Value<'a, 'm> {
+		if !self.is_normal() {
+			panic!("Invalid type");
+		}
+		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		unsafe { Value::from_ref(LLVMBuildAlloca(builder.get_ref(), self.type_ref, name.as_ptr())) }
 	}
 }
 

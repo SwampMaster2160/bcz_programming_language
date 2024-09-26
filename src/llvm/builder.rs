@@ -1,18 +1,19 @@
 use std::marker::PhantomData;
 
-use super::{context::Context, llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder}, traits::WrappedReference};
+use super::{context::Context, llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder}, module::Module, traits::WrappedReference};
 
 #[repr(transparent)]
-pub struct Builder<'a> {
+pub struct Builder<'c, 'm> {
 	builder_ref: LLVMBuilderRef,
-	phantom_data: PhantomData<&'a Context>
+	phantom_data_context: PhantomData<&'c Context>,
+	phantom_data_module: PhantomData<&'m Module<'c>>,
 }
 
-unsafe impl<'a> WrappedReference for Builder<'a> {
+unsafe impl<'c, 'm> WrappedReference for Builder<'c, 'm> {
 	type RefType = LLVMBuilderRef;
 }
 
-impl<'a> Drop for Builder<'a> {
+impl<'c, 'm> Drop for Builder<'c, 'm> {
 	fn drop(&mut self) {
 		unsafe { LLVMDisposeBuilder(self.builder_ref) };
 	}

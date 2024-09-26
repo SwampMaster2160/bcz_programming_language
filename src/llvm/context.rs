@@ -81,7 +81,7 @@ impl Context {
 	}
 
 	#[inline]
-	pub fn new_builder<'a>(&'a self) -> Builder<'a> {
+	pub fn new_builder<'a>(&'a self) -> Builder<'a, 'a> {
 		unsafe { Builder::from_ref(LLVMCreateBuilderInContext(self.context_ref)) }
 	}
 }
