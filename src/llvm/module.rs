@@ -1,6 +1,6 @@
-use std::{iter::once, marker::PhantomData};
+use std::{ffi::{c_int, CStr}, iter::once, marker::PhantomData, ptr::null_mut};
 
-use super::{context::Context, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMTypeKind}, target_data::TargetData, traits::WrappedReference, types::Type, value::Value};
+use super::{context::Context, enums::CodegenFileType, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMTypeKind}, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type, value::Value};
 
 #[repr(transparent)]
 pub struct Module<'c> {
@@ -38,6 +38,24 @@ impl<'c> Module<'c> {
 
 	pub fn set_data_layout(&self, data_layout: &TargetData) {
 		unsafe { LLVMSetModuleDataLayout(self.module_ref, data_layout.get_ref()) };
+	}
+
+	pub fn set_target_triple(&self, target_triple: &str) {
+		let target_triple: Box<[u8]> = target_triple.bytes().chain(once(0)).collect();
+		unsafe { LLVMSetTarget(self.module_ref, target_triple.as_ptr()) };
+	}
+
+	pub fn emit_to_file(&self, target_machine: &TargetMachine, filepath: &str, codegen_type: CodegenFileType) -> Result<(), String> {
+		let filepath: Box<[u8]> = filepath.bytes().chain(once(0)).collect();
+		let mut error: *mut u8 = null_mut();
+		let result = unsafe { LLVMTargetMachineEmitToFile(target_machine.get_ref(), self.module_ref, filepath.as_ptr(), codegen_type as c_int, &mut error) } != 0;
+		match result {
+			false => Ok(()),
+			true => Err({
+				let error = unsafe { CStr::from_ptr(error as *const i8) };
+				error.to_str().unwrap().to_string()
+			})
+		}
 	}
 }
 

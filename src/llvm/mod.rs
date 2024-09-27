@@ -8,3 +8,4 @@ pub mod builder;
 pub mod basic_block;
 pub mod enums;
 pub mod target_data;
+pub mod target_machine;

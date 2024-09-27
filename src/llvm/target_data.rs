@@ -1,10 +1,13 @@
-use super::{llvm_c::LLVMTargetDataRef, traits::WrappedReference};
+use std::marker::PhantomData;
+
+use super::{llvm_c::LLVMTargetDataRef, target_machine::TargetMachine, traits::WrappedReference};
 
 #[repr(transparent)]
-pub struct TargetData {
-	module_ref: LLVMTargetDataRef
+pub struct TargetData<'a> {
+	module_ref: LLVMTargetDataRef,
+	phantom_data_machine: PhantomData<&'a TargetMachine>,
 }
 
-unsafe impl WrappedReference for TargetData {
+unsafe impl<'a> WrappedReference for TargetData<'a> {
 	type RefType = LLVMTargetDataRef;
 }

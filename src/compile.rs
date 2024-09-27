@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, iter::once, path::PathBuf, ptr::null_mut};
+use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, path::PathBuf};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{enums::{CallingConvention, Linkage}, llvm_c::{LLVMObjectFile, LLVMSetTarget, LLVMTargetMachineEmitToFile}, module::Module, traits::WrappedReference}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module}, parse::parse_tokens, token::Token, MainData};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, PathBuf, usize, usize)> {
@@ -135,11 +135,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	if !directory.exists() {
 		create_dir_all(directory).map_err(|_| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?;
 	}
-	let filepath_c: Box<[u8]> = output_filepath.as_os_str().to_str().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?.bytes().chain(once(0)).collect();
-	let result = unsafe { LLVMTargetMachineEmitToFile(main_data.llvm_target_machine, llvm_module.get_ref(), filepath_c.as_ptr(), LLVMObjectFile, null_mut()) } != 0;
-	if result {
-		return Err((Error::UnableToWriteObject, filepath.clone(), 0, 0));
-	}
+	let filepath = output_filepath.to_str().ok_or_else(|| (Error::UnableToWriteObject, filepath.clone(), 0, 0))?;
+	llvm_module.emit_to_file(&main_data.llvm_target_machine, filepath, CodegenFileType::Object).map_err(|_| (Error::UnableToWriteObject, output_filepath.clone(), 0, 0))?;
 	main_data.object_files_to_link.push(output_filepath);
 	// Return
 	Ok(())
@@ -175,7 +172,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: u
 
 fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>) -> Result<(), (Error, (usize, usize))> {
 	// Set up module
-	unsafe { LLVMSetTarget(llvm_module.get_ref(), main_data.llvm_target_triple.as_ptr() as *const u8) };
+	llvm_module.set_target_triple(main_data.llvm_target_triple.as_str());
 	llvm_module.set_data_layout(&main_data.llvm_data_layout);
 	// Create data struct for builder
 	let llvm_builder = main_data.llvm_context.new_builder();

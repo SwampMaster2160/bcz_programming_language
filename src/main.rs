@@ -1,10 +1,10 @@
-use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, ffi::CString, mem::take, path::PathBuf, process::Command, ptr::null_mut};
+use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, mem::take, path::PathBuf, process::Command, ptr::null_mut};
 
 use compile::compile_file;
 use compiler_arguments::process_arguments;
 use llvm::{context::Context, llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetMachineRef, LLVMTargetRef
-}, target_data::TargetData, traits::WrappedReference, types::Type};
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetRef
+}, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;
@@ -44,11 +44,11 @@ pub struct MainData<'a> {
 	/// The context for LLVM functions.
 	llvm_context: Context,
 	/// The data layout fo the target machine.
-	llvm_data_layout: TargetData,
+	llvm_data_layout: TargetData<'a>,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
 	int_type: Type<'a>,
 	/// A C string that contains info about the target machine.
-	llvm_target_triple: CString,
+	llvm_target_triple: String,
 	/// How many bits width the target machine integer is.
 	int_bit_width: u8,
 	/// The max value of the target machine's integer.
@@ -66,7 +66,7 @@ pub struct MainData<'a> {
 	/// Maps strings (whithout the '@' prefix) to keywords.
 	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
 	/// The target machine for LLVM.
-	llvm_target_machine: LLVMTargetMachineRef,
+	llvm_target_machine: TargetMachine,
 	/// A list of object files that have been outputted as a result of compiling that should be linked to create a primary output file.
 	object_files_to_link: Vec<PathBuf>,
 }
@@ -97,8 +97,8 @@ impl<'a> MainData<'a> {
 			str_to_keyword_mapping: Keyword::get_symbols_map(),
 			print_after_analyzer: false,
 			dump_llvm_module: false,
-			llvm_target_triple: CString::default(),
-			llvm_target_machine: null_mut(),
+			llvm_target_triple: String::default(),
+			llvm_target_machine: unsafe { TargetMachine::from_ref(null_mut()) },
 			object_files_to_link: Vec::new(),
 		}
 	}
@@ -121,7 +121,7 @@ fn main() {
 	unsafe { LLVMInitializeX86TargetMC() };
 	unsafe { LLVMInitializeX86AsmParser() };
 	unsafe { LLVMInitializeX86AsmPrinter() };
-	main_data.llvm_target_triple = c"x86_64-pc-windows-msvc".into();
+	main_data.llvm_target_triple = "x86_64-pc-windows-msvc".into();
 	let mut llvm_target: LLVMTargetRef = null_mut();
 	let result = unsafe { LLVMGetTargetFromTriple(main_data.llvm_target_triple.as_ptr() as *const u8, &mut llvm_target, null_mut()) };
 	if result != 0 {
@@ -129,7 +129,7 @@ fn main() {
 		return;
 	}
 	main_data.llvm_target_machine = unsafe {
-		LLVMCreateTargetMachine(
+		TargetMachine::from_ref(LLVMCreateTargetMachine(
 			llvm_target,
 			main_data.llvm_target_triple.as_ptr() as *const u8,
 			c"generic".as_ptr() as *const u8,
@@ -137,9 +137,9 @@ fn main() {
 			LLVMCodeGenLevelDefault,
 			LLVMRelocDefault,
 			LLVMCodeModelDefault,
-		)
+		))
 	};
-	main_data.llvm_data_layout = unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(main_data.llvm_target_machine)) };
+	main_data.llvm_data_layout = unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(main_data.llvm_target_machine.get_ref())) };
 	// Get info about machine being compiled for
 	main_data.int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout.get_ref())) };
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);

@@ -8,3 +8,8 @@ pub enum Linkage {
 pub enum CallingConvention {
 	Win64 = 79,
 }
+
+#[repr(C)]
+pub enum CodegenFileType {
+	Object = 1,
+}
