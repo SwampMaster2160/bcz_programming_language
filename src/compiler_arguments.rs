@@ -1,11 +1,43 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env::current_dir, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use crate::{error::Error, MainData};
+use crate::error::Error;
 
 /// The version of the BCZ compiler taken from `Cargo.toml`.
 const BCZ_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+pub struct CompilerArgumentsData<'a> {
+	pub do_link: bool,
+	pub print_tokens: bool,
+	pub print_ast_nodes: bool,
+	pub print_after_analyzer: bool,
+	pub dump_llvm_module: bool,
+	pub print_after_const_evaluate: bool,
+	pub filepaths_to_compile: Vec<&'a str>,
+	pub primary_output_file: Option<&'a str>,
+	pub compiler_working_directory: PathBuf,
+	pub source_path: PathBuf,
+	pub binary_path: PathBuf,
+}
+
+impl<'a> CompilerArgumentsData<'a> {
+	pub fn new() -> Self {
+		Self {
+			binary_path: PathBuf::new(),
+			source_path: PathBuf::new(),
+			compiler_working_directory: current_dir().unwrap(),
+			do_link: true,
+			print_tokens: false,
+			print_ast_nodes: false,
+			print_after_analyzer: false,
+			dump_llvm_module: false,
+			print_after_const_evaluate: false,
+			filepaths_to_compile: Vec::new(),
+			primary_output_file: None,
+		}
+	}
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 /// A program state that is used while processing compiler arguments that allows arguments to continue previous arguments.
@@ -108,7 +140,7 @@ impl CompilerOptionToken {
 	}
 }
 
-pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]) -> Result<(), Error> {
+pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgumentsData<'a>) -> Result<(), Error> {
 	let mut argument_processing_state = ArgumentProcessingState::Normal;
 	// No arguments should result in the version being printed
 	if arguments.is_empty() {
@@ -167,28 +199,28 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 							println!("\t{description}.");
 						}
 					}
-					CompilerOptionToken::NoLink => main_data.do_link = false,
+					CompilerOptionToken::NoLink => data_out.do_link = false,
 					CompilerOptionToken::SetPrimaryOutput => argument_processing_state = ArgumentProcessingState::SetPrimaryOutput,
-					CompilerOptionToken::InputFilepath => main_data.filepaths_to_compile.push(argument),
+					CompilerOptionToken::InputFilepath => data_out.filepaths_to_compile.push(argument),
 					CompilerOptionToken::SetSourceHomeFilepath => argument_processing_state = ArgumentProcessingState::SetSourceHomeFilepath,
 					CompilerOptionToken::SetBinaryHomeFilepath => argument_processing_state = ArgumentProcessingState::SetBinaryHomeFilepath,
-					CompilerOptionToken::PrintTokens => main_data.print_tokens = true,
-					CompilerOptionToken::PrintAstNodes => main_data.print_ast_nodes = true,
-					CompilerOptionToken::PrintAfterAnalyzer => main_data.print_after_analyzer = true,
-					CompilerOptionToken::DumpLlvmModule => main_data.dump_llvm_module = true,
-					CompilerOptionToken::PrintAfterConstEvaluate => main_data.print_after_const_evaluate = true,
+					CompilerOptionToken::PrintTokens => data_out.print_tokens = true,
+					CompilerOptionToken::PrintAstNodes => data_out.print_ast_nodes = true,
+					CompilerOptionToken::PrintAfterAnalyzer => data_out.print_after_analyzer = true,
+					CompilerOptionToken::DumpLlvmModule => data_out.dump_llvm_module = true,
+					CompilerOptionToken::PrintAfterConstEvaluate => data_out.print_after_const_evaluate = true,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {
-				main_data.primary_output_file = Some(argument);
+				data_out.primary_output_file = Some(argument);
 				argument_processing_state = ArgumentProcessingState::Normal;
 			}
 			ArgumentProcessingState::SetSourceHomeFilepath => {
-				source_path = Some(main_data.compiler_working_directory.join(argument));
+				source_path = Some(data_out.compiler_working_directory.join(argument));
 				argument_processing_state = ArgumentProcessingState::Normal;
 			}
 			ArgumentProcessingState::SetBinaryHomeFilepath => {
-				binary_path = Some(main_data.compiler_working_directory.join(argument));
+				binary_path = Some(data_out.compiler_working_directory.join(argument));
 				argument_processing_state = ArgumentProcessingState::Normal;
 			}
 		}
@@ -198,28 +230,28 @@ pub fn process_arguments<'a>(main_data: &mut MainData<'a>, arguments: &[&'a str]
 		return Err(Error::NoOptionContinuation);
 	}
 	// Set source path
-	main_data.source_path = match source_path {
+	data_out.source_path = match source_path {
 		Some(source_path) => source_path,
 		None => {
-			let bcz_source_path = main_data.compiler_working_directory.join("bcz_src");
+			let bcz_source_path = data_out.compiler_working_directory.join("bcz_src");
 			if bcz_source_path.is_dir() {
 				bcz_source_path
 			}
 			else {
-				main_data.compiler_working_directory.join("src")
+				data_out.compiler_working_directory.join("src")
 			}
 		}
 	};
 	// Set binary path
-	main_data.binary_path = match binary_path {
+	data_out.binary_path = match binary_path {
 		Some(binary_path) => binary_path,
 		None => {
-			let bcz_source_path = main_data.compiler_working_directory.join("bcz_bin");
+			let bcz_source_path = data_out.compiler_working_directory.join("bcz_bin");
 			if bcz_source_path.is_dir() {
 				bcz_source_path
 			}
 			else {
-				main_data.compiler_working_directory.join("bin")
+				data_out.compiler_working_directory.join("bin")
 			}
 		}
 	};

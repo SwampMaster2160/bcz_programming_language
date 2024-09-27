@@ -1,8 +1,15 @@
-use super::{llvm_c::LLVMTargetMachineRef, traits::WrappedReference};
+
+use super::{llvm_c::{LLVMCreateTargetDataLayout, LLVMTargetMachineRef}, target_data::TargetData, traits::WrappedReference};
 
 #[repr(transparent)]
 pub struct TargetMachine {
-	module_ref: LLVMTargetMachineRef
+	machine_ref: LLVMTargetMachineRef,
+}
+
+impl TargetMachine {
+	pub fn get_target_data(&self) -> TargetData {
+		unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(self.machine_ref)) }
+	}
 }
 
 unsafe impl WrappedReference for TargetMachine {

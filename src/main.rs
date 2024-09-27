@@ -1,9 +1,9 @@
-use std::{collections::{HashMap, HashSet}, env::{args, current_dir}, mem::take, path::PathBuf, process::Command, ptr::null_mut};
+use std::{collections::{HashMap, HashSet}, env::args, iter::once, mem::take, path::PathBuf, process::Command, ptr::null_mut};
 
 use compile::compile_file;
-use compiler_arguments::process_arguments;
+use compiler_arguments::{process_arguments, CompilerArgumentsData};
 use llvm::{context::Context, llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetDataLayout, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetRef
+	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetRef
 }, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
@@ -44,7 +44,7 @@ pub struct MainData<'a> {
 	/// The context for LLVM functions.
 	llvm_context: Context,
 	/// The data layout fo the target machine.
-	llvm_data_layout: TargetData<'a>,
+	llvm_data_layout: TargetData,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
 	int_type: Type<'a>,
 	/// A C string that contains info about the target machine.
@@ -72,21 +72,20 @@ pub struct MainData<'a> {
 }
 
 impl<'a> MainData<'a> {
-	pub fn new() -> Self {
-		let context = Context::new();
+	pub fn new(compiler_arguments_data: CompilerArgumentsData<'a>, context: Context, target_machine: TargetMachine, target_data: TargetData, int_type: Type<'a>) -> Self {
 		Self {
 			llvm_context: context,
-			do_link: true,
-			primary_output_file: None,
-			filepaths_to_compile: Vec::new(),
-			compiler_working_directory: current_dir().unwrap(),
-			source_path: PathBuf::new(),
-			binary_path: PathBuf::new(),
-			print_tokens: false,
-			print_ast_nodes: false,
-			print_after_const_evaluate: false,
-			int_type: unsafe { Type::from_ref(null_mut()) },
-			llvm_data_layout: unsafe { TargetData::from_ref(null_mut()) },
+			do_link: compiler_arguments_data.do_link,
+			primary_output_file: compiler_arguments_data.primary_output_file,
+			filepaths_to_compile: compiler_arguments_data.filepaths_to_compile,
+			compiler_working_directory: compiler_arguments_data.compiler_working_directory,
+			source_path: compiler_arguments_data.source_path,
+			binary_path: compiler_arguments_data.binary_path,
+			print_tokens: compiler_arguments_data.print_tokens,
+			print_ast_nodes: compiler_arguments_data.print_ast_nodes,
+			print_after_const_evaluate: compiler_arguments_data.print_after_const_evaluate,
+			int_type,
+			llvm_data_layout: target_data,
 			int_bit_width: 0,
 			int_max_value: 0,
 			sign_bit_mask: 0,
@@ -95,21 +94,21 @@ impl<'a> MainData<'a> {
 			operator_character_set: OperatorSymbol::get_character_set(),
 			char_to_operator_type_mapping: OperatorType::get_symbols_map(),
 			str_to_keyword_mapping: Keyword::get_symbols_map(),
-			print_after_analyzer: false,
-			dump_llvm_module: false,
+			print_after_analyzer: compiler_arguments_data.print_after_analyzer,
+			dump_llvm_module: compiler_arguments_data.dump_llvm_module,
 			llvm_target_triple: String::default(),
-			llvm_target_machine: unsafe { TargetMachine::from_ref(null_mut()) },
+			llvm_target_machine: target_machine,
 			object_files_to_link: Vec::new(),
 		}
 	}
 }
 
 fn main() {
-	let mut main_data = MainData::new();
 	// Get and process arguments
 	let arguments: Box<[Box<str>]> = args().skip(1).map(|string| string.into_boxed_str()).collect();
 	let arguments: Box<[&str]> = arguments.iter().map(|argument| &**argument).collect();
-	let result = process_arguments(&mut main_data, &arguments);
+	let mut compiler_arguments_data = CompilerArgumentsData::new();
+	let result = process_arguments(&arguments, &mut compiler_arguments_data);
 	if let Err(error) = result {
 		println!("Error while processing compiler arguments: {error}.");
 		return;
@@ -121,17 +120,18 @@ fn main() {
 	unsafe { LLVMInitializeX86TargetMC() };
 	unsafe { LLVMInitializeX86AsmParser() };
 	unsafe { LLVMInitializeX86AsmPrinter() };
-	main_data.llvm_target_triple = "x86_64-pc-windows-msvc".into();
+	let llvm_target_triple: String = "x86_64-pc-windows-msvc".into();
 	let mut llvm_target: LLVMTargetRef = null_mut();
-	let result = unsafe { LLVMGetTargetFromTriple(main_data.llvm_target_triple.as_ptr() as *const u8, &mut llvm_target, null_mut()) };
+	let llvm_target_triple_c: Box<[u8]> = llvm_target_triple.bytes().chain(once(0)).collect();
+	let result = unsafe { LLVMGetTargetFromTriple(llvm_target_triple_c.as_ptr(), &mut llvm_target, null_mut()) };
 	if result != 0 {
 		println!("Error: failed to get target.");
 		return;
 	}
-	main_data.llvm_target_machine = unsafe {
+	let llvm_target_machine = unsafe {
 		TargetMachine::from_ref(LLVMCreateTargetMachine(
 			llvm_target,
-			main_data.llvm_target_triple.as_ptr() as *const u8,
+			llvm_target_triple_c.as_ptr(),
 			c"generic".as_ptr() as *const u8,
 			c"".as_ptr() as *const u8,
 			LLVMCodeGenLevelDefault,
@@ -139,9 +139,12 @@ fn main() {
 			LLVMCodeModelDefault,
 		))
 	};
-	main_data.llvm_data_layout = unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(main_data.llvm_target_machine.get_ref())) };
+	//let llvm_data_layout = unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(llvm_target_machine.get_ref())) };
+	let llvm_data_layout = llvm_target_machine.get_target_data();
+	let context = Context::new();
+	let int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(context.get_ref(), llvm_data_layout.get_ref())) };
+	let mut main_data = MainData::new(compiler_arguments_data, context, llvm_target_machine, llvm_data_layout, int_type);
 	// Get info about machine being compiled for
-	main_data.int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(main_data.llvm_context.get_ref(), main_data.llvm_data_layout.get_ref())) };
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {
 		println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
