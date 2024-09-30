@@ -35,7 +35,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	// Parse
 	let mut ast_nodes = parse_tokens(tokens).map_err(|(error, (line, column))| (error, filepath.clone(), line, column))?;
 	// Print parsed AST nodes if commanded to do so
-	if main_data.print_tokens {
+	if main_data.print_ast_nodes {
 		println!("Tokens from parsing file {}:", filepath.display());
 		for ast_node in ast_nodes.iter() {
 			ast_node.print_tree(0);
@@ -99,7 +99,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	drop(globals_and_dependencies);
 	// Print const evaluated globals if commanded to do so
-	if main_data.print_after_analyzer {
+	if main_data.print_after_const_evaluate {
 		println!("Const evaluated globals of {}:", filepath.display());
 		for (name, (global, variable_dependencies)) in globals_and_dependencies_after_const_evaluate.iter() {
 			print!("{name} -> {:?} = ", variable_dependencies);

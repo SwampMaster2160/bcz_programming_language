@@ -1,10 +1,8 @@
-use std::{collections::{HashMap, HashSet}, env::args, iter::once, mem::take, path::PathBuf, process::Command, ptr::null_mut};
+use std::{collections::{HashMap, HashSet}, env::args, mem::take, path::PathBuf, process::Command};
 
 use compile::compile_file;
 use compiler_arguments::{process_arguments, CompilerArgumentsData};
-use llvm::{context::Context, enums::{CodeModel, CodegenOptLevel, RealocMode}, llvm_c::{
-	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetRef
-}, target::Target, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type};
+use llvm::{context::Context, enums::{CodeModel, CodegenOptLevel, RealocMode}, other::initialize_x86, target::Target, target_data::TargetData, target_machine::TargetMachine, types::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;
@@ -26,7 +24,7 @@ pub struct MainData<'a> {
 	/// A list of paths to source files to compile, paths are realitive to `source_path`.
 	filepaths_to_compile: Vec<&'a str>,
 	/// The working directory of the compiler.
-	compiler_working_directory: PathBuf,
+	//compiler_working_directory: PathBuf,
 	/// The path of all source files to be compiled are realitive to this path.
 	source_path: PathBuf,
 	/// The path of all compiled output files are realitive to this path.
@@ -78,7 +76,7 @@ impl<'a> MainData<'a> {
 			do_link: compiler_arguments_data.do_link,
 			primary_output_file: compiler_arguments_data.primary_output_file,
 			filepaths_to_compile: compiler_arguments_data.filepaths_to_compile,
-			compiler_working_directory: compiler_arguments_data.compiler_working_directory,
+			//compiler_working_directory: compiler_arguments_data.compiler_working_directory,
 			source_path: compiler_arguments_data.source_path,
 			binary_path: compiler_arguments_data.binary_path,
 			print_tokens: compiler_arguments_data.print_tokens,
@@ -114,12 +112,7 @@ fn main() {
 		return;
 	}
 	// Setup LLVM
-	// TODO: Non-X86
-	unsafe { LLVMInitializeX86TargetInfo() };
-	unsafe { LLVMInitializeX86Target() };
-	unsafe { LLVMInitializeX86TargetMC() };
-	unsafe { LLVMInitializeX86AsmParser() };
-	unsafe { LLVMInitializeX86AsmPrinter() };
+	initialize_x86();
 	let llvm_target_triple: String = "x86_64-pc-windows-msvc".into();
 	let llvm_target = match Target::from_triple(&llvm_target_triple) {
 		Ok(target) => target,
@@ -133,7 +126,6 @@ fn main() {
 	);
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
-	//let int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(context.get_ref(), llvm_data_layout.get_ref())) };
 	let int_type = llvm_data_layout.int_ptr_type(&context);
 	let mut main_data = MainData::new(compiler_arguments_data, &context, llvm_target_machine, llvm_data_layout, int_type);
 	// Get info about machine being compiled for
