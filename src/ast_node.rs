@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::swap};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::swap, num::NonZeroUsize};
 
 use strum_macros::EnumDiscriminants;
 
@@ -62,9 +62,9 @@ pub enum AstNodeVariant {
 pub struct AstNode {
 	pub variant: AstNodeVariant,
 	/// The line and column that this node starts at.
-	pub start: (usize, usize),
+	pub start: (NonZeroUsize, NonZeroUsize),
 	/// The line and column of the char after the last char of this node.
-	pub end: (usize, usize),
+	pub end: (NonZeroUsize, NonZeroUsize),
 }
 
 impl AstNode {
@@ -111,14 +111,15 @@ impl AstNode {
 	}
 
 	/// Removes global assignments nodes and puts them into a `(name, node)` hash map, replacing them with an identifier node.
-	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, Self>, will_be_discarded: bool) -> Result<(), (Error, (usize, usize))> {
+	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, Self>, will_be_discarded: bool) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 		let start = self.start;
 		match &mut self.variant {
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				Operator::Assignment => {
 					// Separate operands
-					let mut identifier_node = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
-					let mut operand_node = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
+					let dummy_number = NonZeroUsize::new(1).unwrap();
+					let mut identifier_node = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
+					let mut operand_node = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
 					swap(&mut operands[0], &mut identifier_node);
 					swap(&mut operands[1], &mut operand_node);
 					operand_node.separate_globals(global_list, false)?;
@@ -160,7 +161,8 @@ impl AstNode {
 				if children.len() != 1 || (*is_result_undefined && children.len() != 0) {
 					return Err((Error::FeatureNotYetImplemented("global blocks".into()), start));
 				}
-				let mut child = AstNode { start: (0, 0), end: (0, 0), variant: AstNodeVariant::Constant(0) };
+				let dummy_number = NonZeroUsize::new(1).unwrap();
+				let mut child = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
 				swap(&mut children[0], &mut child);
 				child.separate_globals(global_list, will_be_discarded)?;
 				*self = child;
@@ -180,7 +182,7 @@ impl AstNode {
 		local_variables: &mut HashSet<Box<str>>,
 		is_l_value: bool,
 		is_link_function: bool,
-	) -> Result<(), (Error, (usize, usize))> {
+	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 		let AstNode {
 			variant,
 			start,
@@ -280,7 +282,7 @@ impl AstNode {
 	}
 
 	fn build_function_definition<'a>(&'a self, main_data: &'a MainData, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder, name: &str, is_link_function: bool, is_entry_point: bool)
-	-> Result<Value<'a, 'a>, (Error, (usize, usize))> {
+	-> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack function definition node
 		let Self {
 			start,
@@ -384,7 +386,7 @@ impl AstNode {
 	}
 
 	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<&BasicBlock>)
-	-> Result<Value, (Error, (usize, usize))> {
+	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
 		let Self {
 			start,
 			end: _,
@@ -492,7 +494,7 @@ impl AstNode {
 	}
 
 	pub fn build_l_value<'a>(&'a self, main_data: &MainData<'a>, _file_build_data: &mut FileBuildData, _llvm_module: &Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, _basic_block: Option<&BasicBlock>)
-	-> Result<BuiltLValue, (Error, (usize, usize))> {
+	-> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		let Self {
 			start: _,
 			end: _,
@@ -516,7 +518,7 @@ impl AstNode {
 	}
 
 	pub fn build_global_assignment<'a>(&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str)
-	-> Result<Value, (Error, (usize, usize))> {
+	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
 		if self.is_function() {
 			let function = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
 			return Ok(function);
@@ -538,7 +540,7 @@ impl AstNode {
 		}
 	}
 
-	pub fn type_from_width<'a>(&'a self, main_data: &'a MainData) -> Result<(Type, bool), (Error, (usize, usize))> {
+	pub fn type_from_width<'a>(&'a self, main_data: &'a MainData) -> Result<(Type, bool), (Error, (NonZeroUsize, NonZeroUsize))> {
 		let Self {
 			start,
 			end: _,
@@ -565,7 +567,7 @@ impl AstNode {
 	}
 
 	pub fn const_evaluate(&mut self, main_data: &mut MainData, const_evaluated_globals: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>, variable_dependencies: &mut HashSet<Box<str>>, is_link_function: bool)
-	-> Result<(), (Error, (usize, usize))> {
+	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 		let Self {
 			start,
 			end,

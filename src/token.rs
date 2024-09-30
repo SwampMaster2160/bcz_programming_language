@@ -1,5 +1,5 @@
 use strum::IntoEnumIterator;
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, num::NonZeroUsize};
 
 use strum_macros::{EnumDiscriminants, EnumIter};
 
@@ -140,9 +140,9 @@ pub enum TokenVariant {
 pub struct Token {
 	pub variant: TokenVariant,
 	/// The line and column that this token starts at.
-	pub start: (usize, usize),
+	pub start: (NonZeroUsize, NonZeroUsize),
 	/// The line and column of the char after the last char of this token.
-	pub end: (usize, usize),
+	pub end: (NonZeroUsize, NonZeroUsize),
 }
 
 /// Reads a single char that may be escaped, returns it and it's source length in bytes.
@@ -233,7 +233,8 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 
 impl Token {
 	/// Takes in a string slice `line_content` and tokenizes the first token in the string. Returns the tokenized token and the input string slice with the tokenized chars removed.
-	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: usize, column_number: usize) -> Result<(Option<Self>, &'a str), Error> {
+	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: NonZeroUsize, column_number: NonZeroUsize)
+		-> Result<(Option<Self>, &'a str), Error> {
 		// Get the token varient descriminant and length in bytes
 		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next().expect("Function input should not be empty") {
 			_ if line_content.starts_with("//") => return Ok((None, "")),
@@ -373,7 +374,7 @@ impl Token {
 					return Ok((Some(Self {
 						variant: TokenVariant::Operator(None, OperatorType::UnsignedLogicalNotShortCircuit, true, true),
 						start: (line_number, column_number),
-						end: (line_number, column_number + 2),
+						end: (line_number, column_number.saturating_add(2)),
 					}), string_without_token));
 				}
 				// Get operator type
@@ -413,7 +414,7 @@ impl Token {
 		let token = Self {
 			variant: token_varient,
 			start: (line_number, column_number),
-			end: (line_number, column_number + token_string.chars().count()),
+			end: (line_number, column_number.saturating_add(token_string.chars().count())),
 		};
 		Ok((Some(token), string_without_token))
 	}

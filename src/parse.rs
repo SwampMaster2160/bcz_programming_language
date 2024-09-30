@@ -1,4 +1,4 @@
-use std::mem::take;
+use std::{mem::take, num::NonZeroUsize};
 
 use auto_const_array::auto_const_array;
 
@@ -8,7 +8,7 @@ use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operation, Operator}, 
 enum ParseState {
 	Token(Token),
 	AstNode(AstNode),
-	FunctionArgumentsOrParameters(Box<[AstNode]>, (usize, usize), (usize, usize)),
+	FunctionArgumentsOrParameters(Box<[AstNode]>, (NonZeroUsize, NonZeroUsize), (NonZeroUsize, NonZeroUsize)),
 }
 
 impl ParseState {
@@ -20,7 +20,7 @@ impl ParseState {
 		matches!(self, ParseState::Token(Token { variant: TokenVariant::Separator(separator), .. }) if separator.is_close_parenthesis())
 	}
 
-	const fn get_start(&self) -> (usize, usize) {
+	const fn get_start(&self) -> (NonZeroUsize, NonZeroUsize) {
 		match self {
 			ParseState::Token(token) => token.start,
 			ParseState::AstNode(ast_node) => ast_node.start,
@@ -28,7 +28,7 @@ impl ParseState {
 		}
 	}
 
-	const fn get_end(&self) -> (usize, usize) {
+	const fn get_end(&self) -> (NonZeroUsize, NonZeroUsize) {
 		match self {
 			ParseState::Token(token) => token.end,
 			ParseState::AstNode(ast_node) => ast_node.end,
@@ -80,7 +80,8 @@ const fn postfix_operator_from_symbol(symbol: OperatorSymbol, operator_type: Ope
 
 /// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments_or_parameters` is `false` or from comma separated function arguments/parameters if `true`.
 /// The `bool` returned is `true` if the bracketed area ends in a separator.
-fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool) -> Result<(Box<[AstNode]>, bool), (Error, (usize, usize))> {
+fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool)
+	-> Result<(Box<[AstNode]>, bool), (Error, (NonZeroUsize, NonZeroUsize))> {
 	let mut ast_nodes_out: Vec<AstNode> = Vec::new();
 	loop {
 		let mut parenthesis_depth = 0usize;
@@ -127,7 +128,7 @@ fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_argu
 }
 
 /// Parses a single expression into an AST node.
-fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, (Error, (usize, usize))> {
+fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, (Error, (NonZeroUsize, NonZeroUsize))> {
 	// Parse bracketed expressions
 	let mut index = 0;
 	while index < items_being_parsed.len() {
@@ -472,7 +473,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 }
 
 /// Takes in the tokens from tokenizing a file and parses each semi-colon separated global expression into a returned AST node.
-pub fn parse_tokens(tokens: Vec<Token>) -> Result<Box<[AstNode]>, (Error, (usize, usize))> {
+pub fn parse_tokens(tokens: Vec<Token>) -> Result<Box<[AstNode]>, (Error, (NonZeroUsize, NonZeroUsize))> {
 	// Wrap all the tokens in a parse state object
 	let items_being_parsed: Vec<ParseState> = tokens.into_iter()
 		.map(|token| match token {

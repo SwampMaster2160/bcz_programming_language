@@ -1,7 +1,8 @@
-use std::{collections::{HashMap, HashSet}, env::args, mem::take, path::PathBuf, process::Command};
+use std::{collections::{HashMap, HashSet}, env::args, mem::take, num::NonZeroUsize, path::PathBuf, process::Command};
 
 use compile::compile_file;
 use compiler_arguments::{process_arguments, CompilerArgumentsData};
+use error::Error;
 use llvm::{context::Context, enums::{CodeModel, CodegenOptLevel, RealocMode}, other::initialize_x86, target::Target, target_data::TargetData, target_machine::TargetMachine, types::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
@@ -70,7 +71,9 @@ pub struct MainData<'a> {
 }
 
 impl<'a> MainData<'a> {
-	pub fn new(compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: TargetMachine, target_data: TargetData, int_type: Type<'a>) -> Self {
+	pub fn new(
+		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: TargetMachine, target_data: TargetData, int_type: Type<'a>
+	) -> Self {
 		Self {
 			llvm_context: context,
 			do_link: compiler_arguments_data.do_link,
@@ -102,27 +105,48 @@ impl<'a> MainData<'a> {
 }
 
 fn main() {
+	match main_error_handled() {
+		Ok(..) => {}
+		Err((error, error_location)) => {
+			print!("Error");
+			if let Some((error_file, error_row_column)) = error_location {
+				print!(" in file {}", error_file.display());
+				if let Some((error_row, error_column)) = error_row_column {
+					print!(":{error_row}");
+					if let Some(error_column) = error_column {
+						print!(":{error_column}");
+					}
+				}
+			}
+			println!(": {error}.");
+		}
+	}
+}
+
+fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUsize, Option<NonZeroUsize>)>)>)> {
 	// Get and process arguments
 	let arguments: Box<[Box<str>]> = args().skip(1).map(|string| string.into_boxed_str()).collect();
 	let arguments: Box<[&str]> = arguments.iter().map(|argument| &**argument).collect();
 	let mut compiler_arguments_data = CompilerArgumentsData::new();
-	let result = process_arguments(&arguments, &mut compiler_arguments_data);
-	if let Err(error) = result {
-		println!("Error while processing compiler arguments: {error}.");
-		return;
-	}
+	//let result = process_arguments(&arguments, &mut compiler_arguments_data);
+	//if let Err(error) = result {
+	//	println!("Error while processing compiler arguments: {error}.");
+	//	return;
+	//}
+	process_arguments(&arguments, &mut compiler_arguments_data).map_err(|error| (error, None))?;
 	// Setup LLVM
 	initialize_x86();
-	let llvm_target_triple: String = "x86_64-pc-windows-msvc".into();
-	let llvm_target = match Target::from_triple(&llvm_target_triple) {
-		Ok(target) => target,
-		Err(error) => {
-			println!("Error: failed to get target: {error}.");
-			return;
-		}
-	};
+	let llvm_target_triple = "x86_64-pc-windows-msvc";
+	//let llvm_target = match Target::from_triple(llvm_target_triple) {
+	//	Ok(target) => target,
+	//	Err(error) => {
+	//		println!("Error: failed to get target: {error}.");
+	//		return;
+	//	}
+	//};
+	let llvm_target = Target::from_triple(llvm_target_triple).map_err(|llvm_error| (Error::CouldNotGetTarget(llvm_error), None))?;
 	let llvm_target_machine = llvm_target.create_target_machine(
-		&llvm_target_triple, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
+		llvm_target_triple, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
 	);
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
@@ -131,8 +155,9 @@ fn main() {
 	// Get info about machine being compiled for
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {
-		println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
-		return;
+		return Err((Error::InvalidArchitectureBitWidth(int_type_width), None));
+		//println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
+		//return;
 	}
 	main_data.int_bit_width = int_type_width as u8;
 	main_data.int_max_value = ((1u128 << main_data.int_bit_width) - 1) as u64;
@@ -140,11 +165,12 @@ fn main() {
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
 		let absolute_filepath = main_data.source_path.join(filepath);
-		let result = compile_file(&mut main_data, &absolute_filepath);
-		if let Err((error, error_file, error_line, error_column)) = result {
-			print!("Error while compiling {}:{error_line}:{error_column}: {error}.", error_file.display());
-			return;
-		}
+		//let result = compile_file(&mut main_data, &absolute_filepath);
+		//if let Err((error, error_file, error_line, error_column)) = result {
+		//	print!("Error while compiling {}:{error_line}:{error_column}: {error}.", error_file.display());
+		//	return;
+		//}
+		compile_file(&mut main_data, &absolute_filepath)?;
 	}
 	// Link
 	let primary_output_file = match (main_data.primary_output_file, main_data.do_link) {
@@ -162,4 +188,5 @@ fn main() {
 		command.arg(primary_output_file_path);
 		command.output().ok();
 	}
+	Ok(())
 }
