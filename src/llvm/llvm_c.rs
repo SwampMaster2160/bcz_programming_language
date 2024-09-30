@@ -121,7 +121,7 @@ pub const LLVMCodeGenLevelDefault: LLVMCodeGenOptLevel = 2;
 #[allow(non_upper_case_globals)]
 pub const LLVMRelocDefault: LLVMRelocMode = 0;
 #[allow(non_upper_case_globals)]
-pub const LLVMCodeModelDefault: LLVMCodeGenOptLevel = 0;
+pub const LLVMCodeModelDefault: LLVMCodeModel = 0;
 #[allow(non_upper_case_globals)]
 pub const LLVMDLLImportLinkage: LLVMLinkage = 10;
 #[allow(non_upper_case_globals)]

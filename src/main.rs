@@ -2,9 +2,9 @@ use std::{collections::{HashMap, HashSet}, env::args, iter::once, mem::take, pat
 
 use compile::compile_file;
 use compiler_arguments::{process_arguments, CompilerArgumentsData};
-use llvm::{context::Context, llvm_c::{
+use llvm::{context::Context, enums::{CodeModel, CodegenOptLevel, RealocMode}, llvm_c::{
 	LLVMCodeGenLevelDefault, LLVMCodeModelDefault, LLVMCreateTargetMachine, LLVMGetTargetFromTriple, LLVMInitializeX86AsmParser, LLVMInitializeX86AsmPrinter, LLVMInitializeX86Target, LLVMInitializeX86TargetInfo, LLVMInitializeX86TargetMC, LLVMIntPtrTypeInContext, LLVMRelocDefault, LLVMTargetRef
-}, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type};
+}, target::Target, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;
@@ -42,7 +42,7 @@ pub struct MainData<'a> {
 	/// Should the built LLVM module be printed for each file after being built.
 	dump_llvm_module: bool,
 	/// The context for LLVM functions.
-	llvm_context: Context,
+	llvm_context: &'a Context,
 	/// The data layout fo the target machine.
 	llvm_data_layout: TargetData,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
@@ -72,7 +72,7 @@ pub struct MainData<'a> {
 }
 
 impl<'a> MainData<'a> {
-	pub fn new(compiler_arguments_data: CompilerArgumentsData<'a>, context: Context, target_machine: TargetMachine, target_data: TargetData, int_type: Type<'a>) -> Self {
+	pub fn new(compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: TargetMachine, target_data: TargetData, int_type: Type<'a>) -> Self {
 		Self {
 			llvm_context: context,
 			do_link: compiler_arguments_data.do_link,
@@ -121,29 +121,21 @@ fn main() {
 	unsafe { LLVMInitializeX86AsmParser() };
 	unsafe { LLVMInitializeX86AsmPrinter() };
 	let llvm_target_triple: String = "x86_64-pc-windows-msvc".into();
-	let mut llvm_target: LLVMTargetRef = null_mut();
-	let llvm_target_triple_c: Box<[u8]> = llvm_target_triple.bytes().chain(once(0)).collect();
-	let result = unsafe { LLVMGetTargetFromTriple(llvm_target_triple_c.as_ptr(), &mut llvm_target, null_mut()) };
-	if result != 0 {
-		println!("Error: failed to get target.");
-		return;
-	}
-	let llvm_target_machine = unsafe {
-		TargetMachine::from_ref(LLVMCreateTargetMachine(
-			llvm_target,
-			llvm_target_triple_c.as_ptr(),
-			c"generic".as_ptr() as *const u8,
-			c"".as_ptr() as *const u8,
-			LLVMCodeGenLevelDefault,
-			LLVMRelocDefault,
-			LLVMCodeModelDefault,
-		))
+	let llvm_target = match Target::from_triple(&llvm_target_triple) {
+		Ok(target) => target,
+		Err(error) => {
+			println!("Error: failed to get target: {error}.");
+			return;
+		}
 	};
-	//let llvm_data_layout = unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(llvm_target_machine.get_ref())) };
+	let llvm_target_machine = llvm_target.create_target_machine(
+		&llvm_target_triple, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
+	);
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
-	let int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(context.get_ref(), llvm_data_layout.get_ref())) };
-	let mut main_data = MainData::new(compiler_arguments_data, context, llvm_target_machine, llvm_data_layout, int_type);
+	//let int_type = unsafe { Type::from_ref(LLVMIntPtrTypeInContext(context.get_ref(), llvm_data_layout.get_ref())) };
+	let int_type = llvm_data_layout.int_ptr_type(&context);
+	let mut main_data = MainData::new(compiler_arguments_data, &context, llvm_target_machine, llvm_data_layout, int_type);
 	// Get info about machine being compiled for
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {

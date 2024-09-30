@@ -13,3 +13,18 @@ pub enum CallingConvention {
 pub enum CodegenFileType {
 	Object = 1,
 }
+
+#[repr(C)]
+pub enum CodegenOptLevel {
+	Default = 2,
+}
+
+#[repr(C)]
+pub enum RealocMode {
+	Default = 0,
+}
+
+#[repr(C)]
+pub enum CodeModel {
+	Default = 0,
+}
