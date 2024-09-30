@@ -128,22 +128,10 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	let arguments: Box<[Box<str>]> = args().skip(1).map(|string| string.into_boxed_str()).collect();
 	let arguments: Box<[&str]> = arguments.iter().map(|argument| &**argument).collect();
 	let mut compiler_arguments_data = CompilerArgumentsData::new();
-	//let result = process_arguments(&arguments, &mut compiler_arguments_data);
-	//if let Err(error) = result {
-	//	println!("Error while processing compiler arguments: {error}.");
-	//	return;
-	//}
 	process_arguments(&arguments, &mut compiler_arguments_data).map_err(|error| (error, None))?;
 	// Setup LLVM
 	initialize_x86();
 	let llvm_target_triple = "x86_64-pc-windows-msvc";
-	//let llvm_target = match Target::from_triple(llvm_target_triple) {
-	//	Ok(target) => target,
-	//	Err(error) => {
-	//		println!("Error: failed to get target: {error}.");
-	//		return;
-	//	}
-	//};
 	let llvm_target = Target::from_triple(llvm_target_triple).map_err(|llvm_error| (Error::CouldNotGetTarget(llvm_error), None))?;
 	let llvm_target_machine = llvm_target.create_target_machine(
 		llvm_target_triple, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
@@ -156,8 +144,6 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {
 		return Err((Error::InvalidArchitectureBitWidth(int_type_width), None));
-		//println!("Error: Unsupported architecture, bit width of {int_type_width}, greater than 64.");
-		//return;
 	}
 	main_data.int_bit_width = int_type_width as u8;
 	main_data.int_max_value = ((1u128 << main_data.int_bit_width) - 1) as u64;
@@ -165,11 +151,6 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
 		let absolute_filepath = main_data.source_path.join(filepath);
-		//let result = compile_file(&mut main_data, &absolute_filepath);
-		//if let Err((error, error_file, error_line, error_column)) = result {
-		//	print!("Error while compiling {}:{error_line}:{error_column}: {error}.", error_file.display());
-		//	return;
-		//}
 		compile_file(&mut main_data, &absolute_filepath)?;
 	}
 	// Link

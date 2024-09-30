@@ -6,7 +6,7 @@ use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llv
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUsize, Option<NonZeroUsize>)>)>)> {
 	// Open file
 	let file = File::open(filepath)
-		.map_err(|_| (Error::CouldNotOpenFile, Some((filepath.clone(), None))))?;
+		.map_err(|error| (Error::CouldNotOpenFile(error), Some((filepath.clone(), None))))?;
 	let mut file_reader = BufReader::new(file);
 	// Go over each line
 	let mut tokens = Vec::new();
@@ -140,7 +140,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	let filepath = output_filepath.to_str().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?;
 	llvm_module.emit_to_file(&main_data.llvm_target_machine, filepath, CodegenFileType::Object)
-		.map_err(|_| (Error::UnableToWriteObject, Some((output_filepath.clone(), None))))?;
+		.map_err(|error| (Error::UnableToEmitObjectFile(error), Some((output_filepath.clone(), None))))?;
 	main_data.object_files_to_link.push(output_filepath);
 	// Return
 	Ok(())
