@@ -118,8 +118,12 @@ impl AstNode {
 				Operator::Assignment => {
 					// Separate operands
 					let dummy_number = NonZeroUsize::new(1).unwrap();
-					let mut identifier_node = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
-					let mut operand_node = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
+					let mut identifier_node = AstNode {
+						start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0)
+					};
+					let mut operand_node = AstNode {
+						start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0)
+					};
 					swap(&mut operands[0], &mut identifier_node);
 					swap(&mut operands[1], &mut operand_node);
 					operand_node.separate_globals(global_list, false)?;
@@ -176,36 +180,51 @@ impl AstNode {
 	}
 
 	/// Will search a global node and its children for global variable dependencies that need to be compiled before this node is.
+	///
+	/// Appends imported filepaths that need to be compiled before this global variable to `import_dependencies`.
+	///
+	/// Appends the name of global variables that need to be compiled before this global variable to `variable_dependencies`.
 	pub fn get_variable_dependencies(
-		&self, variable_dependencies: &mut HashSet<Box<str>>,
+		&self,
+		variable_dependencies: &mut HashSet<Box<str>>,
 		import_dependencies: &mut HashSet<Box<str>>,
 		local_variables: &mut HashSet<Box<str>>,
 		is_l_value: bool,
 		is_link_function: bool,
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Unpack
 		let AstNode {
 			variant,
 			start,
 			end: _,
 		} = self;
-		if is_link_function && !matches!(variant, AstNodeVariant::FunctionDefinition(..) | AstNodeVariant::Metadata(..)) {
+		// @link keyword must be used on a function
+		if is_link_function && !self.is_function() {
 			return Err((Error::LinkNotUsedOnFunction, *start))
 		}
+		// Search depends on type of node
 		match variant {
+			// For a block we search each sub-expression in the block
 			AstNodeVariant::Block(sub_expressions, _) => for expression in sub_expressions {
 				match is_l_value {
-					false => expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
+					false =>
+						expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
 					true => return Err((Error::FeatureNotYetImplemented("l-value blocks".into()), *start)),
 				};
 			}
+			// Constants can't have dependencies
 			AstNodeVariant::Constant(..) => {}
+			// For a function call we search the expression yeilding the function pointer and the function argument expressions
 			AstNodeVariant::FunctionCall(function, arguments) => {
 				if is_l_value {
 					return Err((Error::LValueFunctionCall, *start));
 				}
-				function.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false)?;
+				function
+					.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false)?;
 				for argument in arguments {
-					argument.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false)?;
+					argument.get_variable_dependencies(
+						variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false
+					)?;
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
@@ -213,6 +232,8 @@ impl AstNode {
 					return Err((Error::LValueFunctionDefinition, *start));
 				}
 				match is_link_function {
+					// For the definition of a non-link function, we create a new list of local variables that the the function does not depend on
+					// Then we search the function body with the new local variable list
 					false => {
 						let mut local_variables = HashSet::new();
 						for parameter in parameters {
@@ -225,31 +246,39 @@ impl AstNode {
 						}
 						body.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables, false, false)?;
 					}
+					// For a link-function, we search the function parameters and body
 					true => {
 						for parameter in parameters {
-							parameter.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
+							parameter.get_variable_dependencies(
+								variable_dependencies, import_dependencies, local_variables, false, false
+							)?;
 						}
 						body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
 				}
 			}
 			AstNodeVariant::Identifier(name) => match is_l_value {
+				// An identifier being used as a r-value should have its name added to the the global variable list unless it's in the local variable list
 				false => if !local_variables.contains(name) {
 					variable_dependencies.insert(name.clone());
 				}
+				// An identifier being used as an l-value should be added to the local variable list so that it is not added to the global variable list if used later
 				true => {
 					local_variables.insert(name.clone());
 				}
 			}
+			// For metadata nodes, we just search the child node
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
 				Metadata::EntryPoint => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
 				Metadata::Link => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
 			},
 			AstNodeVariant::Operator(operator, operands) => match operator {
+				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
 					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 				}
+				// For an augmented assignment, we search the the l-value and r-value
 				Operator::Augmented(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
@@ -257,8 +286,10 @@ impl AstNode {
 						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
-					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read => return Err((Error::FeatureNotYetImplemented("augmented unary operators".into()), *start)),
+					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read
+						=> return Err((Error::FeatureNotYetImplemented("augmented unary operators".into()), *start)),
 				}
+				// For normal operators we search the operands
 				Operator::Normal(operation) => match operation {
 					// Operators that only have r-values as operands
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
@@ -272,28 +303,42 @@ impl AstNode {
 						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 					}
 				}
+				// For l-value assignments, we search the operands
 				Operator::LValueAssignment => for operand in operands {
 					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 				}
 			}
+			// Strings, just like constants, can't have dependencies
 			AstNodeVariant::String(..) => {}
 		}
 		Ok(())
 	}
 
-	fn build_function_definition<'a>(&'a self, main_data: &'a MainData, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder, name: &str, is_link_function: bool, is_entry_point: bool)
-	-> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
+	/// Build a function definition into LLVM IR code and return the built value.
+	fn build_function_definition<'a>(
+		&'a self,
+		main_data: &'a MainData,
+		file_build_data: &mut FileBuildData<'a, 'a>,
+		llvm_module: &'a Module,
+		llvm_builder: &'a Builder,
+		name: &str,
+		is_link_function: bool,
+		is_entry_point: bool
+	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack function definition node
 		let Self {
 			start,
 			end: _,
 			variant,
 		} = self;
+		// If we have a metadata node, then build the child node
 		let (parameters, function_body) = match variant {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
-				Metadata::Link => return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+				Metadata::EntryPoint =>
+					return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+				Metadata::Link =>
+					return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
 			}
 			_ => unreachable!(),
 		};
@@ -385,35 +430,55 @@ impl AstNode {
 		Ok(result)
 	}
 
-	pub fn build_r_value<'a>(&'a self, main_data: &'a MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_module: &'a Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, basic_block: Option<&BasicBlock>)
+	/// Build an r-value into LLVM IR code and return the built value.
+	pub fn build_r_value<'a>(
+		&'a self,
+		main_data: &'a MainData<'a>,
+		file_build_data: &mut FileBuildData<'a, 'a>,
+		llvm_module: &'a Module,
+		llvm_builder: &'a Builder<'a, 'a>,
+		local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
+		basic_block: Option<&BasicBlock>,
+	)
 	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Unpack
 		let Self {
 			start,
 			end: _,
 			variant,
 		} = self;
+		// Use the `build_function_definition()` method to build the node if it is a function.
 		if self.is_function() {
-			let out: Value<'a, 'a> = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false)?;
+			let out = self.build_function_definition(
+				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false
+			)?;
 			if let Some(basic_block) = basic_block {
 				llvm_builder.position_at_end(basic_block);
 			}
 			return Ok(out);
 		}
+		// Building depends on node variant
 		Ok(match variant {
+			// Constants build an int constant
 			AstNodeVariant::Constant(value) => main_data.int_type.const_int(*value as u128, false),
+			// For an identifier, we load the value stored in the variable it represents
 			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, local_variables, &*name),
 			AstNodeVariant::Operator(operator, operands) => match operator {
+				// For an assignment, we build the l and r-values and then build a store instruction
 				Operator::Assignment => {
 					let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 					let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 					l_value.set_value(main_data, llvm_builder, &r_value);
 					return Ok(r_value);
 				}
+				// For a normal operator, we build the operands then build the operator instruction
 				Operator::Normal(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
 					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo => {
-						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
-						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+						let left_value = operands[0]
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+						let right_value = operands[1]
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let result = match operation {
 							Operation::IntegerAdd => left_value.build_add(&right_value, llvm_builder, "add_temp"),
 							Operation::IntegerSubtract => left_value.build_sub(&right_value, llvm_builder, "sub_temp"),
@@ -436,10 +501,13 @@ impl AstNode {
 					}
 					_ => return Err((Error::FeatureNotYetImplemented("this operator".into()), *start)),
 				}
+				// TODO
 				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("augmented assignments".into()), self.start)),
 				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("l-value assignments".into()), self.start)),
 			}
+			// We built function definitions at the start of this function
 			AstNodeVariant::FunctionDefinition(..) => unreachable!(),
+			// For blocks, we build the sub-expressions
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
 				if *is_result_undefined && block_expressions.is_empty() {
@@ -463,6 +531,7 @@ impl AstNode {
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
+			// For a function call, we build the expression that yeilds the function pointer and the ones that yeild the function arguments and then build the call.
 			AstNodeVariant::FunctionCall(function, arguments) => {
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("global function calls".into()), self.start))
@@ -485,7 +554,9 @@ impl AstNode {
 				let built_function_call = function_pointer.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp");
 				built_function_call
 			}
+			// TODO
 			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
+			// For metadata nodes, we build the child nodes
 			AstNodeVariant::Metadata(metadata, _child) => match metadata {
 				Metadata::EntryPoint => unreachable!(),
 				Metadata::Link => unreachable!(),
@@ -493,14 +564,25 @@ impl AstNode {
 		})
 	}
 
-	pub fn build_l_value<'a>(&'a self, main_data: &MainData<'a>, _file_build_data: &mut FileBuildData, _llvm_module: &Module, llvm_builder: &'a Builder<'a, 'a>, local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>, _basic_block: Option<&BasicBlock>)
-	-> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
+	/// Build an l-value into LLVM IR code and return the built l-value.
+	pub fn build_l_value<'a>(
+		&'a self,
+		main_data: &MainData<'a>,
+		_file_build_data: &mut FileBuildData,
+		_llvm_module: &Module,
+		llvm_builder: &'a Builder<'a, 'a>,
+		local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
+		_basic_block: Option<&BasicBlock>
+	) -> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Unpack
 		let Self {
 			start: _,
 			end: _,
 			variant,
 		} = self;
+		// Action depends on variant
 		Ok(match variant {
+			// For an identifier, we create or return a local variable
 			AstNodeVariant::Identifier(name) => {
 				// Get local variable if it exists
 				for scope_level in local_variables.iter().rev() {
@@ -509,26 +591,34 @@ impl AstNode {
 					}
 				}
 				// Else create local variable
-				let variable: Value<'a, 'a> = main_data.int_type.build_alloca(llvm_builder, &**name);
+				let variable = main_data.int_type.build_alloca(llvm_builder, &**name);
 				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLValue::AllocaVariable(variable.clone()));
 				BuiltLValue::AllocaVariable(variable)
 			}
+			// TODO
 			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
 		})
 	}
 
-	pub fn build_global_assignment<'a>(&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str)
-	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
+	/// Build a global variable into LLVM IR code.
+	pub fn build_global_assignment<'a>(
+		&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str
+	) -> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Build r-value/function
 		if self.is_function() {
-			let function = self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
+			let function =
+				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
 			return Ok(function);
 		}
 		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut Vec::new(), None)?;
+		// Assign to global variable
 		let global = llvm_module.add_global(main_data.int_type, name);
 		global.set_initializer(&r_value);
+		// Return
 		return Ok(r_value);
 	}
 
+	/// Returns if the expression can be built into a function.
 	pub fn is_function(&self) -> bool {
 		match &self.variant {
 			AstNodeVariant::FunctionDefinition(..) => true,
@@ -540,6 +630,7 @@ impl AstNode {
 		}
 	}
 
+	/// Get a int/void type form a byte width.
 	pub fn type_from_width<'a>(&'a self, main_data: &'a MainData) -> Result<(Type, bool), (Error, (NonZeroUsize, NonZeroUsize))> {
 		let Self {
 			start,
@@ -554,6 +645,7 @@ impl AstNode {
 					true => (*value ^ main_data.int_max_value).wrapping_add(1),
 				};
 				(match byte_width {
+					// TODO: 0 for void
 					1 => main_data.llvm_context.int_8_type(),
 					2 => main_data.llvm_context.int_16_type(),
 					4 => main_data.llvm_context.int_32_type(),
@@ -566,13 +658,21 @@ impl AstNode {
 		})
 	}
 
-	pub fn const_evaluate(&mut self, main_data: &mut MainData, const_evaluated_globals: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>, variable_dependencies: &mut HashSet<Box<str>>, is_link_function: bool)
-	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+	/// Const evaluate expressions that can be const evaluated.
+	pub fn const_evaluate(
+		&mut self,
+		main_data: &mut MainData,
+		const_evaluated_globals: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>,
+		variable_dependencies: &mut HashSet<Box<str>>,
+		is_link_function: bool
+	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Unpack
 		let Self {
 			start,
 			end,
 			variant,
 		} = self;
+		// Action depends on variant
 		match variant {
 			AstNodeVariant::Operator(operator, operands) => {
 				for operand in operands.iter_mut() {
@@ -621,7 +721,14 @@ impl AstNode {
 	}
 }
 
-fn get_variable_by_name<'a>(main_data: &MainData<'a>, file_build_data: &mut FileBuildData<'a, 'a>, llvm_builder: &Builder<'a, 'a>, local_variables: &Vec<HashMap<Box<str>, BuiltLValue<'a>>>, name: &str) -> Value<'a, 'a> {
+/// Get a local or global variable.
+fn get_variable_by_name<'a>(
+	main_data: &MainData<'a>,
+	file_build_data: &mut FileBuildData<'a, 'a>,
+	llvm_builder: &Builder<'a, 'a>,
+	local_variables: &Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
+	name: &str
+) -> Value<'a, 'a> {
 	for scope_level in local_variables.iter().rev() {
 		if let Some(variable) = scope_level.get(name) {
 			return variable.get_value(main_data, llvm_builder);
