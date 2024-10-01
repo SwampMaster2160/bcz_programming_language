@@ -2,7 +2,8 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::swa
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, llvm::{basic_block::BasicBlock, builder::Builder, enums::{CallingConvention, Linkage}, module::Module, types::Type, value::Value}, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, MainData};
+use llvm_nhb::{basic_block::BasicBlock, builder::Builder, enums::{CallingConvention, Linkage}, module::Module, types::Type, value::Value};
 
 #[derive(Debug, Clone)]
 pub enum Operation {

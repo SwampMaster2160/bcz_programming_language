@@ -2,7 +2,8 @@ use std::{mem::take, num::NonZeroUsize};
 
 use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operation, Operator}, error::Error, token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant}};
+use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operation, Operator}, error::Error};
+use crate::token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant};
 
 #[derive(Debug)]
 enum ParseState {
@@ -50,7 +51,8 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::AddRead, OperatorType::FloatingPointBitwise) => Some(Operation::FloatAdd),
 		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerSubtract),
 		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operation::FloatSubtract),
-		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerMultiply),
+		(OperatorSymbol::MultiplyDereference, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) =>
+			Some(Operation::IntegerMultiply),
 		(OperatorSymbol::MultiplyDereference, OperatorType::FloatingPointBitwise) => Some(Operation::FloatMultiply),
 		(OperatorSymbol::DivideReciprocal, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedDivide),
 		(OperatorSymbol::DivideReciprocal, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedDivide),
@@ -78,7 +80,8 @@ const fn postfix_operator_from_symbol(symbol: OperatorSymbol, operator_type: Ope
 	}
 }
 
-/// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments_or_parameters` is `false` or from comma separated function arguments/parameters if `true`.
+/// Will parse a semi-colon separated expressions into a list of AST nodes if `are_arguments_or_parameters` is `false`
+/// or from comma separated function arguments/parameters if `true`.
 /// The `bool` returned is `true` if the bracketed area ends in a separator.
 fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_arguments_or_parameters: bool)
 	-> Result<(Box<[AstNode]>, bool), (Error, (NonZeroUsize, NonZeroUsize))> {
@@ -95,7 +98,9 @@ fn parse_separated_expressions(mut items_being_parsed: Vec<ParseState>, are_argu
 				if separator.is_close_parenthesis() {
 					parenthesis_depth = parenthesis_depth.checked_sub(1).ok_or_else(|| (Error::TooManyCloseParentheses, item.get_start()))?;
 				}
-				if parenthesis_depth == 0 && (((!are_arguments_or_parameters) && *separator == Separator::Semicolon) || (are_arguments_or_parameters && *separator == Separator::Comma)) {
+				if parenthesis_depth == 0 && (
+					((!are_arguments_or_parameters) && *separator == Separator::Semicolon) || (are_arguments_or_parameters && *separator == Separator::Comma)
+				) {
 					length = Some(length_so_far);
 					break;
 				}
@@ -179,7 +184,9 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 				}
 				Separator::OpenCurlyParenthesis => {
 					let (expressions, result_is_undefined) = parse_separated_expressions(parenthesised_items, false)?;
-					ParseState::AstNode(AstNode { start: open_parenthesis.get_start(), end: close_parenthesis.get_end(), variant: AstNodeVariant::Block(expressions, result_is_undefined) })
+					ParseState::AstNode(AstNode {
+						start: open_parenthesis.get_start(), end: close_parenthesis.get_end(), variant: AstNodeVariant::Block(expressions, result_is_undefined)
+					})
 				},
 				Separator::OpenSquareParenthesis => return Err((Error::FeatureNotYetImplemented("index operator".into()), open_parenthesis.get_start())),
 				_ => unreachable!(),
@@ -229,9 +236,10 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	for index in (0..items_being_parsed.len().saturating_sub(1)).rev() {
 		// Make sure the item is an operator token
 		let (operator_symbol, operator_type, is_assignment, start) = match &items_being_parsed[index] {
-			ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment, _), start, end: _ }) =>
-				(*operator_symbol, *operator_type, *is_assignment, *start),
-				_ => continue,
+			ParseState::Token(Token {
+				variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment, _), start, end: _
+			}) => (*operator_symbol, *operator_type, *is_assignment, *start),
+			_ => continue,
 		};
 		// Make sure the item to the left is not a parsed expression
 		match index.checked_sub(1) {
@@ -274,10 +282,16 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	let mut index = 1;
 	while index < items_being_parsed.len().saturating_sub(1) {
 		// Make sure the item is an operator token
-		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment, _), start, end }) = &items_being_parsed[index] {
-			let (operator_symbol, operator_type, is_assignment, start, end) = (*operator_symbol, *operator_type, *is_assignment, *start, *end);
+		if let ParseState::Token(Token {
+			variant: TokenVariant::Operator(operator_symbol, operator_type, is_assignment, _), start, end
+		}) = &items_being_parsed[index] {
+			let (operator_symbol, operator_type, is_assignment, start, end) =
+			(*operator_symbol, *operator_type, *is_assignment, *start, *end);
 			// Make sure the item to the right is not a parsed expression
-			if !matches!(&items_being_parsed[index + 1], ParseState::AstNode(..) | ParseState::FunctionArgumentsOrParameters(..) | ParseState::Token(Token { variant: TokenVariant::Keyword(..), .. })) {
+			if !matches!(
+				&items_being_parsed[index + 1], ParseState::AstNode(..) | ParseState::FunctionArgumentsOrParameters(..) |
+				ParseState::Token(Token { variant: TokenVariant::Keyword(..), .. })
+			) {
 				// Assignments not yet implemented
 				if is_assignment {
 					return Err((Error::FeatureNotYetImplemented("augmented suffix operators".into()), start));
@@ -316,7 +330,9 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		// Search for operators in the precedence level
 		let mut index = 1;
 		while index < items_being_parsed.len().saturating_sub(1) {
-			if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, false, false), start, end: _ }) = &items_being_parsed[index] {
+			if let ParseState::Token(Token {
+				variant: TokenVariant::Operator(operator_symbol, operator_type, false, false), start, end: _
+			}) = &items_being_parsed[index] {
 				let operator_symbol = match operator_symbol {
 					Some(operator_symbol) => *operator_symbol,
 					None => return Err((Error::NoOperatorBase, *start)),
@@ -415,7 +431,9 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	// Parse augmented binary operators
 	let mut index = items_being_parsed.len().saturating_sub(2);
 	while index > 0 {
-		if let ParseState::Token(Token { variant: TokenVariant::Operator(operator_symbol, operator_type, true, is_l_value_assignment), start, end: _ })
+		if let ParseState::Token(Token {
+			variant: TokenVariant::Operator(operator_symbol, operator_type, true, is_l_value_assignment), start, end: _
+		})
 		= &items_being_parsed[index] {
 			// If we find one
 			// Convert to AST operator
@@ -463,8 +481,10 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	}
 	for item in items_being_parsed.iter() {
 		match item {
-			ParseState::Token(Token { variant: TokenVariant::Operator(..), start, .. }) => return Err((Error::OperatorUsedOnNothing, *start)),
-			ParseState::Token(Token { variant: TokenVariant::Separator(..), start, .. }) => return Err((Error::OperatorUsedOnNothing, *start)),
+			ParseState::Token(Token { variant: TokenVariant::Operator(..), start, .. }) =>
+				return Err((Error::OperatorUsedOnNothing, *start)),
+			ParseState::Token(Token { variant: TokenVariant::Separator(..), start, .. }) =>
+				return Err((Error::OperatorUsedOnNothing, *start)),
 			_ => {},
 		}
 	}

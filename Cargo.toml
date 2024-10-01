@@ -1,6 +1,9 @@
+[dependencies.llvm-nhb]
+path = "llvm-nhb"
+
 [package]
 name = "bcz_programming_language"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 
 [dependencies]

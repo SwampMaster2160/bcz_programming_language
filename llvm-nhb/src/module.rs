@@ -1,6 +1,8 @@
 use std::{ffi::{c_int, CStr}, iter::once, marker::PhantomData, ptr::null_mut};
 
-use super::{context::Context, enums::CodegenFileType, llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule, LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMTypeKind}, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type, value::Value};
+use super::{context::Context, enums::CodegenFileType, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type, value::Value};
+use super::llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule};
+use super::llvm_c::{LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMTypeKind};
 
 #[repr(transparent)]
 pub struct Module<'c> {

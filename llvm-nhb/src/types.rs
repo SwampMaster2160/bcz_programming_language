@@ -1,8 +1,8 @@
 use std::{ffi::c_uint, fmt::Debug, iter::{once, repeat}, marker::PhantomData, mem::{transmute, MaybeUninit}};
 
-use crate::llvm::llvm_c::LLVMBuildAlloca;
-
-use super::{builder::Builder, context::Context, llvm_c::{LLVMBool, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType, LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef}, target_data::TargetData, traits::WrappedReference, value::Value};
+use super::{builder::Builder, context::Context, target_data::TargetData, traits::WrappedReference, value::Value};
+use super::llvm_c::{LLVMBool, LLVMBuildAlloca, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType};
+use super::llvm_c::{LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef};
 
 #[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]

@@ -71,7 +71,8 @@ impl Display for Error {
 			Error::TooManyCloseParentheses => write!(f, "Too many close parentheses"),
 			Error::TooManyOpenParentheses => write!(f, "Too many open parentheses"),
 			Error::BlankExpression => write!(f, "Blank expression"),
-			Error::ParenthesisMismatch(open, close) => write!(f, "Open '{}' mismatched with close '{}'", open.get_symbol(), close.get_symbol()),
+			Error::ParenthesisMismatch(open, close) =>
+				write!(f, "Open '{}' mismatched with close '{}'", open.get_symbol(), close.get_symbol()),
 			Error::NoOperatorBase => write!(f, "No operator base"),
 			Error::BinaryOperatorNotUsedOnExpressions => write!(f, "Binary operator used on non-expressions"),
 			Error::InvalidPrefixOperatorSymbol(symbol) => write!(f, "Invalid prefix operator symbol base \"{}\"", symbol.get_symbol()),

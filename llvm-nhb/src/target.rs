@@ -1,6 +1,7 @@
 use std::{ffi::CStr, iter::once, ptr::null_mut};
 
-use super::{enums::{CodeModel, CodegenOptLevel, RealocMode}, llvm_c::{LLVMCodeGenOptLevel, LLVMCodeModel, LLVMCreateTargetMachine, LLVMDisposeMessage, LLVMGetTargetFromTriple, LLVMRelocMode, LLVMTargetRef}, target_machine::TargetMachine, traits::WrappedReference};
+use super::{enums::{CodeModel, CodegenOptLevel, RealocMode}, target_machine::TargetMachine, traits::WrappedReference};
+use super::llvm_c::{LLVMCodeGenOptLevel, LLVMCodeModel, LLVMCreateTargetMachine, LLVMDisposeMessage, LLVMGetTargetFromTriple, LLVMRelocMode, LLVMTargetRef};
 
 #[repr(transparent)]
 pub struct Target {

@@ -3,7 +3,8 @@ use std::{collections::{HashMap, HashSet}, env::args, mem::take, num::NonZeroUsi
 use compile::compile_file;
 use compiler_arguments::{process_arguments, CompilerArgumentsData};
 use error::Error;
-use llvm::{context::Context, enums::{CodeModel, CodegenOptLevel, RealocMode}, other::initialize_x86, target::Target, target_data::TargetData, target_machine::TargetMachine, types::Type};
+use llvm_nhb::{context::Context, other::initialize_x86, target::Target, target_data::TargetData, target_machine::TargetMachine, types::Type};
+use llvm_nhb::enums::{CodeModel, CodegenOptLevel, RealocMode};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
 mod compiler_arguments;
@@ -14,7 +15,6 @@ mod ast_node;
 mod parse;
 mod built_value;
 mod file_build_data;
-pub mod llvm;
 
 /// Info that applies while compiling all files.
 pub struct MainData<'a> {

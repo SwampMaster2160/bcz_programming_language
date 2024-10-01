@@ -1,6 +1,10 @@
 use std::{ffi::c_uint, fmt::{Debug, Formatter, Write}, iter::once, marker::PhantomData, mem::transmute};
 
-use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMLinkage, LLVMSetFunctionCallConv, LLVMSetInitializer, LLVMSetLinkage, LLVMTypeKind, LLVMTypeOf, LLVMValueKind, LLVMValueRef}, module::Module, traits::WrappedReference, types::Type};
+use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
+use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
+use super::llvm_c::{LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSRem, LLVMBuildStore, LLVMBuildSub, LLVMBuildTrunc, LLVMSetInitializer};
+use super::llvm_c::{LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMTypeOf, LLVMSetFunctionCallConv};
+use super::llvm_c::{LLVMTypeKind, LLVMLinkage, LLVMValueKind, LLVMValueRef};
 
 #[derive(Clone)]
 #[repr(transparent)]

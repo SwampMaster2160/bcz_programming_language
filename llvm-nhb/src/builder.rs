@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
-use super::{basic_block::BasicBlock, context::Context, llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder, LLVMPositionBuilderAtEnd}, module::Module, traits::WrappedReference};
+use super::{basic_block::BasicBlock, context::Context, module::Module, traits::WrappedReference};
+use super::llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder, LLVMPositionBuilderAtEnd};
 
 #[repr(transparent)]
 pub struct Builder<'c, 'm> {

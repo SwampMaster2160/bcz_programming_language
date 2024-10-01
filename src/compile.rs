@@ -1,6 +1,7 @@
 use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, num::NonZeroUsize, path::PathBuf};
 
-use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, llvm::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module}, parse::parse_tokens, token::Token, MainData};
+use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, parse::parse_tokens, token::Token, MainData};
+use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUsize, Option<NonZeroUsize>)>)>)> {
@@ -55,8 +56,9 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	let mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
 	for (name, expression) in globals.into_iter() {
 		let mut variable_dependencies = HashSet::new();
-		expression.get_variable_dependencies(&mut variable_dependencies, &mut import_dependencies, &mut HashSet::new(), false, false)
-			.map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
+		expression.get_variable_dependencies(
+			&mut variable_dependencies, &mut import_dependencies, &mut HashSet::new(), false, false
+		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 		globals_and_dependencies.insert(name, (expression, variable_dependencies));
 	}
 	// Print global variables if commanded to do so
@@ -88,8 +90,9 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			// Const evaluate
 			let mut new_global = global.clone();
 			let mut new_variable_dependencies = variable_dependencies.clone();
-			new_global.const_evaluate(main_data, &globals_and_dependencies_after_const_evaluate, &mut new_variable_dependencies, false)
-				.map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
+			new_global.const_evaluate(
+				main_data, &globals_and_dependencies_after_const_evaluate, &mut new_variable_dependencies, false
+			).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 			// Add to list
 			globals_and_dependencies_after_const_evaluate.insert(name.clone(), (new_global, new_variable_dependencies));
 			globals_have_been_const_evaluated_this_round = true;
@@ -150,7 +153,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: NonZeroUsize, push_to: &mut Vec<Token>) -> Result<(), (Error, NonZeroUsize)> {
 	let mut column_number = NonZeroUsize::MIN;
 	loop {
-		// Get how many whitespace chars there are untill the next non-whitespace, chars and bytes are the same size sice since we are only looking for ASCII whitespace chars
+		// Get how many whitespace chars there are untill the next non-whitespace,
+		// chars and bytes are the same size sice since we are only looking for ASCII whitespace chars
 		let start_whitespace_length = match line_string.find(|chr: char| !chr.is_ascii_whitespace()) {
 			Some(start_whitespace_length) => start_whitespace_length,
 			None => break,
@@ -174,6 +178,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: N
 	Ok(())
 }
 
+/// Take in a list of global variables and build them into a LLVM module.
 fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>)
 	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 	// Set up module
@@ -225,7 +230,8 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		// Get wrapped function
 		let wrapped_entry_point_function_type = main_data.int_type.function_type(&[], false);
 		let wrapped_entry_point_function_pointer_type = wrapped_entry_point_function_type.pointer_to();
-		let wrapped_entry_point_function_pointer = wrapped_entry_point.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
+		let wrapped_entry_point_function_pointer = wrapped_entry_point
+			.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
 		// Build wrapper function
 		// TODO: Non-Windows
 		let entry_point_function = llvm_module.add_function(entry_point_function_type, "WinMain");
@@ -233,7 +239,8 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		entry_point_function.set_calling_convention(CallingConvention::Win64);
 		let entry_point_function_basic_block = entry_point_function.append_basic_block(&main_data.llvm_context, "entry");
 		llvm_builder.position_at_end(&entry_point_function_basic_block);
-		let built_function_call = wrapped_entry_point_function_pointer.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp");
+		let built_function_call = wrapped_entry_point_function_pointer
+			.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp");
 		built_function_call.build_truncate(&llvm_builder, int_32_type, "trunc_cast_temp").build_return(&llvm_builder);
 	}
 	Ok(())

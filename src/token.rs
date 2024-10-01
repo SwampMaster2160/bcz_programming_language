@@ -232,11 +232,13 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 }
 
 impl Token {
-	/// Takes in a string slice `line_content` and tokenizes the first token in the string. Returns the tokenized token and the input string slice with the tokenized chars removed.
+	/// Takes in a string slice `line_content` and tokenizes the first token in the string.
+	/// Returns the tokenized token and the input string slice with the tokenized chars removed.
 	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: NonZeroUsize, column_number: NonZeroUsize)
 		-> Result<(Option<Self>, &'a str), Error> {
 		// Get the token varient descriminant and length in bytes
-		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next().expect("Function input should not be empty") {
+		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next()
+			.expect("Function input should not be empty") {
 			_ if line_content.starts_with("//") => return Ok((None, "")),
 			_ if line_content.starts_with("/*") => return Err(Error::FeatureNotYetImplemented("block comments".into())),
 			first_char if first_char.is_ascii_alphabetic() || first_char == '_' => (
@@ -254,7 +256,9 @@ impl Token {
 			),
 			_ if line_content.starts_with("@=") => match line_content.chars().nth(2) {
 				Some(chr) if !main_data.operator_character_set.contains(&chr) => (TokenVariantDiscriminants::Operator, 2),
-				_ => return Err(Error::InvalidOperator(line_content.split_at(line_content.find(|chr| !main_data.operator_character_set.contains(&chr)).unwrap_or_else(|| line_content.len())).0.into())),
+				_ => return Err(Error::InvalidOperator(line_content.split_at(
+					line_content.find(|chr| !main_data.operator_character_set.contains(&chr)).unwrap_or_else(|| line_content.len())
+				).0.into())),
 			}
 			'@' => (
 				TokenVariantDiscriminants::Keyword,
@@ -384,7 +388,8 @@ impl Token {
 					None => (OperatorType::SignedLogicalShortCircuit, token_string),
 				};
 				// Get if the operator is an assignment
-				let (is_assignment, operator_base_string) = match operator_string_without_type.chars().last() == Some('=') && !matches!(operator_string_without_type, "==" | "!=" | "<=" | ">=") {
+				let (is_assignment, operator_base_string) =
+				match operator_string_without_type.chars().last() == Some('=') && !matches!(operator_string_without_type, "==" | "!=" | "<=" | ">=") {
 					true => (true, &operator_string_without_type[..operator_string_without_type.len() - 1]),
 					false => (false, operator_string_without_type),
 				};

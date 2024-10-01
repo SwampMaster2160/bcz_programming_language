@@ -1,4 +1,5 @@
-use crate::{llvm::{builder::Builder, value::Value}, MainData};
+use crate::MainData;
+use llvm_nhb::{builder::Builder, value::Value};
 
 #[derive(Clone, Debug)]
 pub enum BuiltLValue<'a> {

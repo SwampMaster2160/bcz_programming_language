@@ -1,6 +1,9 @@
 use std::iter::once;
 
-use super::{builder::Builder, llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext, LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext, LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext}, types::Type, module::Module, traits::WrappedReference};
+use super::{builder::Builder, types::Type, module::Module, traits::WrappedReference};
+use super::llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext};
+use super::llvm_c::{LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext};
+use super::llvm_c::{LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext};
 
 #[allow(non_upper_case_globals)]
 static mut context_exists_in_this_thread: bool = false;

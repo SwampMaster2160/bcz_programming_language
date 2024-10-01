@@ -140,6 +140,7 @@ impl CompilerOptionToken {
 	}
 }
 
+/// Process a list of compiler arguments.
 pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgumentsData<'a>) -> Result<(), Error> {
 	let mut argument_processing_state = ArgumentProcessingState::Normal;
 	// No arguments should result in the version being printed
