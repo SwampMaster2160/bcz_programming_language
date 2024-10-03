@@ -1,7 +1,9 @@
 B = 5;
 
 main = @entry_point () {
-	Beep(100, 1000);
+	b = GetConsoleWindow();
+	//FillConsoleOutputCharacterA(b, 'a', 10, 3, 2, 0);
+	Beep(500, 1000);
 	a = 2 + B;
 	420 + aFn(a, 2)
 };
@@ -11,3 +13,5 @@ aFn = (a, b) {
 };
 
 Beep = @link (4, 4) -4;
+GetConsoleWindow = @link () 8;
+FillConsoleOutputCharacterA = @link (8, 1, 4, 2, 2, 8) -4;
