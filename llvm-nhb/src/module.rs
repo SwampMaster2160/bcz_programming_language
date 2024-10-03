@@ -1,4 +1,4 @@
-use std::{ffi::{c_int, CStr}, iter::once, marker::PhantomData, ptr::null_mut};
+use std::{ffi::{c_char, c_int, CStr, CString}, marker::PhantomData, ptr::null_mut};
 
 use super::{context::Context, enums::CodegenFileType, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type, value::Value};
 use super::llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule};
@@ -25,7 +25,7 @@ impl<'c> Module<'c> {
 			invalid if !invalid.is_normal() => panic!("Invalid global type {invalid:?}"),
 			_ => {}
 		}
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe { Value::from_ref(LLVMAddGlobal(self.module_ref, global_type.get_ref(), name.as_ptr())) }
 	}
 
@@ -34,7 +34,7 @@ impl<'c> Module<'c> {
 			LLVMTypeKind::LLVMFunctionTypeKind => {}
 			invalid => panic!("Invalid global type {invalid:?}")
 		}
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe { Value::from_ref(LLVMAddFunction(self.module_ref, name.as_ptr(), function_type.get_ref())) }
 	}
 
@@ -43,20 +43,20 @@ impl<'c> Module<'c> {
 	}
 
 	pub fn set_target_triple(&self, target_triple: &str) {
-		let target_triple: Box<[u8]> = target_triple.bytes().chain(once(0)).collect();
+		let target_triple = CString::new(target_triple).unwrap();
 		unsafe { LLVMSetTarget(self.module_ref, target_triple.as_ptr()) };
 	}
 
 	pub fn emit_to_file(&self, target_machine: &TargetMachine, filepath: &str, codegen_type: CodegenFileType) -> Result<(), String> {
-		let filepath: Box<[u8]> = filepath.bytes().chain(once(0)).collect();
-		let mut error: *mut u8 = null_mut();
+		let mut error: *mut c_char = null_mut();
+		let filepath = CString::new(filepath).unwrap();
 		let result = unsafe { LLVMTargetMachineEmitToFile(
 			target_machine.get_ref(), self.module_ref, filepath.as_ptr(), codegen_type as c_int, &mut error
 		) } != 0;
 		let out = match result {
 			false => Ok(()),
 			true => Err({
-				let error = unsafe { CStr::from_ptr(error as *const i8) };
+				let error = unsafe { CStr::from_ptr(error as *const c_char) };
 				error.to_str().unwrap().to_string()
 			})
 		};

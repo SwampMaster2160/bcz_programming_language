@@ -1,4 +1,4 @@
-use std::{ffi::c_uint, fmt::{Debug, Formatter, Write}, iter::once, marker::PhantomData, mem::transmute};
+use std::{ffi::{c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -30,7 +30,6 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 	}
 
 	pub fn build_ptr_to_int(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMPointerTypeKind) {
 			panic!("Invalid input type kind {:?}", input_type_kind);
@@ -39,11 +38,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(dest_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid dest type kind {:?}", dest_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildPtrToInt(builder.get_ref(), self.value_ref, dest_type.get_ref(), name.as_ptr())) }
 	}
 
 	pub fn build_int_to_ptr(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid input type kind {:?}", input_type_kind);
@@ -52,11 +51,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(dest_type_kind, LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMPointerTypeKind) {
 			panic!("Invalid dest type kind {:?}", dest_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildIntToPtr(builder.get_ref(), self.value_ref, dest_type.get_ref(), name.as_ptr())) }
 	}
 
 	pub fn build_zero_extend(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid input type kind {:?}", input_type_kind);
@@ -65,11 +64,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(dest_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid dest type kind {:?}", dest_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildZExt(builder.get_ref(), self.value_ref, dest_type.get_ref(), name.as_ptr())) }
 	}
 
 	pub fn build_sign_extend(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid input type kind {:?}", input_type_kind);
@@ -78,11 +77,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(dest_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid dest type kind {:?}", dest_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSExt(builder.get_ref(), self.value_ref, dest_type.get_ref(), name.as_ptr())) }
 	}
 
 	pub fn build_truncate(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid input type kind {:?}", input_type_kind);
@@ -91,11 +90,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(dest_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid dest type kind {:?}", dest_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildTrunc(builder.get_ref(), self.value_ref, dest_type.get_ref(), name.as_ptr())) }
 	}
 
 	pub fn build_add(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -104,11 +103,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildAdd(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_sub(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -117,11 +116,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSub(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_mult(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -130,11 +129,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildMul(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_unsigned_div(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -143,11 +142,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildUDiv(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_signed_div(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -156,11 +155,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSDiv(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_unsigned_modulo(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -169,11 +168,11 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildURem(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_signed_truncated_modulo(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
@@ -182,15 +181,16 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSRem(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_negate(&self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		let input_type_kind = self.get_type().type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid input type kind {:?}", input_type_kind);
 		}
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildNeg(builder.get_ref(), self.value_ref, name.as_ptr())) }
 	}
 
@@ -215,7 +215,7 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if self.get_type() != function_type.pointer_to() {
 			panic!("Function call for value of type {:?} but call type of {:?}", self.get_type(), function_type);
 		}
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe {
 			Value::from_ref(LLVMBuildCall2(
 				builder.get_ref(),
@@ -263,7 +263,7 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		if load_type.pointer_to() != self_type {
 			panic!("Load of type {load_type:?} from location of type {self_type:?}");
 		}
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildLoad2(builder.get_ref(), load_type.get_ref(), self.value_ref, name.as_ptr())) }
 	}
 
@@ -290,7 +290,7 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 			(LLVMValueKind::LLVMFunctionValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
 			_ => panic!("Invalid input value {self:?}, should be function")
 		}
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe { BasicBlock::from_ref(LLVMAppendBasicBlockInContext(context.get_ref(), self.value_ref, name.as_ptr())) }
 	}
 

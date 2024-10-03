@@ -1,4 +1,4 @@
-use std::{ffi::c_uint, fmt::Debug, iter::{once, repeat}, marker::PhantomData, mem::{transmute, MaybeUninit}};
+use std::{ffi::{c_uint, CString}, fmt::Debug, iter::repeat, marker::PhantomData, mem::{transmute, MaybeUninit}};
 
 use super::{builder::Builder, context::Context, target_data::TargetData, traits::WrappedReference, value::Value};
 use super::llvm_c::{LLVMBool, LLVMBuildAlloca, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType};
@@ -119,7 +119,7 @@ impl<'a> Type<'a> {
 		if !self.is_normal() {
 			panic!("Invalid type");
 		}
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe { Value::from_ref(LLVMBuildAlloca(builder.get_ref(), self.type_ref, name.as_ptr())) }
 	}
 

@@ -1,4 +1,4 @@
-use std::iter::once;
+use std::ffi::CString;
 
 use super::{builder::Builder, types::Type, module::Module, traits::WrappedReference};
 use super::llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext};
@@ -44,7 +44,7 @@ impl Context {
 
 	#[inline]
 	pub fn new_module<'a>(&'a self, name: &str) -> Module<'a> {
-		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
+		let name = CString::new(name).unwrap();
 		unsafe { Module::from_ref(LLVMModuleCreateWithNameInContext(name.as_ptr(), self.context_ref)) }
 	}
 

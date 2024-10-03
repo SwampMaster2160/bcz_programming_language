@@ -1,4 +1,4 @@
-use std::ffi::{c_int, c_uint, c_ulonglong, c_void};
+use std::ffi::{c_char, c_int, c_uint, c_ulonglong, c_void};
 
 pub type LLVMContextRef = *mut c_void;
 pub type LLVMModuleRef = *mut c_void;
@@ -21,16 +21,16 @@ pub type LLVMCodeGenFileType = c_int;
 extern "C" {
 	// Core
 	pub fn LLVMGetVersion(major: *mut c_uint, minor: *mut c_uint, patch: *mut c_uint) -> c_void;
-	pub fn LLVMDisposeMessage(Message: *mut u8) -> c_void;
+	pub fn LLVMDisposeMessage(Message: *mut c_char) -> c_void;
 	// Core/Contexts
 	pub fn LLVMContextCreate() -> LLVMContextRef;
 	pub fn LLVMContextDispose(C: LLVMContextRef) -> c_void;
 	// Core/Modules
-	pub fn LLVMModuleCreateWithNameInContext(ModuleID: *const u8, C: LLVMContextRef) -> LLVMModuleRef;
+	pub fn LLVMModuleCreateWithNameInContext(ModuleID: *const c_char, C: LLVMContextRef) -> LLVMModuleRef;
 	pub fn LLVMDisposeModule(M: LLVMModuleRef) -> c_void;
 	pub fn LLVMDumpModule(M: LLVMModuleRef) -> c_void;
-	pub fn LLVMSetTarget(M: LLVMModuleRef, Triple: *const u8) -> c_void;
-	pub fn LLVMAddFunction(M: LLVMModuleRef, Name: *const u8, FunctionTy: LLVMTypeRef) -> LLVMValueRef;
+	pub fn LLVMSetTarget(M: LLVMModuleRef, Triple: *const c_char) -> c_void;
+	pub fn LLVMAddFunction(M: LLVMModuleRef, Name: *const c_char, FunctionTy: LLVMTypeRef) -> LLVMValueRef;
 	// Core/Types
 	pub fn LLVMGetTypeKind(Ty: LLVMTypeRef) -> LLVMTypeKind;
 	// Core/Types/Integer Types
@@ -57,11 +57,11 @@ extern "C" {
 	// Core/Values/Constants/Global Values
 	pub fn LLVMSetLinkage(Global: LLVMValueRef, Linkage: LLVMLinkage) -> c_void;
 	// Core/Values/Constants/Global Variables
-	pub fn LLVMAddGlobal(M: LLVMModuleRef, Ty: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMAddGlobal(M: LLVMModuleRef, Ty: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMSetInitializer(GlobalVar: LLVMValueRef, ConstantVal: LLVMValueRef) -> c_void;
 	pub fn LLVMGetInitializer(GlobalVar: LLVMValueRef) -> LLVMValueRef;
 	// Core/Values/Constants/Composite Constants
-	pub fn LLVMConstStringInContext(C: LLVMContextRef, Str: *const u8, Length: c_uint, DontNullTerminate: LLVMBool) -> LLVMValueRef;
+	pub fn LLVMConstStringInContext(C: LLVMContextRef, Str: *const c_char, Length: c_uint, DontNullTerminate: LLVMBool) -> LLVMValueRef;
 	// Core/Values/Constants/Function values
 	pub fn LLVMSetFunctionCallConv(Fn: LLVMValueRef, CC: c_uint) -> c_void;
 	// Core/Values/Constants/Function values/Function Parameters
@@ -73,45 +73,46 @@ extern "C" {
 	pub fn LLVMGetValueKind(Val: LLVMValueRef) -> LLVMValueKind;
 	pub fn LLVMTypeOf(Val: LLVMValueRef) -> LLVMTypeRef;
 	// Core/Basic Block
-	pub fn LLVMAppendBasicBlockInContext(C: LLVMContextRef, Fn: LLVMValueRef, Name: *const u8) -> LLVMBasicBlockRef;
+	pub fn LLVMAppendBasicBlockInContext(C: LLVMContextRef, Fn: LLVMValueRef, Name: *const c_char) -> LLVMBasicBlockRef;
 	// Instruction Builders
 	pub fn LLVMCreateBuilderInContext(C: LLVMContextRef) -> LLVMBuilderRef;
 	pub fn LLVMDisposeBuilder(Builder: LLVMBuilderRef) -> c_void;
 	pub fn LLVMPositionBuilderAtEnd(Builder: LLVMBuilderRef, Block: LLVMBasicBlockRef) -> c_void;
-	pub fn LLVMBuildPtrToInt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildIntToPtr(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildZExt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildSExt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildTrunc(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildCall2(B: LLVMBuilderRef, Ty: LLVMTypeRef, Fn: LLVMValueRef, Args: *const LLVMValueRef, NumArgs: c_uint, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildAdd(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildSub(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildMul(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildUDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildURem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildSDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildSRem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildPtrToInt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildIntToPtr(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildZExt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildSExt(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildTrunc(B: LLVMBuilderRef, Val: LLVMValueRef, DestTy: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildCall2(B: LLVMBuilderRef, Ty: LLVMTypeRef, Fn: LLVMValueRef, Args: *const LLVMValueRef, NumArgs: c_uint, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildAdd(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildSub(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildMul(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildUDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildURem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildSDiv(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildSRem(B: LLVMBuilderRef, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMBuildRet(B: LLVMBuilderRef, V: LLVMValueRef) -> LLVMValueRef;
-	pub fn LLVMBuildAlloca(B: LLVMBuilderRef, Ty: LLVMTypeRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildAlloca(B: LLVMBuilderRef, Ty: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMBuildStore(B: LLVMBuilderRef, Val: LLVMValueRef, Ptr: LLVMValueRef) -> LLVMValueRef;
-	pub fn LLVMBuildLoad2(B: LLVMBuilderRef, Ty: LLVMTypeRef, PointerVal: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
-	pub fn LLVMBuildNeg(B: LLVMBuilderRef, V: LLVMValueRef, Name: *const u8) -> LLVMValueRef;
+	pub fn LLVMBuildLoad2(B: LLVMBuilderRef, Ty: LLVMTypeRef, PointerVal: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildNeg(B: LLVMBuilderRef, V: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	// Target information
 	pub fn LLVMInitializeX86TargetInfo() -> c_void;
 	pub fn LLVMInitializeX86Target() -> c_void;
 	pub fn LLVMInitializeX86TargetMC() -> c_void;
 	pub fn LLVMInitializeX86AsmParser() -> c_void;
 	pub fn LLVMInitializeX86AsmPrinter() -> c_void;
-	pub fn LLVMGetDefaultTargetTriple() -> *mut u8;
-	pub fn LLVMGetTargetFromTriple(Triple: *const u8, T: *mut LLVMTargetRef, ErrorMessage: *mut *mut u8) -> LLVMBool;
+	pub fn LLVMGetDefaultTargetTriple() -> *mut c_char;
+	pub fn LLVMGetTargetFromTriple(Triple: *const c_char, T: *mut LLVMTargetRef, ErrorMessage: *mut *mut c_char) -> LLVMBool;
 	pub fn LLVMCreateTargetMachine(
-		T: LLVMTargetRef, Triple: *const u8, CPU: *const u8, Features: *const u8, Level: LLVMCodeGenOptLevel, Reloc: LLVMRelocMode, CodeModel: LLVMCodeModel
+		T: LLVMTargetRef, Triple: *const c_char,
+		CPU: *const c_char, Features: *const c_char, Level: LLVMCodeGenOptLevel, Reloc: LLVMRelocMode, CodeModel: LLVMCodeModel
 	) -> LLVMTargetMachineRef;
 	pub fn LLVMCreateTargetDataLayout(T: LLVMTargetMachineRef) -> LLVMTargetDataRef;
 	pub fn LLVMIntPtrTypeInContext(C: LLVMContextRef, TD: LLVMTargetDataRef) -> LLVMTypeRef;
 	pub fn LLVMSetModuleDataLayout(M: LLVMModuleRef, DL: LLVMTargetDataRef) -> c_void;
 	pub fn LLVMTargetMachineEmitToFile(
-		T: LLVMTargetMachineRef, M: LLVMModuleRef, Filename: *const u8, codegen: LLVMCodeGenFileType, ErrorMessage: *mut *mut u8
+		T: LLVMTargetMachineRef, M: LLVMModuleRef, Filename: *const c_char, codegen: LLVMCodeGenFileType, ErrorMessage: *mut *mut c_char
 	) -> LLVMBool;
 	pub fn LLVMSizeOfTypeInBits(TD: LLVMTargetDataRef, Ty: LLVMTypeRef) -> c_ulonglong;
 }
