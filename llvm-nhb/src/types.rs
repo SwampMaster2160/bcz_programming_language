@@ -35,7 +35,12 @@ impl<'a> Type<'a> {
 			}
 		}
 		unsafe {
-			Self::from_ref(LLVMFunctionType(self.get_ref(), transmute(parameter_types.as_ptr()), parameter_types.len() as c_uint, is_variable_argument as LLVMBool))
+			Self::from_ref(LLVMFunctionType(
+				self.get_ref(),
+				transmute(parameter_types.as_ptr()),
+				parameter_types.len() as c_uint,
+				is_variable_argument as LLVMBool,
+			))
 		}
 	}
 
@@ -59,7 +64,8 @@ impl<'a> Type<'a> {
 	pub(crate) fn is_normal(self) -> bool {
 		!matches!(
 			self.type_kind(),
-			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind | LLVMTypeKind::LLVMTargetExtTypeKind | LLVMTypeKind::LLVMTokenTypeKind,
+			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind |
+			LLVMTypeKind::LLVMTargetExtTypeKind |LLVMTypeKind::LLVMTokenTypeKind,
 		)
 	}
 

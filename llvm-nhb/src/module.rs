@@ -50,7 +50,9 @@ impl<'c> Module<'c> {
 	pub fn emit_to_file(&self, target_machine: &TargetMachine, filepath: &str, codegen_type: CodegenFileType) -> Result<(), String> {
 		let filepath: Box<[u8]> = filepath.bytes().chain(once(0)).collect();
 		let mut error: *mut u8 = null_mut();
-		let result = unsafe { LLVMTargetMachineEmitToFile(target_machine.get_ref(), self.module_ref, filepath.as_ptr(), codegen_type as c_int, &mut error) } != 0;
+		let result = unsafe { LLVMTargetMachineEmitToFile(
+			target_machine.get_ref(), self.module_ref, filepath.as_ptr(), codegen_type as c_int, &mut error
+		) } != 0;
 		let out = match result {
 			false => Ok(()),
 			true => Err({

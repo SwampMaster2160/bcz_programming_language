@@ -43,7 +43,7 @@ pub struct MainData<'a> {
 	/// The context for LLVM functions.
 	llvm_context: &'a Context,
 	/// The data layout fo the target machine.
-	llvm_data_layout: TargetData,
+	llvm_data_layout: &'a TargetData<'a>,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
 	int_type: Type<'a>,
 	/// A C string that contains info about the target machine.
@@ -65,14 +65,14 @@ pub struct MainData<'a> {
 	/// Maps strings (whithout the '@' prefix) to keywords.
 	str_to_keyword_mapping: HashMap<&'static str, Keyword>,
 	/// The target machine for LLVM.
-	llvm_target_machine: TargetMachine,
+	llvm_target_machine: &'a TargetMachine,
 	/// A list of object files that have been outputted as a result of compiling that should be linked to create a primary output file.
 	object_files_to_link: Vec<PathBuf>,
 }
 
 impl<'a> MainData<'a> {
 	pub fn new(
-		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: TargetMachine, target_data: TargetData, int_type: Type<'a>
+		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>, int_type: Type<'a>
 	) -> Self {
 		Self {
 			llvm_context: context,
@@ -139,7 +139,7 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
 	let int_type = llvm_data_layout.int_ptr_type(&context);
-	let mut main_data = MainData::new(compiler_arguments_data, &context, llvm_target_machine, llvm_data_layout, int_type);
+	let mut main_data = MainData::new(compiler_arguments_data, &context, &llvm_target_machine, &llvm_data_layout, int_type);
 	// Get info about machine being compiled for
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {

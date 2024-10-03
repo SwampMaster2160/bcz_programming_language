@@ -217,7 +217,13 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		}
 		let name: Box<[u8]> = name.bytes().chain(once(0)).collect();
 		unsafe {
-			Value::from_ref(LLVMBuildCall2(builder.get_ref(), function_type.get_ref(), self.value_ref, transmute(arguments.as_ptr()), argument_count_c, name.as_ptr()))
+			Value::from_ref(LLVMBuildCall2(
+				builder.get_ref(),
+				function_type.get_ref(),
+				self.value_ref, transmute(arguments.as_ptr()),
+				argument_count_c,
+				name.as_ptr(),
+			))
 		}
 	}
 	

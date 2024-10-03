@@ -1,4 +1,3 @@
-
 use super::{llvm_c::{LLVMCreateTargetDataLayout, LLVMTargetMachineRef}, target_data::TargetData, traits::WrappedReference};
 
 #[repr(transparent)]
@@ -7,7 +6,7 @@ pub struct TargetMachine {
 }
 
 impl TargetMachine {
-	pub fn get_target_data(&self) -> TargetData {
+	pub fn get_target_data<'a>(&'a self) -> TargetData<'a> {
 		unsafe { TargetData::from_ref(LLVMCreateTargetDataLayout(self.machine_ref)) }
 	}
 }
