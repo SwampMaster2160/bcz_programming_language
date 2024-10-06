@@ -51,6 +51,7 @@ pub enum Error {
 	CouldNotGetTarget(String),
 	InvalidArchitectureBitWidth(u128),
 	UnableToEmitObjectFile(String),
+	InvalidLValue,
 }
 
 impl Display for Error {
@@ -61,7 +62,7 @@ impl Display for Error {
 			Error::NoOptionContinuation => write!(f, "No option continuation"),
 			Error::CouldNotOpenFile(error) => write!(f, "Could not open file: {error}"),
 			Error::CouldNotReadLine => write!(f, "Could not read line"),
-			Error::FeatureNotYetImplemented(feature) => write!(f, "{feature} Not yet implemented"),
+			Error::FeatureNotYetImplemented(feature) => write!(f, "{feature} not yet implemented"),
 			Error::InvalidTokenStartChar(c) => write!(f, "Invalid token start character '{c}'"),
 			Error::InvalidNumericalLiteralBase(c) => write!(f, "Invalid numerical literal base \"0{c}\""),
 			Error::InvalidDigitForBase(c, base) => write!(f, "Invalid digit '{c}' for base {base}"),
@@ -105,6 +106,7 @@ impl Display for Error {
 			Error::UnableToEmitObjectFile(error) => write!(f, "Unable to write object: {error}"),
 			Error::CouldNotGetTarget(error) => write!(f, "Could not get target: {error}"),
 			Error::InvalidArchitectureBitWidth(width) => write!(f, "Unsupported architecture, bit width of {width}, greater than 64"),
+			Error::InvalidLValue => write!(f, "Invalid l-value"),
 		}
 	}
 }

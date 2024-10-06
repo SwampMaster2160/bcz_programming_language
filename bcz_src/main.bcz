@@ -1,8 +1,9 @@
 B = 5;
 
 main = @entry_point () {
+	z = 0;
 	Beep(500, 1000);
-	a = 2 + B;
+	a = 2 + B + {&z};
 	420 + aFn(a, 2)
 };
 

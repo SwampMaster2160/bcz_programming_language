@@ -77,6 +77,9 @@ pub enum OperatorSymbol {
 	MultiplyDereference,
 	DivideReciprocal,
 	ModuloPercent,
+	AndTakeRefrence,
+	Or,
+	Xor,
 }
 
 impl OperatorSymbol {
@@ -87,6 +90,9 @@ impl OperatorSymbol {
 			Self::MultiplyDereference => "*",
 			Self::DivideReciprocal => "/",
 			Self::ModuloPercent => "%",
+			Self::AndTakeRefrence => "&",
+			Self::Or => "|",
+			Self::Xor => "^",
 		}
 	}
 
@@ -240,7 +246,7 @@ impl Token {
 		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next()
 			.expect("Function input should not be empty") {
 			_ if line_content.starts_with("//") => return Ok((None, "")),
-			_ if line_content.starts_with("/*") => return Err(Error::FeatureNotYetImplemented("block comments".into())),
+			_ if line_content.starts_with("/*") => return Err(Error::FeatureNotYetImplemented("Block comments".into())),
 			first_char if first_char.is_ascii_alphabetic() || first_char == '_' => (
 				TokenVariantDiscriminants::Identifier,
 				line_content.find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()),
@@ -344,7 +350,7 @@ impl Token {
 					};
 					// Parse number
 					if is_float {
-						return Err(Error::FeatureNotYetImplemented("float literals".into()));
+						return Err(Error::FeatureNotYetImplemented("Float literals".into()));
 					}
 					else {
 						// Parse number char by char

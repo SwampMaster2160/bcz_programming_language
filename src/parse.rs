@@ -60,6 +60,15 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::ModuloPercent, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedTruncatedModulo),
 		(OperatorSymbol::ModuloPercent, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedModulo),
 		(OperatorSymbol::ModuloPercent, OperatorType::FloatingPointBitwise) => Some(Operation::FloatTruncatedModulo),
+		(OperatorSymbol::AndTakeRefrence, OperatorType::FloatingPointBitwise) => Some(Operation::BitwiseAnd),
+		(OperatorSymbol::Or, OperatorType::FloatingPointBitwise) => Some(Operation::BitwiseOr),
+		(OperatorSymbol::Xor, OperatorType::FloatingPointBitwise) => Some(Operation::BitwiseXor),
+		(OperatorSymbol::AndTakeRefrence, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNotShortCircuitAnd),
+		(OperatorSymbol::Or, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNotShortCircuitOr),
+		(OperatorSymbol::Xor, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNotShortCircuitXor),
+		(OperatorSymbol::AndTakeRefrence, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitAnd),
+		(OperatorSymbol::Or, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitOr),
+		(OperatorSymbol::Xor, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitXor),
 		//_ => None,
 	}
 }
@@ -68,6 +77,7 @@ const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 	match (symbol, operator_type) {
 		(OperatorSymbol::AddRead, _) => Some(Operation::Read),
 		(OperatorSymbol::MultiplyDereference, _) => Some(Operation::Dereference),
+		(OperatorSymbol::AndTakeRefrence, _) => Some(Operation::TakeReference),
 		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerNegate),
 		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operation::FloatNegate),
 		_ => None,
@@ -188,7 +198,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 						start: open_parenthesis.get_start(), end: close_parenthesis.get_end(), variant: AstNodeVariant::Block(expressions, result_is_undefined)
 					})
 				},
-				Separator::OpenSquareParenthesis => return Err((Error::FeatureNotYetImplemented("index operator".into()), open_parenthesis.get_start())),
+				Separator::OpenSquareParenthesis => return Err((Error::FeatureNotYetImplemented("Index operator".into()), open_parenthesis.get_start())),
 				_ => unreachable!(),
 			};
 			// Insert result of parse back into list
@@ -251,7 +261,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 		// Make sure it's not an assignment
 		if is_assignment {
-			return Err((Error::FeatureNotYetImplemented("augmented prefix operators".into()), start));
+			return Err((Error::FeatureNotYetImplemented("Augmented prefix operators".into()), start));
 		}
 		// Make sure the base operator is Some
 		let operator_symbol = match operator_symbol {
@@ -294,7 +304,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			) {
 				// Assignments not yet implemented
 				if is_assignment {
-					return Err((Error::FeatureNotYetImplemented("augmented suffix operators".into()), start));
+					return Err((Error::FeatureNotYetImplemented("Augmented suffix operators".into()), start));
 				}
 				// Make sure the base operator is Some
 				let operator_symbol = match operator_symbol {
@@ -489,7 +499,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 	}
 	let start = items_being_parsed.first().unwrap().get_start();
-	return Err((Error::FeatureNotYetImplemented("feature".into()), start));
+	return Err((Error::FeatureNotYetImplemented("Feature".into()), start));
 }
 
 /// Takes in the tokens from tokenizing a file and parses each semi-colon separated global expression into a returned AST node.

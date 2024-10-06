@@ -23,6 +23,16 @@ pub enum Operation {
 	IntegerNegate,
 	FloatNegate,
 	Dereference,
+	TakeReference,
+	BitwiseAnd,
+	BitwiseOr,
+	BitwiseXor,
+	LogicalNotShortCircuitAnd,
+	LogicalNotShortCircuitOr,
+	LogicalNotShortCircuitXor,
+	LogicalShortCircuitAnd,
+	LogicalShortCircuitOr,
+	LogicalShortCircuitXor,
 }
 
 #[derive(Debug, Clone)]
@@ -164,7 +174,7 @@ impl AstNode {
 					return Ok(());
 				}
 				if children.len() != 1 || (*is_result_undefined && children.len() != 0) {
-					return Err((Error::FeatureNotYetImplemented("global blocks".into()), start));
+					return Err((Error::FeatureNotYetImplemented("Global blocks".into()), start));
 				}
 				let dummy_number = NonZeroUsize::new(1).unwrap();
 				let mut child = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
@@ -209,8 +219,9 @@ impl AstNode {
 			AstNodeVariant::Block(sub_expressions, _) => for expression in sub_expressions {
 				match is_l_value {
 					false =>
-						expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
-					true => return Err((Error::FeatureNotYetImplemented("l-value blocks".into()), *start)),
+						expression
+							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
+					true => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), *start)),
 				};
 			}
 			// Constants can't have dependencies
@@ -263,7 +274,8 @@ impl AstNode {
 				false => if !local_variables.contains(name) {
 					variable_dependencies.insert(name.clone());
 				}
-				// An identifier being used as an l-value should be added to the local variable list so that it is not added to the global variable list if used later
+				// An identifier being used as an l-value should be added to the local variable list
+				// so that it is not added to the global variable list if used later
 				true => {
 					local_variables.insert(name.clone());
 				}
@@ -283,12 +295,17 @@ impl AstNode {
 				Operator::Augmented(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
-					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo => {
-						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
-						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
+					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
+					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
+					Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitXor | Operation::LogicalShortCircuitAnd |
+					Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitXor => {
+						operands[0]
+							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
+						operands[1]
+							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
-					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read
-						=> return Err((Error::FeatureNotYetImplemented("augmented unary operators".into()), *start)),
+					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read | Operation::TakeReference
+						=> return Err((Error::FeatureNotYetImplemented("Augmented unary operators".into()), *start)),
 				}
 				// For normal operators we search the operands
 				Operator::Normal(operation) => match operation {
@@ -296,7 +313,10 @@ impl AstNode {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply | Operation::SignedDivide | Operation::SignedTruncatedModulo |
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
-					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate => for operand in operands {
+					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate |
+					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
+					Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitXor | Operation::LogicalShortCircuitAnd |
+					Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitXor | Operation::TakeReference => for operand in operands {
 						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
 					// Operators that only have l-values as operands
@@ -375,7 +395,8 @@ impl AstNode {
 				}
 				let mut inner_local_variables: Vec<HashMap<Box<str>, BuiltLValue<'a>>> = vec![function_parameter_variables];
 				// Build function body
-				let function_body_built: Value<'a, 'a> = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_local_variables, Some(&basic_block))?;
+				let function_body_built: Value<'a, 'a> = function_body
+					.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_local_variables, Some(&basic_block))?;
 				function_body_built.build_return(llvm_builder);
 			}
 			true => {
@@ -386,7 +407,8 @@ impl AstNode {
 					wrapped_function_parameter_types.push(parameter_type);
 				}
 				let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
-				let wrapped_function_type = wrapped_function_return_type.function_type(wrapped_function_parameter_types.as_slice(), false);
+				let wrapped_function_type = wrapped_function_return_type
+					.function_type(wrapped_function_parameter_types.as_slice(), false);
 				// Link to wrapped function
 				let wrapped_function = llvm_module.add_function(wrapped_function_type, name);
 				wrapped_function.set_linkage(Linkage::DLLImport);
@@ -396,7 +418,8 @@ impl AstNode {
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
 					let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
 					let argument = function.get_parameter(parameter_index);
-						let argument_converted = match main_data.int_bit_width.cmp(&(parameter_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+						let argument_converted = match main_data.int_bit_width
+							.cmp(&(parameter_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 						Ordering::Less => match is_signed {
 							false => argument.build_zero_extend(llvm_builder, parameter_type, "z_extend_temp"),
 							true => argument.build_sign_extend(llvm_builder, parameter_type, "s_extend_temp"),
@@ -409,7 +432,8 @@ impl AstNode {
 				// Call wrapped function
 				let call_result = wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name);
 				// Build return
-				let call_result_converted = match main_data.int_bit_width.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+				let call_result_converted = match main_data.int_bit_width
+					.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 					Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
 					Ordering::Equal => call_result,
 					Ordering::Greater => match wrapped_function_return_type_is_signed {
@@ -475,7 +499,8 @@ impl AstNode {
 				// For a normal operator, we build the operands then build the operator instruction
 				Operator::Normal(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
-					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo => {
+					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
+					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor => {
 						let left_value = operands[0]
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let right_value = operands[1]
@@ -488,23 +513,41 @@ impl AstNode {
 							Operation::UnsignedModulo => left_value.build_unsigned_modulo(&right_value, llvm_builder, "umod_temp"),
 							Operation::SignedDivide => left_value.build_signed_div(&right_value, llvm_builder, "sdiv_temp"),
 							Operation::SignedTruncatedModulo => left_value.build_signed_truncated_modulo(&right_value, llvm_builder, "stmod_temp"),
+							Operation::BitwiseAnd => left_value.build_bitwise_and(&right_value, llvm_builder, "band_temp"),
+							Operation::BitwiseOr => left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
+							Operation::BitwiseXor => left_value.build_bitwise_xor(&right_value, llvm_builder, "bxor_temp"),
 							_ => unreachable!(),
 						};
 						result
 					}
-					Operation::IntegerNegate => {
-						let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+					Operation::IntegerNegate | Operation::Dereference => {
+						let operand = operands[0]
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let result = match operation {
 							Operation::IntegerNegate => operand.build_negate(llvm_builder, "neg_temp"),
+							Operation::Dereference =>
+								operand.build_int_to_ptr(llvm_builder, main_data.int_type.pointer_to(), "int_to_ptr_for_deref")
+									.build_load(main_data.int_type, llvm_builder, "load_for_deref"),
 							_ => unreachable!()
 						};
 						result
 					}
-					_ => return Err((Error::FeatureNotYetImplemented("this operator".into()), *start)),
+					Operation::TakeReference | Operation::Read => {
+						let value = operands[0]
+							.build_l_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+						match operation {
+							Operation::TakeReference => value
+								.get_pointer(main_data, llvm_builder)
+								.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref"),
+							Operation::Read => value.get_value(main_data, llvm_builder),
+							_ => unreachable!(),
+						}
+					}
+					_ => return Err((Error::FeatureNotYetImplemented("This operator".into()), *start)),
 				}
 				// TODO
-				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("augmented assignments".into()), self.start)),
-				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("l-value assignments".into()), self.start)),
+				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), self.start)),
+				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("L-value assignments".into()), self.start)),
 			}
 			// We built function definitions at the start of this function
 			AstNodeVariant::FunctionDefinition(..) => unreachable!(),
@@ -515,7 +558,7 @@ impl AstNode {
 					return Ok(main_data.int_type.undefined());
 				}
 				if local_variables.is_empty() {
-					return Err((Error::FeatureNotYetImplemented("blocks in global scope".into()), self.start));
+					return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start));
 				}
 				// Push block scope
 				local_variables.push(HashMap::new());
@@ -535,13 +578,14 @@ impl AstNode {
 			// For a function call, we build the expression that yeilds the function pointer and the ones that yeild the function arguments and then build the call.
 			AstNodeVariant::FunctionCall(function, arguments) => {
 				if local_variables.is_empty() {
-					return Err((Error::FeatureNotYetImplemented("global function calls".into()), self.start))
+					return Err((Error::FeatureNotYetImplemented("Global function calls".into()), self.start))
 				}
 				if arguments.len() > u16::MAX as usize {
 					return Err((Error::TooManyFunctionArguments, self.start))
 				}
 				// Build function body and arguments
-				let function_pointer_built = function.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+				let function_pointer_built = function
+					.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 				let mut arguments_built = Vec::with_capacity(arguments.len());
 				for argument in arguments {
 					arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?);
@@ -551,12 +595,14 @@ impl AstNode {
 				let function_type = main_data.int_type.function_type(&*argument_types, false);
 				let function_pointer_type = function_type.pointer_to();
 				// Build function call
-				let function_pointer = function_pointer_built.build_int_to_ptr(llvm_builder, function_pointer_type, "int_to_ptr_temp");
-				let built_function_call = function_pointer.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp");
+				let function_pointer = function_pointer_built
+					.build_int_to_ptr(llvm_builder, function_pointer_type, "int_to_ptr_temp");
+				let built_function_call = function_pointer
+					.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp");
 				built_function_call
 			}
 			// TODO
-			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("string literals".into()), self.start)),
+			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("String literals".into()), self.start)),
 			// For metadata nodes, we build the child nodes
 			AstNodeVariant::Metadata(metadata, _child) => match metadata {
 				Metadata::EntryPoint => unreachable!(),
@@ -596,8 +642,16 @@ impl AstNode {
 				local_variables.last_mut().unwrap().insert(name.clone(), BuiltLValue::AllocaVariable(variable.clone()));
 				BuiltLValue::AllocaVariable(variable)
 			}
-			// TODO
-			_ => return Err((Error::FeatureNotYetImplemented("building feature".into()), self.start)),
+			AstNodeVariant::Constant(..) => return Err((Error::InvalidLValue, self.start)),
+			AstNodeVariant::String(..) => return Err((Error::InvalidLValue, self.start)),
+			AstNodeVariant::FunctionCall(..) => return Err((Error::InvalidLValue, self.start)),
+			AstNodeVariant::FunctionDefinition(..) => return Err((Error::InvalidLValue, self.start)),
+			AstNodeVariant::Metadata(metadata, _) => match metadata {
+				Metadata::Link => return Err((Error::InvalidLValue, self.start)),
+				Metadata::EntryPoint => return Err((Error::InvalidLValue, self.start)),
+			},
+			AstNodeVariant::Block(..) => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), self.start)),
+			AstNodeVariant::Operator(..) => return Err((Error::FeatureNotYetImplemented("L-value operators".into()), self.start)),
 		})
 	}
 
