@@ -26,8 +26,8 @@ impl<'a> Type<'a> {
 			panic!("Too many parameters");
 		}
 		// TODO: See what types this is valid for
-		if !self.is_normal() {
-			panic!("Invalid parameter type");
+		if !self.is_normal() && self.type_kind() != LLVMTypeKind::LLVMVoidTypeKind {
+			panic!("Invalid parameter type {:?}", self);
 		}
 		for parameter_type in parameter_types {
 			if !parameter_type.is_normal(){
@@ -65,8 +65,13 @@ impl<'a> Type<'a> {
 		!matches!(
 			self.type_kind(),
 			LLVMTypeKind::LLVMFunctionTypeKind | LLVMTypeKind::LLVMLabelTypeKind | LLVMTypeKind::LLVMMetadataTypeKind |
-			LLVMTypeKind::LLVMTargetExtTypeKind |LLVMTypeKind::LLVMTokenTypeKind,
+			LLVMTypeKind::LLVMTargetExtTypeKind | LLVMTypeKind::LLVMTokenTypeKind | LLVMTypeKind::LLVMVoidTypeKind,
 		)
+	}
+
+	#[inline]
+	pub fn is_void(self) -> bool {
+		self.type_kind() == LLVMTypeKind::LLVMVoidTypeKind
 	}
 
 	#[inline]

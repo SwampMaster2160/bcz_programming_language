@@ -52,6 +52,7 @@ pub enum Error {
 	InvalidArchitectureBitWidth(u128),
 	UnableToEmitObjectFile(String),
 	InvalidLValue,
+	VoidParameter,
 }
 
 impl Display for Error {
@@ -107,6 +108,7 @@ impl Display for Error {
 			Error::CouldNotGetTarget(error) => write!(f, "Could not get target: {error}"),
 			Error::InvalidArchitectureBitWidth(width) => write!(f, "Unsupported architecture, bit width of {width}, greater than 64"),
 			Error::InvalidLValue => write!(f, "Invalid l-value"),
+			Error::VoidParameter => write!(f, "Void parameter"),
 		}
 	}
 }

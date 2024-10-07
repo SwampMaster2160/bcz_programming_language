@@ -404,9 +404,13 @@ impl AstNode {
 				let mut wrapped_function_parameter_types = Vec::with_capacity(parameters.len());
 				for parameter in parameters.iter() {
 					let (parameter_type, _) = parameter.type_from_width(main_data)?;
+					if parameter_type.is_void() {
+						return Err((Error::VoidParameter, parameter.start));
+					}
 					wrapped_function_parameter_types.push(parameter_type);
 				}
 				let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
+				let wrapped_function_return_type_is_void = wrapped_function_return_type.is_void();
 				let wrapped_function_type = wrapped_function_return_type
 					.function_type(wrapped_function_parameter_types.as_slice(), false);
 				// Link to wrapped function
@@ -432,16 +436,21 @@ impl AstNode {
 				// Call wrapped function
 				let call_result = wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name);
 				// Build return
-				let call_result_converted = match main_data.int_bit_width
-					.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
-					Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
-					Ordering::Equal => call_result,
-					Ordering::Greater => match wrapped_function_return_type_is_signed {
-						false => call_result.build_zero_extend(llvm_builder, main_data.int_type, "zero_extend_temp"),
-						true => call_result.build_sign_extend(llvm_builder, main_data.int_type, "sign_extend_temp"),
-					}
-				};
-				call_result_converted.build_return(llvm_builder);
+				if wrapped_function_return_type_is_void {
+					llvm_builder.build_return_void();
+				}
+				else {
+					let call_result_converted = match main_data.int_bit_width
+						.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+						Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
+						Ordering::Equal => call_result,
+						Ordering::Greater => match wrapped_function_return_type_is_signed {
+							false => call_result.build_zero_extend(llvm_builder, main_data.int_type, "zero_extend_temp"),
+							true => call_result.build_sign_extend(llvm_builder, main_data.int_type, "sign_extend_temp"),
+						}
+					};
+					call_result_converted.build_return(llvm_builder);
+				}
 			}
 		}
 		// Return
@@ -713,7 +722,7 @@ impl AstNode {
 					true => (*value ^ main_data.int_max_value).wrapping_add(1),
 				};
 				(match byte_width {
-					// TODO: 0 for void
+					0 => main_data.llvm_context.void_type(),
 					1 => main_data.llvm_context.int_8_type(),
 					2 => main_data.llvm_context.int_16_type(),
 					4 => main_data.llvm_context.int_32_type(),
