@@ -796,7 +796,8 @@ impl AstNode {
 							let new_value = ((value ^ main_data.int_max_value).wrapping_add(1)) & main_data.int_max_value;
 							*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
 						}
-						Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply => {
+						Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
+						Operation::UnsignedDivide | Operation::UnsignedModulo/* | Operation::SignedDivide | Operation::SignedTruncatedModulo*/ => {
 							if let (
 								AstNode { variant: AstNodeVariant::Constant(left_value), .. },
 								AstNode { variant: AstNodeVariant::Constant(right_value), .. }
@@ -805,6 +806,10 @@ impl AstNode {
 									Operation::IntegerAdd => left_value.wrapping_add(*right_value) & main_data.int_max_value,
 									Operation::IntegerSubtract => left_value.wrapping_sub(*right_value) & main_data.int_max_value,
 									Operation::IntegerMultiply => left_value.wrapping_mul(*right_value) & main_data.int_max_value,
+									Operation::UnsignedDivide => left_value.checked_div(*right_value)
+										.ok_or_else(|| (Error::DivisionByZero, *start))? & main_data.int_max_value,
+									Operation::UnsignedModulo => left_value.checked_rem(*right_value)
+									.ok_or_else(|| (Error::ModuloByZero, *start))? & main_data.int_max_value,
 									_ => unreachable!(),
 								};
 								*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };

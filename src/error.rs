@@ -53,6 +53,8 @@ pub enum Error {
 	UnableToEmitObjectFile(String),
 	InvalidLValue,
 	VoidParameter,
+	DivisionByZero,
+	ModuloByZero,
 }
 
 impl Display for Error {
@@ -109,6 +111,8 @@ impl Display for Error {
 			Error::InvalidArchitectureBitWidth(width) => write!(f, "Unsupported architecture, bit width of {width}, greater than 64"),
 			Error::InvalidLValue => write!(f, "Invalid l-value"),
 			Error::VoidParameter => write!(f, "Void parameter"),
+			Error::DivisionByZero => write!(f, "Division by zero"),
+			Error::ModuloByZero => write!(f, "Modulo by zero"),
 		}
 	}
 }
