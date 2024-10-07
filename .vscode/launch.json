@@ -19,7 +19,7 @@
 					"kind": "bin"
 				}
 			},
-			"args": ["-h", "main.bcz", "--print-tokens", "--print-ast-nodes", "--print-after-analyzer", "--dump-llvm-module", "-o", "exe_out.exe"],
+			"args": ["-h", "main1.bcz", "--print-tokens", "--print-ast-nodes", "--print-after-analyzer", "--dump-llvm-module", "--print-after-const-evaluate", "-o", "exe_out.exe"],
 			"cwd": "${workspaceFolder}"
 		},
 		{

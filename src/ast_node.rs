@@ -759,9 +759,6 @@ impl AstNode {
 		match variant {
 			AstNodeVariant::Operator(operator, operands) => {
 				// Const evaluate operands
-				//for operand in operands.iter_mut() {
-				//	operand.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function)?;
-				//}
 				match operator {
 					Operator::Assignment => {
 						operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true)?;
@@ -792,14 +789,38 @@ impl AstNode {
 						}
 					}
 				}
+				// Const evaluate self
 				match operator {
 					Operator::Normal(operation) => match operation {
 						Operation::IntegerNegate => if let AstNode { variant: AstNodeVariant::Constant(value), .. } = operands[0] {
 							let new_value = ((value ^ main_data.int_max_value).wrapping_add(1)) & main_data.int_max_value;
 							*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
 						}
+						Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply => {
+							if let (
+								AstNode { variant: AstNodeVariant::Constant(left_value), .. },
+								AstNode { variant: AstNodeVariant::Constant(right_value), .. }
+							) = (&operands[0], &operands[1]) {
+								let new_value = match operation {
+									Operation::IntegerAdd => left_value.wrapping_add(*right_value) & main_data.int_max_value,
+									Operation::IntegerSubtract => left_value.wrapping_sub(*right_value) & main_data.int_max_value,
+									Operation::IntegerMultiply => left_value.wrapping_mul(*right_value) & main_data.int_max_value,
+									_ => unreachable!(),
+								};
+								*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+							}
+						}
 						// TODO
 						_ => {}
+					}
+					Operator::Assignment => if let (AstNodeVariant::Identifier(name), AstNodeVariant::Constant(value)) =
+						(&operands[0].variant, &operands[1].variant) {
+						for local_variable_level in local_variables.iter_mut().rev() {
+							if let Some(variable) = local_variable_level.get_mut(name) {
+								*variable = Some(*value);
+								return Ok(());
+							}
+						}
 					}
 					// TODO
 					_ => {}
@@ -833,12 +854,14 @@ impl AstNode {
 				Metadata::Link => child
 					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
 			}
-			AstNodeVariant::Block(sub_expressions, ..) => for sub_expression in sub_expressions {
+			AstNodeVariant::Block(sub_expressions, ..) => {
 				local_variables.push(HashMap::new());
 				if is_l_value {
-					return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), sub_expression.start));
+					return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), *start));
 				}
-				sub_expression.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+				for sub_expression in sub_expressions {
+					sub_expression.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+				}
 				local_variables.pop();
 			}
 			AstNodeVariant::Constant(..) => {}
@@ -850,7 +873,33 @@ impl AstNode {
 			}
 			AstNodeVariant::String(..) => {}
 			// TODO
-			AstNodeVariant::Identifier(..) => {}
+			AstNodeVariant::Identifier(name) => 'a: {
+				if is_l_value {
+					for local_variable_level in local_variables.iter_mut().rev() {
+						if local_variable_level.contains_key(name) {
+							break 'a;
+						}
+					}
+					let top_local_variable_level = local_variables.last_mut().unwrap();
+					top_local_variable_level.insert(name.clone(), None);
+				}
+				else {
+					for local_variable_level in local_variables.iter_mut().rev() {
+						if let Some(value) = local_variable_level.get_mut(name) {
+							if let Some(value) = value {
+								self.variant = AstNodeVariant::Constant(*value);
+							}
+							return Ok(());
+						}
+					}
+					if let Some(value) = const_evaluated_globals.get(name) {
+						if let AstNodeVariant::Constant(value) = value.0.variant {
+							self.variant = AstNodeVariant::Constant(value);
+							return Ok(());
+						}
+					}
+				}
+			}
 		}
 		Ok(())
 	}

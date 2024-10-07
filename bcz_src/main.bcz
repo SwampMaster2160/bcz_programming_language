@@ -24,7 +24,7 @@ aFn = (a, b) {
 BOOL = -4;
 DWORD = 4;
 
-Beep = @link (4, 4) -4;
+Beep = @link (DWORD, DWORD) BOOL;
 GetStdHandle = @link (4) 8;
 FillConsoleOutputCharacterA = @link (8, 1, 4, 4, 8) -4;
 SetConsoleScreenBufferSize = @link (8, 2, 2) -4;

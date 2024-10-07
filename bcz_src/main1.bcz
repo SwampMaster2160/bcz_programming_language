@@ -1,5 +1,4 @@
-@entry_point main = () {
-	beep(100, 1000);
+main = @entry_point () {
 	a = 1 + 2 + 3;
 	a * 2
 };
