@@ -46,6 +46,8 @@ pub struct MainData<'a> {
 	llvm_data_layout: &'a TargetData<'a>,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
 	int_type: Type<'a>,
+	/// The 8-bit integer type for the target machine.
+	int_8_type: Type<'a>,
 	/// A C string that contains info about the target machine.
 	llvm_target_triple: String,
 	/// How many bits width the target machine integer is.
@@ -72,7 +74,8 @@ pub struct MainData<'a> {
 
 impl<'a> MainData<'a> {
 	pub fn new(
-		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>, int_type: Type<'a>
+		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>,
+		int_type: Type<'a>, int_8_type: Type<'a>,
 	) -> Self {
 		Self {
 			llvm_context: context,
@@ -100,6 +103,7 @@ impl<'a> MainData<'a> {
 			llvm_target_triple: String::default(),
 			llvm_target_machine: target_machine,
 			object_files_to_link: Vec::new(),
+			int_8_type,
 		}
 	}
 }
@@ -139,7 +143,8 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
 	let int_type = llvm_data_layout.int_ptr_type(&context);
-	let mut main_data = MainData::new(compiler_arguments_data, &context, &llvm_target_machine, &llvm_data_layout, int_type);
+	let int_8_type = context.int_8_type();
+	let mut main_data = MainData::new(compiler_arguments_data, &context, &llvm_target_machine, &llvm_data_layout, int_type, int_8_type);
 	// Get info about machine being compiled for
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {

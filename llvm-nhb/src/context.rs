@@ -1,5 +1,8 @@
 use std::ffi::CString;
 
+use crate::llvm_c::{LLVMBool, LLVMConstStringInContext};
+use crate::value::Value;
+
 use super::{builder::Builder, types::Type, module::Module, traits::WrappedReference};
 use super::llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext};
 use super::llvm_c::{LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext};
@@ -86,6 +89,12 @@ impl Context {
 	#[inline]
 	pub fn new_builder<'a>(&'a self) -> Builder<'a, 'a> {
 		unsafe { Builder::from_ref(LLVMCreateBuilderInContext(self.context_ref)) }
+	}
+
+	pub fn const_string<'a>(&'a self, string: &str, do_null_terminate: bool) -> Value<'a, 'a> {
+		unsafe { Value::from_ref(LLVMConstStringInContext(
+			self.context_ref, string.as_ptr() as *const i8, string.len().try_into().unwrap(), !do_null_terminate as LLVMBool,
+		)) }
 	}
 }
 

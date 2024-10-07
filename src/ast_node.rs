@@ -611,7 +611,11 @@ impl AstNode {
 				built_function_call
 			}
 			// TODO
-			AstNodeVariant::String(_text) => return Err((Error::FeatureNotYetImplemented("String literals".into()), self.start)),
+			AstNodeVariant::String(text) => {
+				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
+				string.set_initializer(&main_data.llvm_context.const_string(text, true));
+				string.build_ptr_to_int(llvm_builder, main_data.int_type, "str_ptr_to_int")
+			}
 			// For metadata nodes, we build the child nodes
 			AstNodeVariant::Metadata(metadata, _child) => match metadata {
 				Metadata::EntryPoint => unreachable!(),

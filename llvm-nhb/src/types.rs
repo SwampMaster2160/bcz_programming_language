@@ -1,5 +1,7 @@
 use std::{ffi::{c_uint, CString}, fmt::Debug, iter::repeat, marker::PhantomData, mem::{transmute, MaybeUninit}};
 
+use crate::llvm_c::LLVMArrayType2;
+
 use super::{builder::Builder, context::Context, target_data::TargetData, traits::WrappedReference, value::Value};
 use super::llvm_c::{LLVMBool, LLVMBuildAlloca, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType};
 use super::llvm_c::{LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef};
@@ -42,6 +44,13 @@ impl<'a> Type<'a> {
 				is_variable_argument as LLVMBool,
 			))
 		}
+	}
+
+	pub fn array_type(self, count: usize) -> Self {
+		if !self.is_normal() {
+			panic!("Cannot create an array type of this type: {self:?}");
+		}
+		unsafe { Self::from_ref(LLVMArrayType2(self.type_ref, count.try_into().unwrap())) }
 	}
 
 	/// Create an undefined value of this type.
