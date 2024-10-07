@@ -91,7 +91,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			let mut new_global = global.clone();
 			let mut new_variable_dependencies = variable_dependencies.clone();
 			new_global.const_evaluate(
-				main_data, &globals_and_dependencies_after_const_evaluate, &mut new_variable_dependencies, false
+				main_data, &globals_and_dependencies_after_const_evaluate,
+				&mut new_variable_dependencies, &mut Vec::new(), false, false
 			).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 			// Add to list
 			globals_and_dependencies_after_const_evaluate.insert(name.clone(), (new_global, new_variable_dependencies));

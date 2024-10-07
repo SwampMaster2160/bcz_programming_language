@@ -745,7 +745,9 @@ impl AstNode {
 		main_data: &mut MainData,
 		const_evaluated_globals: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>,
 		variable_dependencies: &mut HashSet<Box<str>>,
-		is_link_function: bool
+		local_variables: &mut Vec<HashMap<Box<str>, Option<u64>>>,
+		is_link_function: bool,
+		is_l_value: bool,
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
@@ -756,8 +758,39 @@ impl AstNode {
 		// Action depends on variant
 		match variant {
 			AstNodeVariant::Operator(operator, operands) => {
-				for operand in operands.iter_mut() {
-					operand.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+				// Const evaluate operands
+				//for operand in operands.iter_mut() {
+				//	operand.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function)?;
+				//}
+				match operator {
+					Operator::Assignment => {
+						operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true)?;
+						operands[1].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+					}
+					Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), *start)),
+					Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), *start)),
+					Operator::Normal(operation) => match operation {
+						Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::FloatAdd | Operation::FloatDivide |
+						Operation::FloatMultiply | Operation::FloatSubtract | Operation::FloatNegate | Operation::FloatTruncatedModulo |
+						Operation::IntegerAdd | Operation::IntegerMultiply | Operation::IntegerNegate | Operation::IntegerSubtract |
+						Operation::LogicalNotShortCircuitAnd | Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitXor |
+						Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitXor |
+						Operation::SignedDivide | Operation::SignedTruncatedModulo | Operation::UnsignedDivide | Operation::UnsignedModulo |
+						Operation::Dereference => {
+							for operand in operands.iter_mut() {
+								operand.const_evaluate(
+									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false
+								)?;
+							}
+						}
+						Operation::Read | Operation::TakeReference => {
+							for operand in operands.iter_mut() {
+								operand.const_evaluate(
+									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true
+								)?;
+							}
+						}
+					}
 				}
 				match operator {
 					Operator::Normal(operation) => match operation {
@@ -773,25 +806,46 @@ impl AstNode {
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
-				body.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, false)?;
+				let mut inner_local_variables = vec![HashMap::new()];
+				if !is_link_function {
+					for parameter in parameters.iter() {
+						let name = match &parameter.variant {
+							AstNodeVariant::Identifier(name) => name,
+							_ => return Err((Error::ExpectedIdentifier, parameter.start)),
+						}.clone();
+						inner_local_variables[0].insert(name, None);
+					}
+				}
+				body.const_evaluate(
+					main_data, const_evaluated_globals, variable_dependencies, &mut inner_local_variables, false, false
+				)?;
 				if is_link_function {
 					for parameter in parameters {
-						parameter.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, false)?;
+						parameter.const_evaluate(
+							main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
+						)?;
 					}
 				}
 			}
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => child.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?,
-				Metadata::Link => child.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, true)?,
+				Metadata::EntryPoint => child
+					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
+				Metadata::Link => child
+					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
 			}
 			AstNodeVariant::Block(sub_expressions, ..) => for sub_expression in sub_expressions {
-				sub_expression.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+				local_variables.push(HashMap::new());
+				if is_l_value {
+					return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), sub_expression.start));
+				}
+				sub_expression.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+				local_variables.pop();
 			}
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::FunctionCall(function_pointer, arguments) => {
-				function_pointer.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+				function_pointer.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
 				for argument in arguments {
-					argument.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, is_link_function)?;
+					argument.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
 				}
 			}
 			AstNodeVariant::String(..) => {}

@@ -1,3 +1,8 @@
+WORD_BYTES = 8;
+
+Void = 0;
+Ptr = WORD_BYTES;
+
 B = 5;
 
 main = @entry_point () {
@@ -13,6 +18,11 @@ main = @entry_point () {
 aFn = (a, b) {
 	a + b
 };
+
+// user32.dll
+
+BOOL = -4;
+DWORD = 4;
 
 Beep = @link (4, 4) -4;
 GetStdHandle = @link (4) 8;
