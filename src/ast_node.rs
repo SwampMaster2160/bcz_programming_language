@@ -614,12 +614,12 @@ impl AstNode {
 	/// Build an l-value into LLVM IR code and return the built l-value.
 	pub fn build_l_value<'a>(
 		&'a self,
-		main_data: &MainData<'a>,
-		_file_build_data: &mut FileBuildData,
-		_llvm_module: &Module,
+		main_data: &'a MainData<'a>,
+		file_build_data: &mut FileBuildData<'a, 'a>,
+		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
 		local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
-		_basic_block: Option<&BasicBlock>
+		basic_block: Option<&BasicBlock>
 	) -> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
@@ -651,7 +651,20 @@ impl AstNode {
 				Metadata::EntryPoint => return Err((Error::InvalidLValue, self.start)),
 			},
 			AstNodeVariant::Block(..) => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), self.start)),
-			AstNodeVariant::Operator(..) => return Err((Error::FeatureNotYetImplemented("L-value operators".into()), self.start)),
+			AstNodeVariant::Operator(operator, operands) => match operator {
+				Operator::Assignment => return Err((Error::FeatureNotYetImplemented("L-value assignments".into()), self.start)),
+				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("L-value agumented assignments".into()), self.start)),
+				Operator::LValueAssignment => return Err((Error::InvalidLValue, self.start)),
+				Operator::Normal(operation) => match operation {
+					Operation::Dereference => {
+						let pointer = operands[0]
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?
+							.build_int_to_ptr(llvm_builder, main_data.int_type, "int_to_ptr_for_deref");
+						BuiltLValue::DereferencedPointer(pointer)
+					}
+					_ => return Err((Error::FeatureNotYetImplemented("L-value operator".into()), self.start)),
+				}
+			}
 		})
 	}
 

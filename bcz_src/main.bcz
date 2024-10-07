@@ -1,9 +1,11 @@
 B = 5;
 
 main = @entry_point () {
-	z = 0;
+	handle = GetStdHandle(-11);
+	number_of_chars_written = 0;
+	FillConsoleOutputCharacterA(handle, 'a', 10, 4 + 2 * 0x10000, &number_of_chars_written);
 	Beep(500, 1000);
-	a = 2 + B + {&z};
+	a = 2 + B;
 	420 + aFn(a, 2)
 };
 
@@ -13,5 +15,5 @@ aFn = (a, b) {
 
 Beep = @link (4, 4) -4;
 GetStdHandle = @link (4) 8;
-FillConsoleOutputCharacterA = @link (8, 1, 4, 2, 2, 8) -4;
+FillConsoleOutputCharacterA = @link (8, 1, 4, 4, 8) -4;
 SetConsoleScreenBufferSize = @link (8, 2, 2) -4;
