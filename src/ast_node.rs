@@ -808,29 +808,14 @@ impl AstNode {
 							*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
 						}
 						// If we have a binary operator with constant operands
-						Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
-						Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
-						Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor => {
+						Operation::UnsignedModulo | Operation::SignedTruncatedModulo => {
 							if let (
 								AstNode { variant: AstNodeVariant::Constant(left_value), .. },
 								AstNode { variant: AstNodeVariant::Constant(right_value), .. }
 							) = (&operands[0], &operands[1]) {
 								let new_value = match operation {
-									Operation::IntegerAdd => left_value.wrapping_add(*right_value) & main_data.int_max_value,
-									Operation::IntegerSubtract => left_value.wrapping_sub(*right_value) & main_data.int_max_value,
-									Operation::IntegerMultiply => left_value.wrapping_mul(*right_value) & main_data.int_max_value,
-									Operation::UnsignedDivide => left_value.checked_div(*right_value)
-										.ok_or_else(|| (Error::DivisionByZero, *start))? & main_data.int_max_value,
 									Operation::UnsignedModulo => left_value.checked_rem(*right_value)
-									.ok_or_else(|| (Error::ModuloByZero, *start))? & main_data.int_max_value,
-									Operation::SignedDivide => {
-										let left_value = main_data.value_to_signed(*left_value);
-										let right_value = main_data.value_to_signed(*right_value);
-										if right_value == 0 {
-											return Err((Error::DivisionByZero, *start));
-										}
-										main_data.signed_to_value(left_value.wrapping_div(right_value))
-									}
+										.ok_or_else(|| (Error::ModuloByZero, *start))? & main_data.int_max_value,
 									Operation::SignedTruncatedModulo => {
 										let left_value = main_data.value_to_signed(*left_value);
 										let right_value = main_data.value_to_signed(*right_value);
@@ -839,9 +824,6 @@ impl AstNode {
 										}
 										main_data.signed_to_value(left_value.wrapping_rem(right_value))
 									}
-									Operation::BitwiseAnd => left_value & right_value,
-									Operation::BitwiseOr => left_value | right_value,
-									Operation::BitwiseXor => left_value ^ right_value,
 									_ => unreachable!(),
 								};
 								*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
@@ -857,6 +839,168 @@ impl AstNode {
 							if let AstNode { variant: AstNodeVariant::Identifier(name), .. } = &mut operands[0] {
 								*self = AstNode { variant: AstNodeVariant::Identifier(take(name)), start: *start, end: *end };
 								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+							}
+						}
+						// x & MAX = x
+						Operation::BitwiseAnd => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == main_data.int_max_value {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+									let new_value = left_value & right_value & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == main_data.int_max_value {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						// x | 0 = x
+						Operation::BitwiseOr => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == 0 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+									let new_value = (left_value | right_value) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						// x ^ 0 = x
+						// x ^ MAX = !x
+						Operation::BitwiseXor => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == 0 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+								else if left_value == main_data.int_max_value {
+									if let AstNodeVariant::Operator(operator, operands) = &mut self.variant {
+										*operator = Operator::Normal(Operation::BitwiseNot);
+										*operands = Box::new([operands[1].clone()]);
+										self.const_evaluate(
+											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value
+										)?;
+									}
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+									let new_value = (left_value ^ right_value) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+								else if right_value == main_data.int_max_value {
+									if let AstNodeVariant::Operator(operator, operands) = &mut self.variant {
+										*operator = Operator::Normal(Operation::BitwiseNot);
+										*operands = Box::new([operands[0].clone()]);
+										self.const_evaluate(
+											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value
+										)?;
+									}
+								}
+							}
+						}
+						// x + 0 = x
+						Operation::IntegerAdd => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == 0 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+									let new_value = left_value.wrapping_add(right_value) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						// x - 0 = x
+						// 0 - x = -x
+						Operation::IntegerSubtract => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == 0 {
+									if let AstNodeVariant::Operator(operator, operands) = &mut self.variant {
+										*operator = Operator::Normal(Operation::IntegerNegate);
+										*operands = Box::new([operands[1].clone()]);
+										self.const_evaluate(
+											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value
+										)?;
+									}
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+									let new_value = left_value.wrapping_sub(right_value) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						// x * 1 = x
+						Operation::IntegerMultiply => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == 1 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+									let new_value = left_value.wrapping_mul(right_value) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 1 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						// x / 1 = x
+						// x / 0 = Error
+						Operation::UnsignedDivide => {
+							if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[0] {
+								if right_value == 1 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+								else if right_value == 0 {
+									return Err((Error::DivisionByZero, *start));
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[1] {
+									let new_value = left_value.wrapping_div(right_value) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
+							}
+						}
+						// x / 1 = x
+						// x / 0 = Error
+						Operation::SignedDivide => {
+							if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[0] {
+								if right_value == 1 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+								else if right_value == 0 {
+									return Err((Error::DivisionByZero, *start));
+								}
+								else if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[1] {
+									let left_value = main_data.value_to_signed(left_value);
+									let right_value = main_data.value_to_signed(right_value);
+									let new_value = main_data.signed_to_value(left_value.wrapping_div(right_value)) & main_data.int_max_value;
+									*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
+								}
 							}
 						}
 						// true & x = x
