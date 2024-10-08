@@ -859,6 +859,8 @@ impl AstNode {
 								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
 							}
 						}
+						// true & x = x
+						// false & x = false
 						Operation::LogicalShortCircuitAnd => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value != 0 {
@@ -874,6 +876,8 @@ impl AstNode {
 								}
 							}
 						}
+						// false | x = x
+						// true | x = true
 						Operation::LogicalShortCircuitOr => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value == 0 {
@@ -889,6 +893,7 @@ impl AstNode {
 								}
 							}
 						}
+						// true & x = x
 						Operation::LogicalNotShortCircuitAnd => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value != 0 {
@@ -901,6 +906,7 @@ impl AstNode {
 								}
 							}
 						}
+						// false | x = x
 						Operation::LogicalNotShortCircuitOr => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value == 0 {
@@ -913,6 +919,8 @@ impl AstNode {
 								}
 							}
 						}
+						// false ^ x = x
+						// true ^ x = !x
 						Operation::LogicalXor => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value == 0 {
@@ -926,6 +934,7 @@ impl AstNode {
 										}
 										_ => unreachable!(),
 									}
+									self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
 								}
 							}
 							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
@@ -940,8 +949,9 @@ impl AstNode {
 										}
 										_ => unreachable!(),
 									}
+									self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
 								}
-								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+								
 							}
 						}
 						// TODO
