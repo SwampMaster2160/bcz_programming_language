@@ -65,10 +65,9 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::Xor, OperatorType::FloatingPointBitwise) => Some(Operation::BitwiseXor),
 		(OperatorSymbol::AndTakeRefrence, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNotShortCircuitAnd),
 		(OperatorSymbol::Or, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNotShortCircuitOr),
-		(OperatorSymbol::Xor, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNotShortCircuitXor),
+		(OperatorSymbol::Xor, OperatorType::UnsignedLogicalNotShortCircuit | OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalXor),
 		(OperatorSymbol::AndTakeRefrence, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitAnd),
 		(OperatorSymbol::Or, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitOr),
-		(OperatorSymbol::Xor, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitXor),
 		_ => None,
 	}
 }

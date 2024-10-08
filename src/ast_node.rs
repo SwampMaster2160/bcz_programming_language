@@ -30,10 +30,9 @@ pub enum Operation {
 	BitwiseNot,
 	LogicalNotShortCircuitAnd,
 	LogicalNotShortCircuitOr,
-	LogicalNotShortCircuitXor,
 	LogicalShortCircuitAnd,
 	LogicalShortCircuitOr,
-	LogicalShortCircuitXor,
+	LogicalXor,
 	LogicalNot,
 }
 
@@ -299,8 +298,7 @@ impl AstNode {
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
-					Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitXor | Operation::LogicalShortCircuitAnd |
-					Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitXor => {
+					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
 						operands[0]
 							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 						operands[1]
@@ -318,8 +316,8 @@ impl AstNode {
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
-					Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitXor | Operation::LogicalShortCircuitAnd |
-					Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitXor | Operation::TakeReference | Operation::BitwiseNot |
+					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd |
+					Operation::LogicalShortCircuitOr | Operation::TakeReference | Operation::BitwiseNot |
 					Operation::LogicalNot
 						 => for operand in operands {
 						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
@@ -777,8 +775,8 @@ impl AstNode {
 						Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::FloatAdd | Operation::FloatDivide |
 						Operation::FloatMultiply | Operation::FloatSubtract | Operation::FloatNegate | Operation::FloatTruncatedModulo |
 						Operation::IntegerAdd | Operation::IntegerMultiply | Operation::IntegerNegate | Operation::IntegerSubtract |
-						Operation::LogicalNotShortCircuitAnd | Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitXor |
-						Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitXor |
+						Operation::LogicalNotShortCircuitAnd | Operation::LogicalNotShortCircuitOr | Operation::LogicalXor |
+						Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr |
 						Operation::SignedDivide | Operation::SignedTruncatedModulo | Operation::UnsignedDivide | Operation::UnsignedModulo |
 						Operation::Dereference | Operation::BitwiseNot | Operation::LogicalNot => {
 							for operand in operands.iter_mut() {
@@ -799,6 +797,7 @@ impl AstNode {
 				// Const evaluate self
 				match operator {
 					Operator::Normal(operation) => match operation {
+						// If we have a unary operator or a constant
 						Operation::IntegerNegate | Operation::BitwiseNot | Operation::LogicalNot
 						=> if let AstNode { variant: AstNodeVariant::Constant(value), .. } = operands[0] {
 							let new_value = match operation {
@@ -808,10 +807,10 @@ impl AstNode {
 							};
 							*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
 						}
+						// If we have a binary operator with constant operands
 						Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
 						Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
-						Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor |
-						Operation::LogicalNotShortCircuitOr | Operation::LogicalNotShortCircuitAnd | Operation::LogicalNotShortCircuitXor => {
+						Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor => {
 							if let (
 								AstNode { variant: AstNodeVariant::Constant(left_value), .. },
 								AstNode { variant: AstNodeVariant::Constant(right_value), .. }
@@ -841,15 +840,14 @@ impl AstNode {
 										main_data.signed_to_value(left_value.wrapping_rem(right_value))
 									}
 									Operation::BitwiseAnd => left_value & right_value,
-									Operation::BitwiseOr | Operation::LogicalNotShortCircuitOr | Operation::LogicalShortCircuitOr => left_value | right_value,
+									Operation::BitwiseOr => left_value | right_value,
 									Operation::BitwiseXor => left_value ^ right_value,
-									Operation::LogicalNotShortCircuitAnd => (*left_value != 0 && *right_value != 0) as u64,
-									Operation::LogicalNotShortCircuitXor => ((*left_value != 0) != (*right_value != 0)) as u64,
 									_ => unreachable!(),
 								};
 								*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
 							}
 						}
+						// Make sure constant null pointers are not dereferenced
 						Operation::Dereference => {
 							if let AstNode { variant: AstNodeVariant::Constant(0), .. } = operands[0] {
 								return Err((Error::NullPointerDereference, *start));
@@ -869,7 +867,11 @@ impl AstNode {
 								else {
 									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
 								}
-								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value != 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
 							}
 						}
 						Operation::LogicalShortCircuitOr => {
@@ -880,10 +882,38 @@ impl AstNode {
 								else {
 									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
 								}
-								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
 							}
 						}
-						Operation::LogicalShortCircuitXor => {
+						Operation::LogicalNotShortCircuitAnd => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value != 0 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value != 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						Operation::LogicalNotShortCircuitOr => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value == 0 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						Operation::LogicalXor => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value == 0 {
 									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
@@ -893,6 +923,20 @@ impl AstNode {
 										AstNodeVariant::Operator(operator, operands) => {
 											*operator = Operator::Normal(Operation::LogicalNot);
 											*operands = Box::new([operands[1].clone()]);
+										}
+										_ => unreachable!(),
+									}
+								}
+							}
+							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
+								if right_value == 0 {
+									*self = AstNode { variant: operands[0].variant.clone(), start: *start, end: *end };
+								}
+								else {
+									match &mut self.variant {
+										AstNodeVariant::Operator(operator, operands) => {
+											*operator = Operator::Normal(Operation::LogicalNot);
+											*operands = Box::new([operands[0].clone()]);
 										}
 										_ => unreachable!(),
 									}
