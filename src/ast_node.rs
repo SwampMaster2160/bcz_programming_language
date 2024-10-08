@@ -529,6 +529,9 @@ impl AstNode {
 							Operation::BitwiseOr | Operation::LogicalNotShortCircuitOr =>
 								left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
 							Operation::BitwiseXor => left_value.build_bitwise_xor(&right_value, llvm_builder, "bxor_temp"),
+							Operation::LogicalShortCircuitOr => {
+								
+							}
 							_ => unreachable!(),
 						};
 						result
