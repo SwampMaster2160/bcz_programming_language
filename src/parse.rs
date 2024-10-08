@@ -69,7 +69,7 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::AndTakeRefrence, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitAnd),
 		(OperatorSymbol::Or, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitOr),
 		(OperatorSymbol::Xor, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitXor),
-		//_ => None,
+		_ => None,
 	}
 }
 
@@ -80,6 +80,8 @@ const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::AndTakeRefrence, _) => Some(Operation::TakeReference),
 		(OperatorSymbol::SubtractNegate, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::IntegerNegate),
 		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operation::FloatNegate),
+		(OperatorSymbol::Not, OperatorType::FloatingPointBitwise) => Some(Operation::BitwiseNot),
+		(OperatorSymbol::Not, OperatorType::SignedLogicalShortCircuit | OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::LogicalNot),
 		_ => None,
 	}
 }

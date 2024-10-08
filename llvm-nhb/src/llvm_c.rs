@@ -100,6 +100,7 @@ extern "C" {
 	pub fn LLVMBuildStore(B: LLVMBuilderRef, Val: LLVMValueRef, Ptr: LLVMValueRef) -> LLVMValueRef;
 	pub fn LLVMBuildLoad2(B: LLVMBuilderRef, Ty: LLVMTypeRef, PointerVal: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMBuildNeg(B: LLVMBuilderRef, V: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildNot(B: LLVMBuilderRef, V: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	// Target information
 	pub fn LLVMInitializeX86TargetInfo() -> c_void;
 	pub fn LLVMInitializeX86Target() -> c_void;

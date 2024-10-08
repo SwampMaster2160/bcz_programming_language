@@ -55,6 +55,7 @@ pub enum Error {
 	VoidParameter,
 	DivisionByZero,
 	ModuloByZero,
+	NullPointerDereference,
 }
 
 impl Display for Error {
@@ -113,6 +114,7 @@ impl Display for Error {
 			Error::VoidParameter => write!(f, "Void parameter"),
 			Error::DivisionByZero => write!(f, "Division by zero"),
 			Error::ModuloByZero => write!(f, "Modulo by zero"),
+			Error::NullPointerDereference => write!(f, "Null pointer dereference"),
 		}
 	}
 }

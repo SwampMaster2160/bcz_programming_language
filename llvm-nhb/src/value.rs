@@ -1,6 +1,6 @@
 use std::{ffi::{c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
-use crate::llvm_c::{LLVMBuildAnd, LLVMBuildOr, LLVMBuildXor};
+use crate::llvm_c::{LLVMBuildAnd, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -194,6 +194,15 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildNeg(builder.get_ref(), self.value_ref, name.as_ptr())) }
+	}
+
+	pub fn build_bitwise_not(&self, builder: &Builder<'c, 'm>, name: &str) -> Self {
+		let input_type_kind = self.get_type().type_kind();
+		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid input type kind {:?}", input_type_kind);
+		}
+		let name = CString::new(name).unwrap();
+		unsafe { Self::from_ref(LLVMBuildNot(builder.get_ref(), self.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_bitwise_and(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {

@@ -80,6 +80,7 @@ pub enum OperatorSymbol {
 	AndTakeRefrence,
 	Or,
 	Xor,
+	Not,
 }
 
 impl OperatorSymbol {
@@ -93,6 +94,7 @@ impl OperatorSymbol {
 			Self::AndTakeRefrence => "&",
 			Self::Or => "|",
 			Self::Xor => "^",
+			Self::Not => "!",
 		}
 	}
 

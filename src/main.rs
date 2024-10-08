@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, env::args, mem::take, num::NonZeroUsize, path::PathBuf, process::Command};
+use std::{collections::{HashMap, HashSet}, env::args, i64, mem::take, num::NonZeroUsize, path::PathBuf, process::Command};
 
 use compile::compile_file;
 use compiler_arguments::{process_arguments, CompilerArgumentsData};
@@ -104,6 +104,22 @@ impl<'a> MainData<'a> {
 			llvm_target_machine: target_machine,
 			object_files_to_link: Vec::new(),
 			int_8_type,
+		}
+	}
+
+	pub fn value_to_signed(&self, value: u64) -> i64 {
+		let sign_bit = (value & self.sign_bit_mask) != 0;
+		(value & (self.int_max_value >> 1)) as i64 | match sign_bit {
+			true => i64::MIN,
+			false => 0,
+		}
+	}
+
+	pub fn signed_to_value(&self, signed: i64) -> u64 {
+		let sign_bit = (signed & i64::MIN) != 0;
+		(signed as u64 & (self.int_max_value >> 1)) | match sign_bit {
+			true => self.sign_bit_mask,
+			false => 0,
 		}
 	}
 }
