@@ -514,7 +514,7 @@ impl AstNode {
 				Operator::Normal(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
 					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
-					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor => {
+					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitOr => {
 						let left_value = operands[0]
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let right_value = operands[1]
@@ -528,13 +528,14 @@ impl AstNode {
 							Operation::SignedDivide => left_value.build_signed_div(&right_value, llvm_builder, "sdiv_temp"),
 							Operation::SignedTruncatedModulo => left_value.build_signed_truncated_modulo(&right_value, llvm_builder, "stmod_temp"),
 							Operation::BitwiseAnd => left_value.build_bitwise_and(&right_value, llvm_builder, "band_temp"),
-							Operation::BitwiseOr => left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
+							Operation::BitwiseOr | Operation::LogicalNotShortCircuitOr =>
+								left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
 							Operation::BitwiseXor => left_value.build_bitwise_xor(&right_value, llvm_builder, "bxor_temp"),
 							_ => unreachable!(),
 						};
 						result
 					}
-					Operation::IntegerNegate | Operation::Dereference => {
+					Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
 						let operand = operands[0]
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let result = match operation {
@@ -542,6 +543,7 @@ impl AstNode {
 							Operation::Dereference =>
 								operand.build_int_to_ptr(llvm_builder, main_data.int_type.pointer_to(), "int_to_ptr_for_deref")
 									.build_load(main_data.int_type, llvm_builder, "load_for_deref"),
+							Operation::BitwiseNot => operand.build_bitwise_not(llvm_builder, "bnot_temp"),
 							_ => unreachable!()
 						};
 						result
