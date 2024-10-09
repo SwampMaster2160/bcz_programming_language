@@ -60,10 +60,15 @@ pub enum Operator {
 	LValueAssignment,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Metadata {
 	EntryPoint,
 	Link,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum BuiltInFunctionCall {
+	Write,
 }
 
 #[derive(Debug, EnumDiscriminants, Clone)]
@@ -78,6 +83,8 @@ pub enum AstNodeVariant {
 	Block(Box<[AstNode]>, bool),
 	/// A function pointer to call and the arguments passed in.
 	FunctionCall(Box<AstNode>, Box<[AstNode]>),
+	/// A built in function to call and the arguments passed in.
+	BuiltInFunctionCall(BuiltInFunctionCall, Box<[AstNode]>),
 	/// A list of parameters for a function definition and the function body.
 	FunctionDefinition(Box<[AstNode]>, Box<AstNode>),
 	/// A string literal.
@@ -102,14 +109,15 @@ impl AstNode {
 		}
 		print!("{} {}:{} to {}:{} {:?}", '{', self.start.0, self.start.1, self.end.0, self.end.1, AstNodeVariantDiscriminants::from(&self.variant));
 		match &self.variant {
-			AstNodeVariant::Block(_, result_is_undefined) => print!(", result_is_undefined: {:?}", result_is_undefined),
-			AstNodeVariant::Constant(value) => print!(", value: {}", value),
+			AstNodeVariant::Block(_, result_is_undefined) => print!(", result_is_undefined: {result_is_undefined:?}"),
+			AstNodeVariant::Constant(value) => print!(", value: {value}"),
 			AstNodeVariant::FunctionCall(_, _) => {},
+			AstNodeVariant::BuiltInFunctionCall(function, _) => print!(", function: {function:?}"),
 			AstNodeVariant::FunctionDefinition(_, _) => {},
 			AstNodeVariant::Identifier(name) => print!(", name: {name}"),
 			AstNodeVariant::String(string_value) => print!(", string_value: {string_value:?}"),
-			AstNodeVariant::Operator(operator, _) => print!(", operator: {:?}", operator),
-			AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {:?}", metadata),
+			AstNodeVariant::Operator(operator, _) => print!(", operator: {operator:?}"),
+			AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {metadata:?}"),
 		}
 		println!(" {}", '}');
 		match &self.variant {
@@ -118,6 +126,11 @@ impl AstNode {
 			}
 			AstNodeVariant::FunctionCall(function, arguments) => {
 				function.print_tree(level + 1);
+				for argument in arguments {
+					argument.print_tree(level + 1);
+				}
+			},
+			AstNodeVariant::BuiltInFunctionCall(_, arguments) => {
 				for argument in arguments {
 					argument.print_tree(level + 1);
 				}
@@ -186,6 +199,7 @@ impl AstNode {
 			AstNodeVariant::FunctionCall(..) => if will_be_discarded {
 				return Err((Error::DiscardedGlobalFunctionCall, start));
 			}
+			AstNodeVariant::BuiltInFunctionCall(..) => {}
 			AstNodeVariant::Block(children, is_result_undefined) => {
 				if *is_result_undefined && children.is_empty() {
 					return Ok(());
@@ -252,8 +266,17 @@ impl AstNode {
 					.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false)?;
 				for argument in arguments {
 					argument.get_variable_dependencies(
-						variable_dependencies, import_dependencies, &mut local_variables.clone(), false, false
+						variable_dependencies, import_dependencies, local_variables, false, false
 					)?;
+				}
+			}
+			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
+				match function {
+					BuiltInFunctionCall::Write => for argument in arguments {
+						argument.get_variable_dependencies(
+							variable_dependencies, import_dependencies, local_variables, false, false
+						)?;
+					}
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
@@ -273,7 +296,9 @@ impl AstNode {
 								_ => return Err((Error::ExpectedIdentifier, parameter.start)),
 							}
 						}
-						body.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables, false, false)?;
+						body.get_variable_dependencies(
+							variable_dependencies, import_dependencies, &mut local_variables, false, false
+						)?;
 					}
 					// For a link-function, we search the function parameters and body
 					true => {
@@ -693,6 +718,44 @@ impl AstNode {
 					.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp");
 				built_function_call
 			}
+			// For a built in function, building depends on the function
+			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
+				match function {
+					BuiltInFunctionCall::Write => {
+						// Get arguments
+						let (address_to_write_to, (write_type, is_signed), value_to_write) = match arguments.len() {
+							2 => {
+								(&arguments[0], (main_data.int_type, false), &arguments[1])
+							}
+							3 => (&arguments[0], *(&arguments[1].type_from_width(main_data)?), &arguments[2]),
+							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+						};
+						if write_type.is_void() {
+							return Err((Error::VoidParameter, self.start))
+						}
+						let write_type_ptr = write_type.pointer_to();
+						// Build arguments
+						let address_to_write_to_built = address_to_write_to
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?
+							.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
+						let value_to_write_built = value_to_write
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+						let value_to_write_built_cast = match main_data.int_bit_width
+							.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+							Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
+							Ordering::Equal => value_to_write_built.clone(),
+							Ordering::Less => match is_signed {
+								false => value_to_write_built.clone().build_zero_extend(llvm_builder, write_type, "zero_extend_temp"),
+								true => value_to_write_built.clone().build_sign_extend(llvm_builder, write_type, "sign_extend_temp"),
+							}
+						};
+						// Build write
+						address_to_write_to_built.build_store(&value_to_write_built_cast, llvm_builder);
+						// Expression yeilds the written value
+						value_to_write_built
+					}
+				}
+			}
 			// TODO
 			AstNodeVariant::String(text) => {
 				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
@@ -759,6 +822,11 @@ impl AstNode {
 						BuiltLValue::DereferencedPointer(pointer)
 					}
 					_ => return Err((Error::FeatureNotYetImplemented("L-value operator".into()), self.start)),
+				}
+			}
+			AstNodeVariant::BuiltInFunctionCall(function, _arguments) => {
+				match function {
+					BuiltInFunctionCall::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
 				}
 			}
 		})
@@ -844,8 +912,10 @@ impl AstNode {
 				// Const evaluate operands
 				match operator {
 					Operator::Assignment => {
-						operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true)?;
-						operands[1].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+						operands[0]
+							.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true)?;
+						operands[1]
+							.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
 					}
 					Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), *start)),
 					Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), *start)),
@@ -1260,15 +1330,29 @@ impl AstNode {
 					return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), *start));
 				}
 				for sub_expression in sub_expressions {
-					sub_expression.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+					sub_expression
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
 				}
 				local_variables.pop();
 			}
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::FunctionCall(function_pointer, arguments) => {
-				function_pointer.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+				function_pointer
+					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
 				for argument in arguments {
-					argument.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+					argument
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
+				}
+			}
+			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
+				match function {
+					BuiltInFunctionCall::Write => {
+						for argument in arguments {
+							argument.const_evaluate(
+								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
+							)?;
+						}
+					}
 				}
 			}
 			AstNodeVariant::String(..) => {}

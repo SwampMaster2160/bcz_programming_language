@@ -2,7 +2,7 @@ use std::{mem::take, num::NonZeroUsize};
 
 use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{AstNode, AstNodeVariant, Metadata, Operation, Operator}, error::Error};
+use crate::{ast_node::{AstNode, AstNodeVariant, BuiltInFunctionCall, Metadata, Operation, Operator}, error::Error};
 use crate::token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant};
 
 #[derive(Debug)]
@@ -231,36 +231,68 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	}
 	// Parse function calls
 	let mut index = 1;
-	while index < items_being_parsed.len() {
+	'w: while index < items_being_parsed.len() {
 		// Make sure the item is a function arguments/parameters item
 		if let ParseState::FunctionArgumentsOrParameters(_, arguments_start, arguments_end) = &items_being_parsed[index] {
 			let (_, arguments_end) = (*arguments_start, *arguments_end);
 			// Make sure the item to the left is not a parsed expression
-			if matches!(&items_being_parsed[index - 1], ParseState::AstNode(..)) {
-				// Get function pointer
-				let function_pointer = items_being_parsed.remove(index - 1);
-				let function_pointer = match function_pointer {
-					ParseState::AstNode(ast_node) => ast_node,
-					_ => {
-						index += 1;
-						continue;
-					}
-				};
-				// Get function parameters
-				let parameters = match &mut items_being_parsed[index - 1] {
-					ParseState::FunctionArgumentsOrParameters(parameters, _, _) => take(parameters),
-					_ => unreachable!(),
-				};
-				// Construct function call node
-				let operator_ast_node = AstNode {
-					start: function_pointer.start,
-					end: arguments_end,
-					variant: AstNodeVariant::FunctionCall(Box::new(function_pointer), parameters),
-				};
-				// Insert back into list
-				items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
-				index -= 1;
-				continue;
+			match &items_being_parsed[index - 1] {
+				ParseState::AstNode(..) => {
+					// Get function pointer
+					let function_pointer = items_being_parsed.remove(index - 1);
+					let function_pointer = match function_pointer {
+						ParseState::AstNode(ast_node) => ast_node,
+						_ => {
+							index += 1;
+							continue;
+						}
+					};
+					// Get function parameters
+					let parameters = match &mut items_being_parsed[index - 1] {
+						ParseState::FunctionArgumentsOrParameters(parameters, _, _) => take(parameters),
+						_ => unreachable!(),
+					};
+					// Construct function call node
+					let operator_ast_node = AstNode {
+						start: function_pointer.start,
+						end: arguments_end,
+						variant: AstNodeVariant::FunctionCall(Box::new(function_pointer), parameters),
+					};
+					// Insert back into list
+					items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
+					index -= 1;
+					continue;
+				}
+				ParseState::Token(Token { start, end: _, variant: TokenVariant::Keyword(keyword) }) => 'a: {
+					let start = *start;
+					// Get built in function
+					let function = match keyword {
+						Keyword::Write => {
+							match keyword {
+								Keyword::Write => BuiltInFunctionCall::Write,
+								_ => unreachable!(),
+							}
+						}
+						_ => break 'a,
+					};
+					items_being_parsed.remove(index - 1);
+					// Get function parameters
+					let parameters = match &mut items_being_parsed[index - 1] {
+						ParseState::FunctionArgumentsOrParameters(parameters, _, _) => take(parameters),
+						_ => unreachable!(),
+					};
+					// Construct function call node
+					let operator_ast_node = AstNode {
+						start,
+						end: arguments_end,
+						variant: AstNodeVariant::BuiltInFunctionCall(function, parameters),
+					};
+					// Insert back into list
+					items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
+					index -= 1;
+					continue 'w;
+				}
+				_ => {}
 			}
 		};
 		index += 1;
@@ -446,6 +478,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		let metadata = match keyword {
 			Keyword::EntryPoint => Metadata::EntryPoint,
 			Keyword::Link => Metadata::Link,
+			Keyword::Write => continue,
 		};
 		// Take child node
 		let child_node = match items_being_parsed.remove(index + 1) {

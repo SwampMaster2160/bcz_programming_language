@@ -52,6 +52,7 @@ impl Separator {
 pub enum Keyword {
 	EntryPoint,
 	Link,
+	Write,
 }
 
 impl Keyword {
@@ -59,6 +60,7 @@ impl Keyword {
 		match self {
 			Self::EntryPoint => "entry_point",
 			Self::Link => "link",
+			Self::Write => "write",
 		}
 	}
 

@@ -56,6 +56,7 @@ pub enum Error {
 	DivisionByZero,
 	ModuloByZero,
 	NullPointerDereference,
+	InvalidBuiltInFunctionArgumentCount,
 }
 
 impl Display for Error {
@@ -115,6 +116,7 @@ impl Display for Error {
 			Error::DivisionByZero => write!(f, "Division by zero"),
 			Error::ModuloByZero => write!(f, "Modulo by zero"),
 			Error::NullPointerDereference => write!(f, "Null pointer dereference"),
+			Error::InvalidBuiltInFunctionArgumentCount => write!(f, "Invalid built-in function argument count"),
 		}
 	}
 }
