@@ -34,6 +34,22 @@ pub enum Operation {
 	LogicalShortCircuitOr,
 	LogicalXor,
 	LogicalNot,
+	IntegerEqualTo,
+	IntegerNotEqualTo,
+	UnsignedLessThan,
+	UnsignedLessThanOrEqualTo,
+	UnsignedGreaterThan,
+	UnsignedGreaterThanOrEqualTo,
+	SignedLessThan,
+	SignedLessThanOrEqualTo,
+	SignedGreaterThan,
+	SignedGreaterThanOrEqualTo,
+	FloatEqualTo,
+	FloatNotEqualTo,
+	FloatLessThan,
+	FloatLessThanOrEqualTo,
+	FloatGreaterThan,
+	FloatGreaterThanOrEqualTo,
 }
 
 #[derive(Debug, Clone)]
@@ -298,7 +314,12 @@ impl AstNode {
 					Operation::UnsignedDivide | Operation::UnsignedModulo |
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
-					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
+					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr |
+					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo  | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
+					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
+					Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
+					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
+					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
 						operands[0]
 							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
 						operands[1]
@@ -318,7 +339,12 @@ impl AstNode {
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
 					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd |
 					Operation::LogicalShortCircuitOr | Operation::TakeReference | Operation::BitwiseNot |
-					Operation::LogicalNot
+					Operation::LogicalNot |
+					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo  | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
+					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
+					Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
+					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
+					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan
 						 => for operand in operands {
 						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 					}
@@ -513,7 +539,10 @@ impl AstNode {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
 					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitOr |
-					Operation::LogicalNotShortCircuitAnd | Operation::LogicalXor => {
+					Operation::LogicalNotShortCircuitAnd | Operation::LogicalXor |
+					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo |
+					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
+					Operation::SignedLessThanOrEqualTo | Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan => {
 						let left_value = operands[0]
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let right_value = operands[1]
@@ -548,6 +577,36 @@ impl AstNode {
 								left_value_bool.build_bitwise_xor(&right_value_bool, llvm_builder, "bxor_temp")
 									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
 							}
+							Operation::IntegerEqualTo =>
+								left_value.build_compare(&right_value, Comparison::Equal, llvm_builder, "eq_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::IntegerNotEqualTo =>
+								left_value.build_compare(&right_value, Comparison::NotEqual, llvm_builder, "neq_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::UnsignedLessThan =>
+								left_value.build_compare(&right_value, Comparison::UnsignedLessThan, llvm_builder, "ult_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::UnsignedLessThanOrEqualTo =>
+								left_value.build_compare(&right_value, Comparison::UnsignedLessThanOrEqualTo, llvm_builder, "ulteq_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::UnsignedGreaterThan =>
+								left_value.build_compare(&right_value, Comparison::UnsignedGreaterThan, llvm_builder, "ugt_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::UnsignedGreaterThanOrEqualTo =>
+								left_value.build_compare(&right_value, Comparison::UnsignedGreaterThanOrEqualTo, llvm_builder, "ugteq_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::SignedLessThan =>
+								left_value.build_compare(&right_value, Comparison::SignedLessThan, llvm_builder, "slt_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::SignedLessThanOrEqualTo =>
+								left_value.build_compare(&right_value, Comparison::SignedLessThanOrEqualTo, llvm_builder, "slteq_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::SignedGreaterThan =>
+								left_value.build_compare(&right_value, Comparison::SignedGreaterThan, llvm_builder, "sgt_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+							Operation::SignedGreaterThanOrEqualTo =>
+								left_value.build_compare(&right_value, Comparison::SignedGreaterThanOrEqualTo, llvm_builder, "sgteq_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
 							_ => unreachable!(),
 						};
 						result
@@ -797,7 +856,12 @@ impl AstNode {
 						Operation::LogicalNotShortCircuitAnd | Operation::LogicalNotShortCircuitOr | Operation::LogicalXor |
 						Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr |
 						Operation::SignedDivide | Operation::SignedTruncatedModulo | Operation::UnsignedDivide | Operation::UnsignedModulo |
-						Operation::Dereference | Operation::BitwiseNot | Operation::LogicalNot => {
+						Operation::Dereference | Operation::BitwiseNot | Operation::LogicalNot |
+						Operation::IntegerEqualTo | Operation::IntegerNotEqualTo  | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
+						Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
+						Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
+						Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
+						Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
 							for operand in operands.iter_mut() {
 								operand.const_evaluate(
 									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false

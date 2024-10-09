@@ -42,6 +42,11 @@ auto_const_array! {
 	const BINARY_OPERATOR_PRECEDENCE: [&'static [OperatorSymbol]; _] = [
 		&[OperatorSymbol::MultiplyDereference, OperatorSymbol::DivideReciprocal, OperatorSymbol::ModuloPercent],
 		&[OperatorSymbol::AddRead, OperatorSymbol::SubtractNegate],
+		&[OperatorSymbol::LessThan, OperatorSymbol::LessThanOrEqualTo, OperatorSymbol::GreaterThan, OperatorSymbol::GreaterThanOrEqualTo],
+		&[OperatorSymbol::EqualTo, OperatorSymbol::NotEqualTo],
+		&[OperatorSymbol::AndTakeRefrence],
+		&[OperatorSymbol::Xor],
+		&[OperatorSymbol::Or],
 	];
 }
 
@@ -68,7 +73,24 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::Xor, OperatorType::UnsignedLogicalNotShortCircuit | OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalXor),
 		(OperatorSymbol::AndTakeRefrence, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitAnd),
 		(OperatorSymbol::Or, OperatorType::SignedLogicalShortCircuit) => Some(Operation::LogicalShortCircuitOr),
-		_ => None,
+		(OperatorSymbol::EqualTo, OperatorType::UnsignedLogicalNotShortCircuit | OperatorType::SignedLogicalShortCircuit) => Some(Operation::IntegerEqualTo),
+		(OperatorSymbol::NotEqualTo, OperatorType::UnsignedLogicalNotShortCircuit | OperatorType::SignedLogicalShortCircuit) => Some(Operation::IntegerNotEqualTo),
+		(OperatorSymbol::LessThan, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedLessThan),
+		(OperatorSymbol::LessThanOrEqualTo, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedLessThanOrEqualTo),
+		(OperatorSymbol::GreaterThan, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedGreaterThan),
+		(OperatorSymbol::GreaterThanOrEqualTo, OperatorType::UnsignedLogicalNotShortCircuit) => Some(Operation::UnsignedGreaterThanOrEqualTo),
+		(OperatorSymbol::LessThan, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedLessThan),
+		(OperatorSymbol::LessThanOrEqualTo, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedLessThanOrEqualTo),
+		(OperatorSymbol::GreaterThan, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedGreaterThan),
+		(OperatorSymbol::GreaterThanOrEqualTo, OperatorType::SignedLogicalShortCircuit) => Some(Operation::SignedGreaterThanOrEqualTo),
+		(OperatorSymbol::EqualTo, OperatorType::FloatingPointBitwise) => Some(Operation::FloatEqualTo),
+		(OperatorSymbol::NotEqualTo, OperatorType::FloatingPointBitwise) => Some(Operation::FloatNotEqualTo),
+		(OperatorSymbol::LessThan, OperatorType::FloatingPointBitwise) => Some(Operation::FloatLessThan),
+		(OperatorSymbol::LessThanOrEqualTo, OperatorType::FloatingPointBitwise) => Some(Operation::FloatLessThanOrEqualTo),
+		(OperatorSymbol::GreaterThan, OperatorType::FloatingPointBitwise) => Some(Operation::FloatGreaterThan),
+		(OperatorSymbol::GreaterThanOrEqualTo, OperatorType::FloatingPointBitwise) => Some(Operation::FloatGreaterThanOrEqualTo),
+		(OperatorSymbol::Not, _) => None,
+		//_ => None,
 	}
 }
 

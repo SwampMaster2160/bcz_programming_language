@@ -81,6 +81,12 @@ pub enum OperatorSymbol {
 	Or,
 	Xor,
 	Not,
+	EqualTo,
+	NotEqualTo,
+	LessThan,
+	LessThanOrEqualTo,
+	GreaterThan,
+	GreaterThanOrEqualTo,
 }
 
 impl OperatorSymbol {
@@ -95,6 +101,12 @@ impl OperatorSymbol {
 			Self::Or => "|",
 			Self::Xor => "^",
 			Self::Not => "!",
+			Self::EqualTo => "==",
+			Self::NotEqualTo => "!=",
+			Self::LessThan => "<",
+			Self::LessThanOrEqualTo => "<=",
+			Self::GreaterThan => ">",
+			Self::GreaterThanOrEqualTo => ">=",
 		}
 	}
 
