@@ -28,3 +28,17 @@ pub enum RealocMode {
 pub enum CodeModel {
 	Default = 0,
 }
+
+#[repr(C)]
+pub enum Comparison {
+	Equal = 32,
+	NotEqual,
+	UnsignedGreaterThan,
+	UnsignedGreaterThanOrEqualTo,
+	UnsignedLessThan,
+	UnsignedLessThanOrEqualTo,
+	SignedGreaterThan,
+	SignedGreaterThanOrEqualTo,
+	SignedLessThan,
+	SignedLessThanOrEqualTo,
+}

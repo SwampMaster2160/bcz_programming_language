@@ -1,6 +1,6 @@
-use std::{ffi::{c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
+use std::{ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
-use crate::llvm_c::{LLVMBuildAnd, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor};
+use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -97,91 +97,126 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 	}
 
 	pub fn build_add(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildAdd(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_sub(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSub(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_mult(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildMul(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_unsigned_div(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildUDiv(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_signed_div(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSDiv(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_unsigned_modulo(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildURem(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_signed_truncated_modulo(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildSRem(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
@@ -206,42 +241,75 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 	}
 
 	pub fn build_bitwise_and(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildAnd(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_bitwise_or(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildOr(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	pub fn build_bitwise_xor(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {
-		let input_type_kind = self.get_type().type_kind();
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
 		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid LHS input type kind {:?}", input_type_kind);
 		}
-		let rhs_type_kind = self.get_type().type_kind();
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
 		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
 			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
 		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
+		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildXor(builder.get_ref(), self.value_ref, rhs.value_ref, name.as_ptr())) }
+	}
+
+	pub fn build_compare(&self, rhs: &Self, comparison: Comparison, builder: &Builder<'c, 'm>, name: &str) -> Self {
+		let input_type = self.get_type();
+		let input_type_kind = input_type.type_kind();
+		if !matches!(input_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid LHS input type kind {:?}", input_type_kind);
+		}
+		let rhs_type = rhs.get_type();
+		let rhs_type_kind = rhs_type.type_kind();
+		if !matches!(rhs_type_kind, LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid RHS input type kind {:?}", rhs_type_kind);
+		}
+		if input_type != rhs_type {
+			panic!("Type mismatch");
+		}
+		let name = CString::new(name).unwrap();
+		unsafe { Self::from_ref(LLVMBuildICmp(builder.get_ref(), comparison as c_int, self.value_ref, rhs.value_ref, name.as_ptr())) }
 	}
 
 	/// Call a function with `self` as the function value/pointer.

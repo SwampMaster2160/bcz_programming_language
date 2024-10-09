@@ -3,7 +3,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{sw
 use strum_macros::EnumDiscriminants;
 
 use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, MainData};
-use llvm_nhb::{basic_block::BasicBlock, builder::Builder, enums::{CallingConvention, Linkage}, module::Module, types::Type, value::Value};
+use llvm_nhb::{basic_block::BasicBlock, builder::Builder, enums::{CallingConvention, Comparison, Linkage}, module::Module, types::Type, value::Value};
 
 #[derive(Debug, Clone)]
 pub enum Operation {
@@ -512,7 +512,8 @@ impl AstNode {
 				Operator::Normal(operation) => match operation {
 					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
 					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
-					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitOr => {
+					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitOr |
+					Operation::LogicalNotShortCircuitAnd | Operation::LogicalXor => {
 						let left_value = operands[0]
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let right_value = operands[1]
@@ -529,9 +530,24 @@ impl AstNode {
 							Operation::BitwiseOr | Operation::LogicalNotShortCircuitOr =>
 								left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
 							Operation::BitwiseXor => left_value.build_bitwise_xor(&right_value, llvm_builder, "bxor_temp"),
-							//Operation::LogicalShortCircuitOr => {
-							//	
-							//}
+							Operation::LogicalNotShortCircuitAnd => {
+								let zero_const = main_data.int_type.const_int(0, false);
+								let left_value_bool =
+									left_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+								let right_value_bool =
+									right_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+								left_value_bool.build_bitwise_and(&right_value_bool, llvm_builder, "band_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
+							}
+							Operation::LogicalXor => {
+								let zero_const = main_data.int_type.const_int(0, false);
+								let left_value_bool =
+									left_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+								let right_value_bool =
+									right_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+								left_value_bool.build_bitwise_xor(&right_value_bool, llvm_builder, "bxor_temp")
+									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
+							}
 							_ => unreachable!(),
 						};
 						result

@@ -16,6 +16,7 @@ pub type LLVMRelocMode = c_int;
 pub type LLVMCodeModel = c_int;
 pub type LLVMLinkage = c_int;
 pub type LLVMCodeGenFileType = c_int;
+pub type LLVMIntPredicate = c_int;
 
 #[link(name = "C:/Program Files/LLVM/lib/LLVM-C")]
 extern "C" {
@@ -101,6 +102,7 @@ extern "C" {
 	pub fn LLVMBuildLoad2(B: LLVMBuilderRef, Ty: LLVMTypeRef, PointerVal: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMBuildNeg(B: LLVMBuilderRef, V: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMBuildNot(B: LLVMBuilderRef, V: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
+	pub fn LLVMBuildICmp(B: LLVMBuilderRef, Op: LLVMIntPredicate, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	// Target information
 	pub fn LLVMInitializeX86TargetInfo() -> c_void;
 	pub fn LLVMInitializeX86Target() -> c_void;
