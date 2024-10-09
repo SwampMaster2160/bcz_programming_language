@@ -891,7 +891,10 @@ impl AstNode {
 							*self = AstNode { variant: AstNodeVariant::Constant(new_value), start: *start, end: *end };
 						}
 						// If we have a binary operator with constant operands
-						Operation::UnsignedModulo | Operation::SignedTruncatedModulo => {
+						Operation::UnsignedModulo | Operation::SignedTruncatedModulo | Operation::IntegerEqualTo | Operation::IntegerNotEqualTo |
+						Operation::UnsignedLessThan | Operation::UnsignedLessThanOrEqualTo | Operation::UnsignedGreaterThan |
+						Operation::UnsignedGreaterThanOrEqualTo | Operation::SignedLessThan | Operation::SignedLessThanOrEqualTo |
+						Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo => {
 							if let (
 								AstNode { variant: AstNodeVariant::Constant(left_value), .. },
 								AstNode { variant: AstNodeVariant::Constant(right_value), .. }
@@ -906,6 +909,32 @@ impl AstNode {
 											return Err((Error::ModuloByZero, *start));
 										}
 										main_data.signed_to_value(left_value.wrapping_rem(right_value))
+									}
+									Operation::IntegerEqualTo => (left_value == right_value) as u64,
+									Operation::IntegerNotEqualTo => (left_value != right_value) as u64,
+									Operation::UnsignedLessThan => (left_value < right_value) as u64,
+									Operation::UnsignedLessThanOrEqualTo => (left_value <= right_value) as u64,
+									Operation::UnsignedGreaterThan => (left_value > right_value) as u64,
+									Operation::UnsignedGreaterThanOrEqualTo => (left_value >= right_value) as u64,
+									Operation::SignedLessThan => {
+										let left_value = main_data.value_to_signed(*left_value);
+										let right_value = main_data.value_to_signed(*right_value);
+										(left_value < right_value) as u64
+									}
+									Operation::SignedLessThanOrEqualTo => {
+										let left_value = main_data.value_to_signed(*left_value);
+										let right_value = main_data.value_to_signed(*right_value);
+										(left_value <= right_value) as u64
+									}
+									Operation::SignedGreaterThan => {
+										let left_value = main_data.value_to_signed(*left_value);
+										let right_value = main_data.value_to_signed(*right_value);
+										(left_value > right_value) as u64
+									}
+									Operation::SignedGreaterThanOrEqualTo => {
+										let left_value = main_data.value_to_signed(*left_value);
+										let right_value = main_data.value_to_signed(*right_value);
+										(left_value >= right_value) as u64
 									}
 									_ => unreachable!(),
 								};
