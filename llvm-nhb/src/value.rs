@@ -1,6 +1,6 @@
-use std::{ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
+use std::{cmp::Ordering, ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
-use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
+use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}, target_data::TargetData};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -94,6 +94,40 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		}
 		let name = CString::new(name).unwrap();
 		unsafe { Self::from_ref(LLVMBuildTrunc(builder.get_ref(), self.value_ref, dest_type.get_ref(), name.as_ptr())) }
+	}
+
+	pub fn build_unsigned_cast(&self, builder: &Builder<'c, 'm>, target_data: &TargetData<'c>, dest_type: Type<'c>, name: &str) -> Self {
+		let input_type = self.get_type();
+		if !matches!(input_type.type_kind(), LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid input type {self:?}");
+		}
+		let input_bit_width = input_type.size_in_bits(target_data);
+		if !matches!(dest_type.type_kind(), LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid dest type {dest_type:?}");
+		}
+		let dest_bit_width = dest_type.size_in_bits(target_data);
+		match dest_bit_width.cmp(&input_bit_width) {
+			Ordering::Greater => self.build_zero_extend(builder, dest_type, name),
+			Ordering::Equal => self.clone(),
+			Ordering::Less => self.build_truncate(builder, dest_type, name),
+		}
+	}
+
+	pub fn build_signed_cast(&self, builder: &Builder<'c, 'm>, target_data: &TargetData<'c>, dest_type: Type<'c>, name: &str) -> Self {
+		let input_type = self.get_type();
+		if !matches!(input_type.type_kind(), LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid input type {self:?}");
+		}
+		let input_bit_width = input_type.size_in_bits(target_data);
+		if !matches!(dest_type.type_kind(), LLVMTypeKind::LLVMIntegerTypeKind) {
+			panic!("Invalid dest type {dest_type:?}");
+		}
+		let dest_bit_width = dest_type.size_in_bits(target_data);
+		match dest_bit_width.cmp(&input_bit_width) {
+			Ordering::Greater => self.build_sign_extend(builder, dest_type, name),
+			Ordering::Equal => self.clone(),
+			Ordering::Less => self.build_truncate(builder, dest_type, name),
+		}
 	}
 
 	pub fn build_add(&self, rhs: &Self, builder: &Builder<'c, 'm>, name: &str) -> Self {

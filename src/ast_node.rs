@@ -740,14 +740,11 @@ impl AstNode {
 							.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
 						let value_to_write_built = value_to_write
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
-						let value_to_write_built_cast = match main_data.int_bit_width
-							.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
-							Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
-							Ordering::Equal => value_to_write_built.clone(),
-							Ordering::Less => match is_signed {
-								false => value_to_write_built.clone().build_zero_extend(llvm_builder, write_type, "zero_extend_temp"),
-								true => value_to_write_built.clone().build_sign_extend(llvm_builder, write_type, "sign_extend_temp"),
-							}
+						let value_to_write_built_cast = match is_signed {
+							false => value_to_write_built
+								.build_unsigned_cast(llvm_builder, main_data.llvm_data_layout, write_type, "cast_temp"),
+							true => value_to_write_built
+								.build_signed_cast(llvm_builder, main_data.llvm_data_layout, write_type, "cast_temp"),
 						};
 						// Build write
 						address_to_write_to_built.build_store(&value_to_write_built_cast, llvm_builder);
