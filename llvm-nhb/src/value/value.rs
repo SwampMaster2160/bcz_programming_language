@@ -427,7 +427,7 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		unsafe { Self::from_ref(LLVMBuildStore(builder.get_ref(), value_to_store.value_ref, self.value_ref)) }
 	}
 
-	pub fn build_return(&self, builder: &Builder) ->Self {
+	pub fn build_return(&self, builder: &Builder) -> Self {
 		let self_type = self.get_type();
 		if !self_type.is_normal() {
 			panic!("Invalid type of return value: {self_type:?}");
