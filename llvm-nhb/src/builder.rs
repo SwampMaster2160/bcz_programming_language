@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::llvm_c::LLVMBuildRetVoid;
-use crate::value::Value;
+use crate::value::value::Value;
 
 use super::{basic_block::BasicBlock, context::Context, module::Module, traits::WrappedReference};
 use super::llvm_c::{LLVMBuilderRef, LLVMDisposeBuilder, LLVMPositionBuilderAtEnd};

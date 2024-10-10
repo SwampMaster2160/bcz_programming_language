@@ -1,6 +1,7 @@
 use std::{ffi::{c_char, c_int, CStr, CString}, marker::PhantomData, ptr::null_mut};
 
-use super::{context::Context, enums::CodegenFileType, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::Type, value::Value};
+use super::{context::Context, enums::CodegenFileType, target_data::TargetData, target_machine::TargetMachine, traits::WrappedReference, types::types::Type};
+use super::value::value::Value;
 use super::llvm_c::{LLVMAddFunction, LLVMAddGlobal, LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule};
 use super::llvm_c::{LLVMModuleRef, LLVMSetModuleDataLayout, LLVMSetTarget, LLVMTargetMachineEmitToFile, LLVMTypeKind};
 

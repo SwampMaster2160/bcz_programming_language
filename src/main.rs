@@ -3,7 +3,7 @@ use std::{collections::{HashMap, HashSet}, env::args, i64, mem::take, num::NonZe
 use compile::compile_file;
 use compiler_arguments::{process_arguments, CompilerArgumentsData};
 use error::Error;
-use llvm_nhb::{context::Context, other::initialize_x86, target::Target, target_data::TargetData, target_machine::TargetMachine, types::Type};
+use llvm_nhb::{context::Context, other::initialize_x86, target::Target, target_data::TargetData, target_machine::TargetMachine, types::int::IntType};
 use llvm_nhb::enums::{CodeModel, CodegenOptLevel, RealocMode};
 use token::{Keyword, OperatorSymbol, OperatorType, Separator};
 
@@ -45,9 +45,9 @@ pub struct MainData<'a> {
 	/// The data layout fo the target machine.
 	llvm_data_layout: &'a TargetData<'a>,
 	/// The integer type for the target machine, should be big enough to hold a pointer.
-	int_type: Type<'a>,
+	int_type: IntType<'a>,
 	/// The 8-bit integer type for the target machine.
-	int_8_type: Type<'a>,
+	int_8_type: IntType<'a>,
 	/// A C string that contains info about the target machine.
 	llvm_target_triple: String,
 	/// How many bits width the target machine integer is.
@@ -75,7 +75,7 @@ pub struct MainData<'a> {
 impl<'a> MainData<'a> {
 	pub fn new(
 		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>,
-		int_type: Type<'a>, int_8_type: Type<'a>,
+		int_type: IntType<'a>, int_8_type: IntType<'a>,
 	) -> Self {
 		Self {
 			llvm_context: context,

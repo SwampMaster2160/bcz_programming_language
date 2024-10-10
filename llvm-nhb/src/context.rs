@@ -1,9 +1,10 @@
 use std::ffi::CString;
 
 use crate::llvm_c::{LLVMBool, LLVMConstStringInContext};
-use crate::value::Value;
+use crate::types::int::IntType;
+use crate::value::value::Value;
 
-use super::{builder::Builder, types::Type, module::Module, traits::WrappedReference};
+use super::{builder::Builder, types::types::Type, module::Module, traits::WrappedReference};
 use super::llvm_c::{LLVMContextCreate, LLVMContextDispose, LLVMContextRef, LLVMCreateBuilderInContext, LLVMInt128TypeInContext};
 use super::llvm_c::{LLVMInt16TypeInContext, LLVMInt1TypeInContext, LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext};
 use super::llvm_c::{LLVMModuleCreateWithNameInContext, LLVMVoidTypeInContext};
@@ -57,33 +58,33 @@ impl Context {
 	}
 
 	#[inline]
-	pub fn int_1_type<'a>(&'a self) -> Type<'a> {
-		unsafe { Type::from_ref(LLVMInt1TypeInContext(self.context_ref)) }
+	pub fn int_1_type<'a>(&'a self) -> IntType<'a> {
+		unsafe { IntType::from_ref(LLVMInt1TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_8_type<'a>(&'a self) -> Type<'a> {
-		unsafe { Type::from_ref(LLVMInt8TypeInContext(self.context_ref)) }
+	pub fn int_8_type<'a>(&'a self) -> IntType<'a> {
+		unsafe { IntType::from_ref(LLVMInt8TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_16_type<'a>(&'a self) -> Type<'a> {
-		unsafe { Type::from_ref(LLVMInt16TypeInContext(self.context_ref)) }
+	pub fn int_16_type<'a>(&'a self) -> IntType<'a> {
+		unsafe { IntType::from_ref(LLVMInt16TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_32_type<'a>(&'a self) -> Type<'a> {
-		unsafe { Type::from_ref(LLVMInt32TypeInContext(self.context_ref)) }
+	pub fn int_32_type<'a>(&'a self) -> IntType<'a> {
+		unsafe { IntType::from_ref(LLVMInt32TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_64_type<'a>(&'a self) -> Type<'a> {
-		unsafe { Type::from_ref(LLVMInt64TypeInContext(self.context_ref)) }
+	pub fn int_64_type<'a>(&'a self) -> IntType<'a> {
+		unsafe { IntType::from_ref(LLVMInt64TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
-	pub fn int_128_type<'a>(&'a self) -> Type<'a> {
-		unsafe { Type::from_ref(LLVMInt128TypeInContext(self.context_ref)) }
+	pub fn int_128_type<'a>(&'a self) -> IntType<'a> {
+		unsafe { IntType::from_ref(LLVMInt128TypeInContext(self.context_ref)) }
 	}
 
 	#[inline]
