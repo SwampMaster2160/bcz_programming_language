@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, num::NonZeroUsize, path::PathBuf};
 
 use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, parse::parse_tokens, token::Token, MainData};
-use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module, value::int::IntValue};
+use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUsize, Option<NonZeroUsize>)>)>)> {
@@ -226,10 +226,10 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 	if let Some(wrapped_entry_point) = file_build_data.entrypoint {
 		// Get types of wrapper function
 		let int_32_type = main_data.llvm_context.int_32_type();
-		let entry_point_function_parameters = [main_data.int_type.as_type(), main_data.int_type.as_type(), main_data.int_type.as_type(), int_32_type.as_type()];
-		let entry_point_function_type = int_32_type.as_type().function_type(&entry_point_function_parameters, false);
+		let entry_point_function_parameters = [main_data.int_type, main_data.int_type, main_data.int_type, int_32_type];
+		let entry_point_function_type = int_32_type.function_type(&entry_point_function_parameters, false);
 		// Get wrapped function
-		let wrapped_entry_point_function_type = main_data.int_type.as_type().function_type(&[], false);
+		let wrapped_entry_point_function_type = main_data.int_type.function_type(&[], false);
 		let wrapped_entry_point_function_pointer_type = wrapped_entry_point_function_type.pointer_to();
 		let wrapped_entry_point_function_pointer = wrapped_entry_point
 			.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
@@ -240,12 +240,9 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		entry_point_function.set_calling_convention(CallingConvention::Win64);
 		let entry_point_function_basic_block = entry_point_function.append_basic_block(&main_data.llvm_context, "entry");
 		llvm_builder.position_at_end(&entry_point_function_basic_block);
-		let built_function_call: IntValue = wrapped_entry_point_function_pointer
-			.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp")
-			.try_into().unwrap();
-		built_function_call.build_truncate(&llvm_builder, main_data.llvm_data_layout, int_32_type, "trunc_cast_temp")
-			.as_value()
-			.build_return(&llvm_builder);
+		let built_function_call = wrapped_entry_point_function_pointer
+			.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp");
+		built_function_call.build_truncate(&llvm_builder, int_32_type, "trunc_cast_temp").build_return(&llvm_builder);
 	}
 	Ok(())
 }

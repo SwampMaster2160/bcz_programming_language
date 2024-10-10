@@ -1,5 +1,5 @@
 use crate::MainData;
-use llvm_nhb::{builder::Builder, value::{int::IntValue, value::Value}};
+use llvm_nhb::{builder::Builder, value::Value};
 
 #[derive(Clone, Debug)]
 pub enum BuiltLValue<'a> {
@@ -8,12 +8,12 @@ pub enum BuiltLValue<'a> {
 }
 
 impl<'a> BuiltLValue<'a> {
-	pub fn get_value(&self, main_data: &MainData<'a>, llvm_builder: &Builder<'a, 'a>) -> IntValue<'a, 'a> {
+	pub fn get_value(&self, main_data: &MainData<'a>, llvm_builder: &Builder<'a, 'a>) -> Value<'a, 'a> {
 		match self {
 			Self::AllocaVariable(alloca_variable) =>
-				alloca_variable.build_load(main_data.int_type.as_type(), llvm_builder, "alloca_read_temp").try_into().unwrap(),
+				alloca_variable.build_load(main_data.int_type, llvm_builder, "alloca_read_temp"),
 			Self::DereferencedPointer(pointer) =>
-				pointer.build_load(main_data.int_type.as_type(), llvm_builder, "alloca_read_temp").try_into().unwrap(),
+				pointer.build_load(main_data.int_type, llvm_builder, "alloca_read_temp"),
 		}
 	}
 
@@ -24,10 +24,10 @@ impl<'a> BuiltLValue<'a> {
 		}
 	}
 
-	pub fn set_value(&self, _main_data: &MainData, llvm_builder: &Builder<'a, 'a>, value: &IntValue<'a, 'a>) -> Value {
+	pub fn set_value(&self, _main_data: &MainData, llvm_builder: &Builder<'a, 'a>, value: &Value<'a, 'a>) -> Value {
 		match self {
-			Self::AllocaVariable(alloca_variable) => alloca_variable.build_store(&(value.as_value().into()), llvm_builder),
-			Self::DereferencedPointer(pointer) => pointer.build_store(&(value.as_value().into()), llvm_builder),
+			Self::AllocaVariable(alloca_variable) => alloca_variable.build_store(value, llvm_builder),
+			Self::DereferencedPointer(pointer) => pointer.build_store(value, llvm_builder),
 		}
 	}
 }

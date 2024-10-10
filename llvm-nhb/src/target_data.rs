@@ -1,8 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::types::int::IntType;
-
-use super::{context::Context, llvm_c::{LLVMIntPtrTypeInContext, LLVMTargetDataRef}, traits::WrappedReference};
+use super::{context::Context, llvm_c::{LLVMIntPtrTypeInContext, LLVMTargetDataRef}, traits::WrappedReference, types::Type};
 
 #[repr(transparent)]
 pub struct TargetData<'a> {
@@ -12,8 +10,8 @@ pub struct TargetData<'a> {
 
 impl<'a> TargetData<'a> {
 	#[inline]
-	pub fn int_ptr_type(&self, context: &'a Context) -> IntType<'a> {
-		unsafe { IntType::from_ref(LLVMIntPtrTypeInContext(context.get_ref(), self.target_data_ref)) }
+	pub fn int_ptr_type(&self, context: &'a Context) -> Type<'a> {
+		unsafe { Type::from_ref(LLVMIntPtrTypeInContext(context.get_ref(), self.target_data_ref)) }
 	}
 }
 

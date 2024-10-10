@@ -2,11 +2,9 @@ use std::{ffi::{c_uint, CString}, fmt::Debug, iter::repeat, marker::PhantomData,
 
 use crate::llvm_c::LLVMArrayType2;
 
-use crate::{builder::Builder, context::Context, target_data::TargetData, traits::WrappedReference, value::value::Value};
-use crate::llvm_c::{LLVMBool, LLVMBuildAlloca, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType};
-use crate::llvm_c::{LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef};
-
-use super::int::IntType;
+use super::{builder::Builder, context::Context, target_data::TargetData, traits::WrappedReference, value::Value};
+use super::llvm_c::{LLVMBool, LLVMBuildAlloca, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType};
+use super::llvm_c::{LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef};
 
 #[derive(Clone, Copy, Hash, PartialEq)]
 #[repr(transparent)]
@@ -123,13 +121,13 @@ impl<'a> Type<'a> {
 		unsafe { Type::from_ref(LLVMPointerType(self.type_ref, 0)) }
 	}
 
-	//pub fn const_int(self, value: u128, sign_extend: bool) -> Value<'a, 'a> {
-	//	match self.type_kind() {
-	//		LLVMTypeKind::LLVMIntegerTypeKind => {},
-	//		other => panic!("Type is not an integer type: {other:?}"),
-	//	}
-	//	unsafe { Value::from_ref(LLVMConstInt(self.type_ref, value.try_into().unwrap(), sign_extend as LLVMBool)) }
-	//}
+	pub fn const_int(self, value: u128, sign_extend: bool) -> Value<'a, 'a> {
+		match self.type_kind() {
+			LLVMTypeKind::LLVMIntegerTypeKind => {},
+			other => panic!("Type is not an integer type: {other:?}"),
+		}
+		unsafe { Value::from_ref(LLVMConstInt(self.type_ref, value.try_into().unwrap(), sign_extend as LLVMBool)) }
+	}
 
 	pub fn build_alloca<'m>(self, builder: &Builder<'a, 'm>, name: &str) -> Value<'a, 'm> {
 		if !self.is_normal() {
@@ -150,16 +148,5 @@ impl<'a> Type<'a> {
 impl<'a> Debug for Type<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.type_kind().fmt(f)
-	}
-}
-
-impl<'a> TryInto<IntType<'a>> for Type<'a> {
-	type Error = ();
-
-	fn try_into(self) -> Result<IntType<'a>, Self::Error> {
-		match self.type_kind() {
-			LLVMTypeKind::LLVMIntegerTypeKind => Ok(unsafe { transmute(self) }),
-			_ => Err(()),
-		}
 	}
 }
