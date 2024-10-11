@@ -45,7 +45,7 @@ pub enum Error {
 	MultipleEntryPoints,
 	TooManyFunctionArguments,
 	LinkNotUsedOnFunction,
-	InvalidType,
+	//InvalidType,
 	InvalidTypeWidth,
 	UnableToWriteObject,
 	CouldNotGetTarget(String),
@@ -57,6 +57,7 @@ pub enum Error {
 	ModuloByZero,
 	NullPointerDereference,
 	InvalidBuiltInFunctionArgumentCount,
+	ConstValueRequired,
 }
 
 impl Display for Error {
@@ -105,7 +106,7 @@ impl Display for Error {
 			Error::MultipleEntryPoints => write!(f, "Multiple entry points"),
 			Error::TooManyFunctionArguments => write!(f, "Too many function arguments"),
 			Error::LinkNotUsedOnFunction => write!(f, "Link not used on function"),
-			Error::InvalidType => write!(f, "Invalid type"),
+			//Error::InvalidType => write!(f, "Invalid type"),
 			Error::InvalidTypeWidth => write!(f, "Invalid type width"),
 			Error::UnableToWriteObject => write!(f, "Unable to write object"),
 			Error::UnableToEmitObjectFile(error) => write!(f, "Unable to write object: {error}"),
@@ -117,6 +118,7 @@ impl Display for Error {
 			Error::ModuloByZero => write!(f, "Modulo by zero"),
 			Error::NullPointerDereference => write!(f, "Null pointer dereference"),
 			Error::InvalidBuiltInFunctionArgumentCount => write!(f, "Invalid built-in function argument count"),
+			Error::ConstValueRequired => write!(f, "Const value required"),
 		}
 	}
 }

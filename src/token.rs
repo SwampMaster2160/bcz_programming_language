@@ -53,6 +53,7 @@ pub enum Keyword {
 	EntryPoint,
 	Link,
 	Write,
+	Stack,
 }
 
 impl Keyword {
@@ -61,6 +62,7 @@ impl Keyword {
 			Self::EntryPoint => "entry_point",
 			Self::Link => "link",
 			Self::Write => "write",
+			Self::Stack => "stack",
 		}
 	}
 

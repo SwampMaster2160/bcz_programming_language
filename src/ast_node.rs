@@ -69,6 +69,7 @@ pub enum Metadata {
 #[derive(Debug, Copy, Clone)]
 pub enum BuiltInFunctionCall {
 	Write,
+	Stack,
 }
 
 #[derive(Debug, EnumDiscriminants, Clone)]
@@ -272,7 +273,7 @@ impl AstNode {
 			}
 			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
 				match function {
-					BuiltInFunctionCall::Write => for argument in arguments {
+					BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => for argument in arguments {
 						argument.get_variable_dependencies(
 							variable_dependencies, import_dependencies, local_variables, false, false
 						)?;
@@ -754,6 +755,37 @@ impl AstNode {
 						// Expression yeilds the written value
 						value_to_write_built
 					}
+					BuiltInFunctionCall::Stack => {
+						// Get arguments
+						let (count, entry_width) = match arguments.len() {
+							0 => (None, None),
+							1 => (Some(&arguments[0]), None),
+							2 => (Some(&arguments[0]), Some(&arguments[1])),
+							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+						};
+						// Get entry count
+						let count = match count {
+							Some(count) => match count.variant {
+								AstNodeVariant::Constant(count) => count,
+								_ => return Err((Error::ConstValueRequired, count.start)),
+							}
+							None => 1,
+						};
+						// Get entry type
+						let entry_type = match entry_width {
+							Some(entry_width) => {
+								let entry_type = entry_width.type_from_width(main_data)?.0;
+								if entry_type.is_void() {
+									return Err((Error::VoidParameter, self.start));
+								}
+								entry_type
+							}
+							None => main_data.int_type,
+						};
+						// Get array type
+						let array_type = entry_type.array_type(count.try_into().unwrap());
+						array_type.build_alloca(llvm_builder, "stack_alloca_temp")
+					}
 				}
 			}
 			// TODO
@@ -827,6 +859,7 @@ impl AstNode {
 			AstNodeVariant::BuiltInFunctionCall(function, _arguments) => {
 				match function {
 					BuiltInFunctionCall::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
+					BuiltInFunctionCall::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
 				}
 			}
 		})
@@ -886,7 +919,7 @@ impl AstNode {
 					_ => return Err((Error::InvalidTypeWidth, *start)),
 				}, is_negative)
 			}
-			_ => return Err((Error::InvalidType, *start)),
+			_ => return Err((Error::ConstValueRequired, *start)),
 		})
 	}
 
@@ -1346,7 +1379,7 @@ impl AstNode {
 			}
 			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
 				match function {
-					BuiltInFunctionCall::Write => {
+					BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => {
 						for argument in arguments {
 							argument.const_evaluate(
 								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false

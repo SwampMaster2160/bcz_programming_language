@@ -267,13 +267,14 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					let start = *start;
 					// Get built in function
 					let function = match keyword {
-						Keyword::Write => {
+						Keyword::Write | Keyword::Stack => {
 							match keyword {
 								Keyword::Write => BuiltInFunctionCall::Write,
+								Keyword::Stack => BuiltInFunctionCall::Stack,
 								_ => unreachable!(),
 							}
 						}
-						_ => break 'a,
+						Keyword::EntryPoint | Keyword::Link => break 'a,
 					};
 					items_being_parsed.remove(index - 1);
 					// Get function parameters
@@ -479,6 +480,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			Keyword::EntryPoint => Metadata::EntryPoint,
 			Keyword::Link => Metadata::Link,
 			Keyword::Write => continue,
+			Keyword::Stack => continue,
 		};
 		// Take child node
 		let child_node = match items_being_parsed.remove(index + 1) {
