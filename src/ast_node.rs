@@ -231,7 +231,7 @@ impl AstNode {
 		&self,
 		variable_dependencies: &mut HashSet<Box<str>>,
 		import_dependencies: &mut HashSet<Box<str>>,
-		local_variables: &mut HashSet<Box<str>>,
+		local_variables: &mut Vec<HashSet<Box<str>>>,
 		is_l_value: bool,
 		is_link_function: bool,
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
@@ -248,11 +248,15 @@ impl AstNode {
 		// Search depends on type of node
 		match variant {
 			// For a block we search each sub-expression in the block
-			AstNodeVariant::Block(sub_expressions, _) => for expression in sub_expressions {
+			AstNodeVariant::Block(sub_expressions, _) => {
 				match is_l_value {
-					false =>
-						expression
-							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
+					false => {
+						local_variables.push(HashSet::new());
+						for expression in sub_expressions {
+							expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
+						}
+						local_variables.pop();
+					}
 					true => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), *start)),
 				};
 			}
@@ -288,15 +292,16 @@ impl AstNode {
 					// For the definition of a non-link function, we create a new list of local variables that the the function does not depend on
 					// Then we search the function body with the new local variable list
 					false => {
-						let mut local_variables = HashSet::new();
+						let mut local_variables_top = HashSet::new();
 						for parameter in parameters {
 							match &parameter.variant {
 								AstNodeVariant::Identifier(name) => {
-									local_variables.insert(name.clone());
+									local_variables_top.insert(name.clone());
 								}
 								_ => return Err((Error::ExpectedIdentifier, parameter.start)),
 							}
 						}
+						let mut local_variables = vec![local_variables_top];
 						body.get_variable_dependencies(
 							variable_dependencies, import_dependencies, &mut local_variables, false, false
 						)?;
@@ -314,13 +319,23 @@ impl AstNode {
 			}
 			AstNodeVariant::Identifier(name) => match is_l_value {
 				// An identifier being used as a r-value should have its name added to the the global variable list unless it's in the local variable list
-				false => if !local_variables.contains(name) {
+				false => 'a: {
+					for local_variable_level in local_variables.iter() {
+						if local_variable_level.contains(name) {
+							break 'a;
+						}
+					}
 					variable_dependencies.insert(name.clone());
 				}
 				// An identifier being used as an l-value should be added to the local variable list
 				// so that it is not added to the global variable list if used later
-				true => {
-					local_variables.insert(name.clone());
+				true => 'a: {
+					for local_variable_level in local_variables.iter() {
+						if local_variable_level.contains(name) {
+							break 'a;
+						}
+					}
+					local_variables.last_mut().unwrap().insert(name.clone());
 				}
 			}
 			// For metadata nodes, we just search the child node

@@ -4,9 +4,11 @@ main = @entry_point () {
 	@write(utf_16_str + 2, 2, 'i');
 	@write(utf_16_str + 4, 2, '\n');
 	handle = GetStdHandle(-11);
-	result = 0;
 	Beep(500, 1000);
-	WriteConsoleW(handle, utf_16_str, 3, &result, 0);
+	{
+		result = 0;
+		WriteConsoleW(handle, utf_16_str, 3, &result, 0);
+	};
 	Beep(600, 1000);
 	//a = 1 + 2 + 3;
 	//b = {2 == 2};

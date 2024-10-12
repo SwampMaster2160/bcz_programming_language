@@ -57,7 +57,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	for (name, expression) in globals.into_iter() {
 		let mut variable_dependencies = HashSet::new();
 		expression.get_variable_dependencies(
-			&mut variable_dependencies, &mut import_dependencies, &mut HashSet::new(), false, false
+			&mut variable_dependencies, &mut import_dependencies, &mut Vec::new(), false, false
 		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 		globals_and_dependencies.insert(name, (expression, variable_dependencies));
 	}
