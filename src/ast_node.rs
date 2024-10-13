@@ -476,18 +476,23 @@ impl AstNode {
 			}
 			_ => unreachable!(),
 		};
-		// Create function parameter type
-		if parameters.len() > u16::MAX as usize {
-			return Err((Error::TooManyFunctionParameters, *start));
-		}
-		let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
-		let function_type = main_data.int_type.function_type(&*parameter_types, false);
-		// Build function value
-		let mangled_name: Box<str> = match is_link_function {
-			false => name.into(),
-			true => "__bcz__link__".chars().chain(name.chars()).collect(),
+		let function = match file_build_data.built_global_function_signatures.get(name) {
+			Some(function) => function.clone(),
+			None => {
+				//Create function parameter type
+				if parameters.len() > u16::MAX as usize {
+					return Err((Error::TooManyFunctionParameters, *start));
+				}
+				let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
+				let function_type = main_data.int_type.function_type(&*parameter_types, false);
+				// Build function value
+				let mangled_name: Box<str> = match is_link_function {
+					false => name.into(),
+					true => "__bcz__link__".chars().chain(name.chars()).collect(),
+				};
+				llvm_module.add_function(function_type, &*mangled_name)
+			}
 		};
-		let function = llvm_module.add_function(function_type, &*mangled_name);
 		// Build function body
 		let basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
 		llvm_builder.position_at_end(&basic_block);
@@ -1496,5 +1501,5 @@ fn get_variable_by_name<'a>(
 	if let Some(built_global) = file_build_data.built_globals.get(name) {
 		return built_global.clone();
 	}
-	todo!()
+	file_build_data.built_global_function_signatures[name].build_ptr_to_int(llvm_builder, main_data.int_type, "fn_ptr_to_int_temp")
 }
