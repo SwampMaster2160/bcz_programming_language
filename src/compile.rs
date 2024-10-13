@@ -74,6 +74,13 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		}
 	}
 	// Const evaluate globals
+	let mut global_function_list = HashSet::new();
+	for (name, (global, _)) in globals_and_dependencies.iter_mut() {
+		if !global.is_function() {
+			continue;
+		}
+		global_function_list.insert(name.clone());
+	}
 	let mut globals_and_dependencies_after_const_evaluate: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
 	while globals_and_dependencies.len() > globals_and_dependencies_after_const_evaluate.len() {
 		let mut globals_have_been_const_evaluated_this_round = false;
@@ -83,7 +90,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 				continue 'a;
 			}
 			for variable_dependency in variable_dependencies.iter() {
-				if !globals_and_dependencies_after_const_evaluate.contains_key(variable_dependency) {
+				if !globals_and_dependencies_after_const_evaluate.contains_key(variable_dependency) && !global_function_list.contains(variable_dependency) {
 					continue 'a;
 				}
 			}
@@ -123,13 +130,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		}
 	};
 	let llvm_module = main_data.llvm_context.new_module(module_name);
-	build_llvm_module(main_data, &llvm_module, globals_and_dependencies_after_const_evaluate)
+	build_llvm_module(main_data, &llvm_module, globals_and_dependencies_after_const_evaluate, filepath)
 		.map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
-	// Dump module if commanded to do so
-	if main_data.dump_llvm_module {
-		println!("LLVM IR of {}:", filepath.display());
-		llvm_module.dump();
-	}
 	// Write .o file
 	let filepath_stem: PathBuf = filepath.file_stem().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?.into();
 	let mut output_filepath = main_data.binary_path.clone();
@@ -180,7 +182,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: N
 }
 
 /// Take in a list of global variables and build them into a LLVM module.
-fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>)
+fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>, filepath: &PathBuf)
 	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 	// Set up module
 	llvm_module.set_target_triple(main_data.llvm_target_triple.as_str());
@@ -189,12 +191,26 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 	let llvm_builder = main_data.llvm_context.new_builder();
 	let mut file_build_data = FileBuildData {
 		built_globals: HashMap::new(),
+		built_global_function_signatures: HashMap::new(),
 		entrypoint: None,
 	};
+	// Build function signatures
+	for (name, (global, _)) in globals_and_dependencies.iter() {
+		if !global.is_function() {
+			continue;
+		}
+		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name, false, false)?;
+		file_build_data.built_global_function_signatures.insert(name.clone(), function_signature);
+	}
+	// Dump module if commanded to do so after building function signatures
+	if main_data.dump_llvm_module_after_function_signatures_build {
+		println!("LLVM IR after building function signatures of {}:", filepath.display());
+		llvm_module.dump();
+	}
 	// Build each global in rounds
 	let mut globals_built = HashSet::new();
 	while globals_and_dependencies.len() > globals_built.len() {
-		// Build all globals this round in their dependencies are built
+		// Build all globals this round if their dependencies are built
 		let mut globals_built_this_round = HashSet::new();
 		'a: for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
 			if globals_built.contains(name) {
@@ -202,7 +218,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 			}
 			// Make sure that the dependencies are built
 			for variable_dependency in variable_dependencies.iter() {
-				if !file_build_data.built_globals.contains_key(variable_dependency) {
+				if !file_build_data.built_globals.contains_key(variable_dependency) && !file_build_data.built_global_function_signatures.contains_key(variable_dependency) {
 					continue 'a;
 				}
 			}
@@ -243,6 +259,11 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		let built_function_call = wrapped_entry_point_function_pointer
 			.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp");
 		built_function_call.build_truncate(&llvm_builder, int_32_type, "trunc_cast_temp").build_return(&llvm_builder);
+	}
+	// Dump module if commanded to do so
+	if main_data.dump_llvm_module {
+		println!("LLVM IR of {}:", filepath.display());
+		llvm_module.dump();
 	}
 	Ok(())
 }

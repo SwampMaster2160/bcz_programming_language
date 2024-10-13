@@ -405,6 +405,49 @@ impl AstNode {
 		Ok(())
 	}
 
+	pub fn build_function_signature<'a>(
+		&'a self,
+		main_data: &'a MainData,
+		file_build_data: &mut FileBuildData<'a, 'a>,
+		llvm_module: &'a Module,
+		llvm_builder: &'a Builder,
+		name: &str,
+		is_link_function: bool,
+		is_entry_point: bool
+	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Unpack node
+		let Self {
+			start,
+			end: _,
+			variant,
+		} = self;
+		match variant {
+			AstNodeVariant::FunctionDefinition(parameters, _) => {
+				// Create function parameter type
+				if parameters.len() > u16::MAX as usize {
+					return Err((Error::TooManyFunctionParameters, *start));
+				}
+				let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
+				let function_type = main_data.int_type.function_type(&*parameter_types, false);
+				// Build function value
+				let mangled_name: Box<str> = match is_link_function {
+					false => name.into(),
+					true => "__bcz__link__".chars().chain(name.chars()).collect(),
+				};
+				let function = llvm_module.add_function(function_type, &*mangled_name);
+				// Return
+				Ok(function)
+			}
+			AstNodeVariant::Metadata(metadata, child_node) => match metadata {
+				Metadata::EntryPoint =>
+					child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+				Metadata::Link =>
+					child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+			}
+			_ => unreachable!(),
+		}
+	}
+
 	/// Build a function definition into LLVM IR code and return the built value.
 	fn build_function_definition<'a>(
 		&'a self,
@@ -1450,5 +1493,8 @@ fn get_variable_by_name<'a>(
 			return variable.get_value(main_data, llvm_builder);
 		}
 	}
-	file_build_data.built_globals[name].clone()
+	if let Some(built_global) = file_build_data.built_globals.get(name) {
+		return built_global.clone();
+	}
+	todo!()
 }

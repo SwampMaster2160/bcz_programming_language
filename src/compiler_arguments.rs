@@ -14,6 +14,7 @@ pub struct CompilerArgumentsData<'a> {
 	pub print_after_analyzer: bool,
 	pub dump_llvm_module: bool,
 	pub print_after_const_evaluate: bool,
+	pub dump_llvm_module_after_function_signatures_build: bool,
 	pub filepaths_to_compile: Vec<&'a str>,
 	pub primary_output_file: Option<&'a str>,
 	pub compiler_working_directory: PathBuf,
@@ -33,6 +34,7 @@ impl<'a> CompilerArgumentsData<'a> {
 			print_after_analyzer: false,
 			dump_llvm_module: false,
 			print_after_const_evaluate: false,
+			dump_llvm_module_after_function_signatures_build: false,
 			filepaths_to_compile: Vec::new(),
 			primary_output_file: None,
 		}
@@ -60,6 +62,7 @@ enum CompilerOptionToken {
 	SetSourceHomeFilepath,
 	SetBinaryHomeFilepath,
 	PrintTokens,
+	PrintAstNodesAfterFunctionSignatureBuild,
 	PrintAstNodes,
 	PrintAfterAnalyzer,
 	PrintAfterConstEvaluate,
@@ -82,6 +85,7 @@ impl CompilerOptionToken {
 			Self::PrintAfterAnalyzer => None,
 			Self::DumpLlvmModule => None,
 			Self::PrintAfterConstEvaluate => None,
+			Self::PrintAstNodesAfterFunctionSignatureBuild => None,
 		}
 	}
 
@@ -100,6 +104,7 @@ impl CompilerOptionToken {
 			Self::PrintAfterAnalyzer => Some("print-after-analyzer"),
 			Self::DumpLlvmModule => Some("dump-llvm-module"),
 			Self::PrintAfterConstEvaluate => Some("print-after-const-evaluate"),
+			Self::PrintAstNodesAfterFunctionSignatureBuild => Some("print-ast-nodes-after-function-signature-build"),
 		}
 	}
 
@@ -118,6 +123,7 @@ impl CompilerOptionToken {
 			Self::PrintAfterAnalyzer => Some("Print AST nodes after the analyzer has run"),
 			Self::DumpLlvmModule => Some("Print the content of the built LLVM module"),
 			Self::PrintAfterConstEvaluate => Some("Print AST nodes after constant evaluation"),
+			Self::PrintAstNodesAfterFunctionSignatureBuild => Some("Print AST nodes after global function signatures have been built"),
 		}
 	}
 
@@ -210,6 +216,7 @@ pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgum
 					CompilerOptionToken::PrintAfterAnalyzer => data_out.print_after_analyzer = true,
 					CompilerOptionToken::DumpLlvmModule => data_out.dump_llvm_module = true,
 					CompilerOptionToken::PrintAfterConstEvaluate => data_out.print_after_const_evaluate = true,
+					CompilerOptionToken::PrintAstNodesAfterFunctionSignatureBuild => data_out.dump_llvm_module_after_function_signatures_build = true,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {

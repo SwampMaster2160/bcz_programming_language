@@ -38,6 +38,8 @@ pub struct MainData<'a> {
 	print_after_analyzer: bool,
 	/// Should the AST nodes from each global variable be printed after constant evaluation.
 	print_after_const_evaluate: bool,
+	/// Should the built LLVM module be printed for each file after function signatures have been build.
+	dump_llvm_module_after_function_signatures_build: bool,
 	/// Should the built LLVM module be printed for each file after being built.
 	dump_llvm_module: bool,
 	/// The context for LLVM functions.
@@ -88,6 +90,7 @@ impl<'a> MainData<'a> {
 			print_tokens: compiler_arguments_data.print_tokens,
 			print_ast_nodes: compiler_arguments_data.print_ast_nodes,
 			print_after_const_evaluate: compiler_arguments_data.print_after_const_evaluate,
+			dump_llvm_module_after_function_signatures_build: compiler_arguments_data.dump_llvm_module_after_function_signatures_build,
 			int_type,
 			llvm_data_layout: target_data,
 			int_bit_width: 0,
