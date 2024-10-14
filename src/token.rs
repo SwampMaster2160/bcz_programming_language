@@ -91,6 +91,8 @@ pub enum OperatorSymbol {
 	LessThanOrEqualTo,
 	GreaterThan,
 	GreaterThanOrEqualTo,
+	TernaryFirst,
+	TernarySecond,
 }
 
 impl OperatorSymbol {
@@ -111,6 +113,8 @@ impl OperatorSymbol {
 			Self::LessThanOrEqualTo => "<=",
 			Self::GreaterThan => ">",
 			Self::GreaterThanOrEqualTo => ">=",
+			Self::TernaryFirst => "?",
+			Self::TernarySecond => ":",
 		}
 	}
 

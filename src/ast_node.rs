@@ -50,6 +50,8 @@ pub enum Operation {
 	FloatLessThanOrEqualTo,
 	FloatGreaterThan,
 	FloatGreaterThanOrEqualTo,
+	NotShortCircuitTernary,
+	ShortCircuitTernary,
 }
 
 #[derive(Debug, Clone)]
@@ -369,6 +371,7 @@ impl AstNode {
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read | Operation::TakeReference |
 					Operation::BitwiseNot | Operation::LogicalNot
 						=> return Err((Error::FeatureNotYetImplemented("Augmented unary operators".into()), *start)),
+					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => unreachable!(),
 				}
 				// For normal operators we search the operands
 				Operator::Normal(operation) => match operation {
@@ -392,6 +395,12 @@ impl AstNode {
 					// Operators that only have l-values as operands
 					Operation::Read => for operand in operands {
 						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true, false)?;
+					}
+					// Ternary operator
+					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
+						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
+						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, false)?;
+						operands[2].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, false)?;
 					}
 				}
 				// For l-value assignments, we search the operands
@@ -1040,6 +1049,11 @@ impl AstNode {
 									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true
 								)?;
 							}
+						}
+						Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
+							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
 						}
 					}
 				}

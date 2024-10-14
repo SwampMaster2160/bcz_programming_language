@@ -90,6 +90,7 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::GreaterThan, OperatorType::FloatingPointBitwise) => Some(Operation::FloatGreaterThan),
 		(OperatorSymbol::GreaterThanOrEqualTo, OperatorType::FloatingPointBitwise) => Some(Operation::FloatGreaterThanOrEqualTo),
 		(OperatorSymbol::Not, _) => None,
+		(OperatorSymbol::TernaryFirst | OperatorSymbol::TernarySecond, _) => None,
 		//_ => None,
 	}
 }
@@ -437,6 +438,59 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		}
 	}
 	// TODO: Parse ternary operators
+	let mut index = items_being_parsed.len().saturating_sub(2);
+	while index > 0 {
+		if let ParseState::Token(Token {
+			variant: TokenVariant::Operator(operator_symbol, operator_type, false, _), start, end: _
+		}) = &items_being_parsed[index] { 'a: {
+			// Get the AST operator
+			let operator = match operator_symbol {
+				Some(OperatorSymbol::TernaryFirst) => match operator_type {
+					OperatorType::SignedLogicalShortCircuit => Operation::ShortCircuitTernary,
+					OperatorType::UnsignedLogicalNotShortCircuit => Operation::NotShortCircuitTernary,
+					OperatorType::FloatingPointBitwise => return Err((Error::InvalidTernaryOperator, *start)),
+				},
+				_ => break 'a,
+			};
+			// Get the index of the ":" operator
+			let second_operator_index = items_being_parsed.iter()
+				.skip(index)
+				.position(|item| matches!(item, ParseState::Token(Token {
+					variant: TokenVariant::Operator(Some(OperatorSymbol::TernarySecond), OperatorType::SignedLogicalShortCircuit, false, _),
+					start: _,
+					end: _,
+				}
+				)))
+				.ok_or_else(|| (Error::UnmatchedTernary, *start))?;
+			// Remove operators and operands
+			let left_operand = items_being_parsed.remove(index - 1);
+			items_being_parsed.remove(index - 1);
+			let right_operand = items_being_parsed.remove(index + second_operator_index - 1);
+			items_being_parsed.remove(index + second_operator_index - 2);
+			let center_operand = items_being_parsed.drain(index - 1..index + second_operator_index - 2).collect();
+			// Parse expression between the "?" and ":" operators
+			let center_operand = parse_expression(center_operand)?;
+			// Get left and right operands
+			let left_operand = match left_operand {
+				ParseState::AstNode(ast_node) => ast_node,
+				_ => return Err((Error::TernaryOperatorNotUsedOnExpressions, left_operand.get_start())),
+			};
+			let right_operand = match right_operand {
+				ParseState::AstNode(ast_node) => ast_node,
+				_ => return Err((Error::TernaryOperatorNotUsedOnExpressions, right_operand.get_start())),
+			};
+			// Construct operator node
+			let operator_ast_node = AstNode {
+				start: left_operand.start,
+				end: right_operand.end,
+				variant: AstNodeVariant::Operator(Operator::Normal(operator), [left_operand, center_operand, right_operand].into()),
+			};
+			// Insert back into list
+			items_being_parsed.insert(index - 1, ParseState::AstNode(operator_ast_node));
+			index -= 1;
+		}}
+		index -= 1;
+	}
 	// Parse function definitions
 	for index in (0..items_being_parsed.len()).rev() {
 		// Make sure the item is a function arguments/parameters item

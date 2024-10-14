@@ -21,9 +21,11 @@ pub enum Error {
 	ParenthesisMismatch(Separator, Separator),
 	NoOperatorBase,
 	BinaryOperatorNotUsedOnExpressions,
+	TernaryOperatorNotUsedOnExpressions,
 	OperatorUsedOnNothing,
 	InvalidPrefixOperatorSymbol(OperatorSymbol),
 	InvalidInfixOperatorSymbol(OperatorSymbol),
+	InvalidTernaryOperator,
 	FunctionParametersWithoutBody,
 	UnterminatedCharLiteral,
 	EmptyCharLiteral,
@@ -58,6 +60,7 @@ pub enum Error {
 	NullPointerDereference,
 	InvalidBuiltInFunctionArgumentCount,
 	ConstValueRequired,
+	UnmatchedTernary,
 }
 
 impl Display for Error {
@@ -119,6 +122,9 @@ impl Display for Error {
 			Error::NullPointerDereference => write!(f, "Null pointer dereference"),
 			Error::InvalidBuiltInFunctionArgumentCount => write!(f, "Invalid built-in function argument count"),
 			Error::ConstValueRequired => write!(f, "Const value required"),
+			Error::InvalidTernaryOperator => write!(f, "Invalid ternary operator"),
+			Error::UnmatchedTernary => write!(f, "Unmatched ternary operator"),
+			Error::TernaryOperatorNotUsedOnExpressions => write!(f, "Ternary operator used on non-expressions"),
 		}
 	}
 }
