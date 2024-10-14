@@ -709,6 +709,15 @@ impl AstNode {
 						};
 						result
 					}
+					//Operation::NotShortCircuitTernary => {
+					//	let left_operand = operands[0]
+					//		.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+					//	let center_operand = operands[1]
+					//		.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+					//	let right_operand = operands[2]
+					//		.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
+					//	todo!()
+					//}
 					Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
 						let operand = operands[0]
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
@@ -860,7 +869,7 @@ impl AstNode {
 					}
 				}
 			}
-			// TODO
+			// Build strings
 			AstNodeVariant::String(text) => {
 				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
 				string.set_initializer(&main_data.llvm_context.const_string(text, true));
@@ -1131,6 +1140,30 @@ impl AstNode {
 							if let AstNode { variant: AstNodeVariant::Identifier(name), .. } = &mut operands[0] {
 								*self = AstNode { variant: AstNodeVariant::Identifier(take(name)), start: *start, end: *end };
 								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+							}
+						}
+						Operation::NotShortCircuitTernary => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value != 0 {
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+								}
+								else {
+									*self = AstNode { variant: operands[2].variant.clone(), start: *start, end: *end };
+								}
+							}
+						}
+						Operation::ShortCircuitTernary => {
+							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
+								if left_value != 0 {
+									if let AstNode { variant: AstNodeVariant::Constant(_), .. } = operands[2] {
+										*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
+									}
+								}
+								else {
+									if let AstNode { variant: AstNodeVariant::Constant(_), .. } = operands[1] {
+										*self = AstNode { variant: operands[2].variant.clone(), start: *start, end: *end };
+									}
+								}
 							}
 						}
 						// x & MAX = x
