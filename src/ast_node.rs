@@ -759,6 +759,8 @@ impl AstNode {
 				if local_variables.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start));
 				}
+				// Create basic block
+				
 				// Push block scope
 				local_variables.push(HashMap::new());
 				// Build each expression

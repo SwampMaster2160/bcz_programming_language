@@ -1,6 +1,6 @@
 use std::{ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
-use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
+use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildCondBr, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -343,6 +343,13 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 				name.as_ptr(),
 			))
 		}
+	}
+
+	pub fn build_conditional_branch(&self, then_dest: BasicBlock<'c, 'm>, else_dest: BasicBlock<'c, 'm>, context: &'c Context, builder: &Builder<'c, 'm>) -> Value<'c, 'm> {
+		if self.get_type() != context.int_1_type() {
+			panic!("Condition type should be i1, is {self:?}")
+		}
+		unsafe { Value::from_ref(LLVMBuildCondBr(builder.get_ref(), self.value_ref, then_dest.get_ref(), else_dest.get_ref())) }
 	}
 	
 	pub fn set_initializer(&self, set_to: &Self) {

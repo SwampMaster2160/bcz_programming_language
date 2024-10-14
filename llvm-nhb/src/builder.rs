@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::llvm_c::LLVMBuildRetVoid;
+use crate::llvm_c::{LLVMBuildBr, LLVMBuildRetVoid};
 use crate::value::Value;
 
 use super::{basic_block::BasicBlock, context::Context, module::Module, traits::WrappedReference};
@@ -24,6 +24,10 @@ impl<'c, 'm> Builder<'c, 'm> {
 
 	pub fn build_return_void(&self) -> Value<'c, 'm> {
 		unsafe { Value::from_ref(LLVMBuildRetVoid(self.builder_ref)) }
+	}
+
+	pub fn build_branch(&self, dest: BasicBlock<'c, 'm>) -> Value<'c, 'm> {
+		unsafe { Value::from_ref(LLVMBuildBr(self.builder_ref, dest.get_ref())) }
 	}
 }
 
