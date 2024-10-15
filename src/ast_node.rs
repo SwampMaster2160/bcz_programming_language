@@ -713,15 +713,37 @@ impl AstNode {
 						};
 						result
 					}
-					//Operation::NotShortCircuitTernary => {
-					//	let left_operand = operands[0]
-					//		.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
-					//	let center_operand = operands[1]
-					//		.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
-					//	let right_operand = operands[2]
-					//		.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
-					//	todo!()
-					//}
+					Operation::NotShortCircuitTernary => {
+						// Build operands
+						let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
+						let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let function_some = function.unwrap();
+						// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
+						let then_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_then");
+						let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
+						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
+						// Build the alloca to write the ternary result to
+						let ternary_result = main_data.int_type.build_alloca(llvm_builder, "ternary_result");
+						// Build the conditional branch to the then and else branches depending on the condition
+						condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
+						// Build then case
+						llvm_builder.position_at_end(&then_basic_block);
+						block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
+						ternary_result.build_store(&then_case, llvm_builder);
+						llvm_builder.build_branch(&end_basic_block);
+						// Build else case
+						llvm_builder.position_at_end(&else_basic_block);
+						block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
+						ternary_result.build_store(&else_case, llvm_builder);
+						llvm_builder.build_branch(&end_basic_block);
+						// Re-position builder at end
+						llvm_builder.position_at_end(&end_basic_block);
+						block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+						// Read ternary result
+						ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result")
+					}
 					Operation::ShortCircuitTernary => {
 						// Build the condition to an i1
 						let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
