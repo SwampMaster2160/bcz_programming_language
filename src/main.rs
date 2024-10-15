@@ -15,6 +15,7 @@ mod ast_node;
 mod parse;
 mod built_value;
 mod file_build_data;
+pub mod block_level;
 
 /// Info that applies while compiling all files.
 pub struct MainData<'a> {

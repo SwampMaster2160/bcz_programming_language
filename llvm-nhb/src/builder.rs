@@ -26,7 +26,7 @@ impl<'c, 'm> Builder<'c, 'm> {
 		unsafe { Value::from_ref(LLVMBuildRetVoid(self.builder_ref)) }
 	}
 
-	pub fn build_branch(&self, dest: BasicBlock<'c, 'm>) -> Value<'c, 'm> {
+	pub fn build_branch(&self, dest: &BasicBlock<'c, 'm>) -> Value<'c, 'm> {
 		unsafe { Value::from_ref(LLVMBuildBr(self.builder_ref, dest.get_ref())) }
 	}
 }

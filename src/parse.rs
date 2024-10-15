@@ -487,7 +487,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			};
 			// Insert back into list
 			items_being_parsed.insert(index - 1, ParseState::AstNode(operator_ast_node));
-			index -= 1;
+			//index -= 1;
 		}}
 		index -= 1;
 	}

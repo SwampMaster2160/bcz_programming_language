@@ -75,6 +75,7 @@ extern "C" {
 	pub fn LLVMTypeOf(Val: LLVMValueRef) -> LLVMTypeRef;
 	// Core/Basic Block
 	pub fn LLVMAppendBasicBlockInContext(C: LLVMContextRef, Fn: LLVMValueRef, Name: *const c_char) -> LLVMBasicBlockRef;
+	pub fn LLVMInsertBasicBlockInContext(C: LLVMContextRef, BB: LLVMBasicBlockRef, Name: *const c_char) -> LLVMBasicBlockRef;
 	// Instruction Builders
 	pub fn LLVMCreateBuilderInContext(C: LLVMContextRef) -> LLVMBuilderRef;
 	pub fn LLVMDisposeBuilder(Builder: LLVMBuilderRef) -> c_void;
