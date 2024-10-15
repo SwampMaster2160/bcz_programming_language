@@ -1,6 +1,14 @@
 main = @entry_point () {
-	0? 0: 0
-}
+	fnA(2)
+	//0? 0: 0
+};
+
+fnA = (v) v;
+
+fnB = (v) {
+	a = v + 1;
+	a
+};
 
 //main = @entry_point () {
 //	utf_16_str = @stack(3, 2);

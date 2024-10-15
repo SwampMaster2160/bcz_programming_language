@@ -603,12 +603,10 @@ impl AstNode {
 		file_build_data: &mut FileBuildData<'a, 'a>,
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
-		//local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
-		//basic_block: Option<&BasicBlock>,
 		block_stack: &'b mut Vec<BlockLevel<'a>>,
 		function: Option<&Value<'a, 'a>>
 	)
-	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> where BlockLevel<'a>: Sized {
+	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
 			start,
@@ -617,13 +615,13 @@ impl AstNode {
 		} = self;
 		// Use the `build_function_definition()` method to build the node if it is a function.
 		if self.is_function() {
+			// Build function
 			let out = self.build_function_definition(
 				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false
 			)?;
-			//if let Some(basic_block) = basic_block {
-			//	llvm_builder.position_at_end(basic_block);
-			//}
+			// The function will have positioned the builder pos to one of it's basic blocks, so re-position it back
 			llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+			// Return
 			return Ok(out);
 		}
 		// Building depends on node variant
@@ -631,14 +629,11 @@ impl AstNode {
 			// Constants build an int constant
 			AstNodeVariant::Constant(value) => main_data.int_type.const_int(*value as u128, false),
 			// For an identifier, we load the value stored in the variable it represents
-			//AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, local_variables, &*name),
 			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, block_stack, &*name),
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we build the l and r-values and then build a store instruction
 				Operator::Assignment => {
-					//let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 					let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-					//let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 					let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
 					l_value.set_value(main_data, llvm_builder, &r_value);
 					return Ok(r_value);
@@ -652,10 +647,6 @@ impl AstNode {
 					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo |
 					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 					Operation::SignedLessThanOrEqualTo | Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan => {
-						//let left_value = operands[0]
-						//	.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
-						//let right_value = operands[1]
-						//	.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
 						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
 						let result = match operation {
@@ -732,8 +723,6 @@ impl AstNode {
 					//	todo!()
 					//}
 					Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
-						//let operand = operands[0]
-						//	.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
 						let result = match operation {
 							Operation::IntegerNegate => operand.build_negate(llvm_builder, "neg_temp"),
@@ -746,8 +735,6 @@ impl AstNode {
 						result
 					}
 					Operation::TakeReference | Operation::Read => {
-						//let value = operands[0]
-						//	.build_l_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 						let value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
 						match operation {
 							Operation::TakeReference => value
@@ -774,27 +761,25 @@ impl AstNode {
 				if block_stack.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start));
 				}
-				// Create basic block
+				// Create the first inner basic block for the BCZ block, then branch from the current basic block to it, then re-position the builder to the new basic block
 				let inner_basic_block = function.unwrap().append_basic_block(&main_data.llvm_context, "block_start");
 				llvm_builder.build_branch(&inner_basic_block);
-				//let basic_block_after_bcz_block = function.unwrap().append_basic_block(&main_data.llvm_context, "block_end");
-				//block_stack.last().unwrap().current_basic_block = &basic_block_after_bcz_block;
+				llvm_builder.position_at_end(&inner_basic_block);
+				// Create a basic block to branch to after we are done with the BCZ block we are building
 				block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "block_end"));
-				// Push block scope
-				//let mut local_variables = HashMap::new();
+				// Push a new block level onto the block stack
 				block_stack.push(BlockLevel {
 					basic_blocks: vec![inner_basic_block],
 					local_variables: HashMap::new(),
 				});
-				llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
 				// Build each expression
 				let mut last_built_expression = None;
 				for expression in block_expressions {
-					//last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?);
 					last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
 				}
 				// Pop the scope we pushed
 				block_stack.pop();
+				// Branch to the basic block that was created before to branch to after the BCZ block was built and position the builder to it
 				llvm_builder.build_branch(block_stack.last().unwrap().last_block());
 				llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
 				// Return
@@ -805,7 +790,6 @@ impl AstNode {
 			}
 			// For a function call, we build the expression that yeilds the function pointer and the ones that yeild the function arguments and then build the call.
 			AstNodeVariant::FunctionCall(function_to_call, arguments) => {
-				//if local_variables.is_empty() {
 				if block_stack.is_empty() {
 					return Err((Error::FeatureNotYetImplemented("Global function calls".into()), self.start))
 				}
@@ -815,7 +799,6 @@ impl AstNode {
 				// Build function body and arguments
 				let function_pointer_built = function_to_call
 					.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-					//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, local_variables, basic_block)?;
 				let mut arguments_built = Vec::with_capacity(arguments.len());
 				for argument in arguments {
 					arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
@@ -921,11 +904,9 @@ impl AstNode {
 		file_build_data: &mut FileBuildData<'a, 'a>,
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
-		//local_variables: &mut Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
-		//basic_block: Option<&BasicBlock>
 		block_stack: &'b mut Vec<BlockLevel<'a>>,
 		function: Option<&Value<'a, 'a>>,
-	) -> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> where BlockLevel<'a>: Sized {
+	) -> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
 			start: _,
@@ -937,7 +918,6 @@ impl AstNode {
 			// For an identifier, we create or return a local variable
 			AstNodeVariant::Identifier(name) => {
 				// Get local variable if it exists
-				//for scope_level in local_variables.iter().rev() {
 				for scope_level in block_stack.iter().rev() {
 					if let Some(variable) = scope_level.local_variables.get(name) {
 						return Ok(variable.clone());
@@ -1534,7 +1514,6 @@ impl AstNode {
 				}
 			}
 			AstNodeVariant::String(..) => {}
-			// TODO
 			AstNodeVariant::Identifier(name) => 'a: {
 				if is_l_value {
 					for local_variable_level in local_variables.iter_mut().rev() {
@@ -1572,11 +1551,9 @@ fn get_variable_by_name<'a, 'b>(
 	main_data: &MainData<'a>,
 	file_build_data: &mut FileBuildData<'a, 'a>,
 	llvm_builder: &Builder<'a, 'a>,
-	//local_variables: &Vec<HashMap<Box<str>, BuiltLValue<'a>>>,
 	block_stack: &'b mut Vec<BlockLevel<'a>>,
 	name: &str
-) -> Value<'a, 'a> where BlockLevel<'a>: Sized {
-	//for scope_level in local_variables.iter().rev() {
+) -> Value<'a, 'a> {
 	for scope_level in block_stack.iter().rev() {
 		if let Some(variable) = scope_level.local_variables.get(name) {
 			return variable.get_value(main_data, llvm_builder);
