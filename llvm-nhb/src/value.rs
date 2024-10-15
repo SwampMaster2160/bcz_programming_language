@@ -345,7 +345,7 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 		}
 	}
 
-	pub fn build_conditional_branch(&self, then_dest: BasicBlock<'c, 'm>, else_dest: BasicBlock<'c, 'm>, context: &'c Context, builder: &Builder<'c, 'm>) -> Value<'c, 'm> {
+	pub fn build_conditional_branch(&self, then_dest: &BasicBlock<'c, 'm>, else_dest: &BasicBlock<'c, 'm>, context: &'c Context, builder: &Builder<'c, 'm>) -> Value<'c, 'm> {
 		if self.get_type() != context.int_1_type() {
 			panic!("Condition type should be i1, is {self:?}")
 		}

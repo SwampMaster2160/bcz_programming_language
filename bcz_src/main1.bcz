@@ -1,13 +1,12 @@
 main = @entry_point () {
-	fnA(2)
+	fnB(1, 420, 69)
 	//0? 0: 0
 };
 
-fnA = (v) v;
+//fnA = (v) v;
 
-fnB = (v) {
-	a = v + 1;
-	a
+fnB = (a, b, c) {
+	a? b: c
 };
 
 //main = @entry_point () {
