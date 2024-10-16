@@ -713,6 +713,43 @@ impl AstNode {
 						};
 						result
 					}
+					Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
+						// Get the left value
+						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						// Get if we should skip
+						let skip_condition = match operation {
+							Operation::LogicalShortCircuitAnd
+								=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::Equal, llvm_builder, "should_skip_temp"),
+							Operation::LogicalShortCircuitOr
+								=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "should_skip_temp"),
+							_ => unreachable!()
+						};
+						let function_some = function.unwrap();
+						// Build the alloca to write the result to
+						let result = main_data.int_type.build_alloca(llvm_builder, "result");
+						result.build_store(&left_value, llvm_builder);
+						// Build the basic block for getting the right value if we should and then the block to branch to at the end
+						let get_right_value_basic_block = function_some.append_basic_block(&main_data.llvm_context, "get_right_value");
+						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "skip");
+						// Build a conditional branch that may or may not skip getting the right value
+						skip_condition.build_conditional_branch(&end_basic_block, &get_right_value_basic_block, &main_data.llvm_context, llvm_builder);
+						// Build getting right value
+						llvm_builder.position_at_end(&get_right_value_basic_block);
+						block_stack.last_mut().unwrap().basic_blocks.push(get_right_value_basic_block);
+						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let operation_result = match operation {
+							Operation::LogicalShortCircuitAnd => right_value,
+							Operation::LogicalShortCircuitOr => right_value,
+							_ => unreachable!()
+						};
+						result.build_store(&operation_result, llvm_builder);
+						llvm_builder.build_branch(&end_basic_block);
+						// Re-position builder at end
+						llvm_builder.position_at_end(&end_basic_block);
+						block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+						// Read result
+						result.build_load(main_data.int_type, llvm_builder, "read_result")
+					}
 					Operation::NotShortCircuitTernary => {
 						// Build operands
 						let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
