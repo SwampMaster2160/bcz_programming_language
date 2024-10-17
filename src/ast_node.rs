@@ -224,6 +224,33 @@ impl AstNode {
 		Ok(())
 	}
 
+	/// Count how many stack allocations an expression needs.
+	/// Returns the amount of overlapping and non-overlapping ints as well as uses of @stack.
+	pub fn get_alloca_count(
+		&self,
+		local_variables: &mut Vec<HashSet<Box<str>>>,
+		is_l_value: bool,
+		overlapping_stack_uses: &mut HashMap<(Type, u64), usize>,
+		non_overlapping_stack_uses: &mut HashMap<(Type, u64), usize>,
+		overlapping_ints: &mut usize,
+		non_overlapping_ints: &mut usize,
+	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+		// Unpack
+		let AstNode {
+			variant,
+			start,
+			end: _,
+		} = self;
+		// Search depends on type of node
+		match variant {
+			AstNodeVariant::Constant(..) => {}
+			AstNodeVariant::String(..) => {}
+			
+			_ => todo!(),
+		}
+		todo!()
+	}
+
 	/// Will search a global node and its children for global variable dependencies that need to be compiled before this node is.
 	///
 	/// Appends imported filepaths that need to be compiled before this global variable to `import_dependencies`.
@@ -810,15 +837,15 @@ impl AstNode {
 						llvm_builder.position_at_end(&end_basic_block);
 						block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
 						// Read ternary result
-						ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result")
+						ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result_temp")
 					}
 					Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
 						let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
 						let result = match operation {
 							Operation::IntegerNegate => operand.build_negate(llvm_builder, "neg_temp"),
 							Operation::Dereference =>
-								operand.build_int_to_ptr(llvm_builder, main_data.int_type.pointer_to(), "int_to_ptr_for_deref")
-									.build_load(main_data.int_type, llvm_builder, "load_for_deref"),
+								operand.build_int_to_ptr(llvm_builder, main_data.int_type.pointer_to(), "int_to_ptr_for_deref_temp")
+									.build_load(main_data.int_type, llvm_builder, "load_for_deref_temp"),
 							Operation::BitwiseNot => operand.build_bitwise_not(llvm_builder, "bnot_temp"),
 							_ => unreachable!()
 						};
@@ -829,7 +856,7 @@ impl AstNode {
 						match operation {
 							Operation::TakeReference => value
 								.get_pointer(main_data, llvm_builder)
-								.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref"),
+								.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref_temp"),
 							Operation::Read => value.get_value(main_data, llvm_builder),
 							_ => unreachable!(),
 						}
