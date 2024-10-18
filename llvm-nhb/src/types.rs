@@ -6,7 +6,7 @@ use super::{builder::Builder, context::Context, target_data::TargetData, traits:
 use super::llvm_c::{LLVMBool, LLVMBuildAlloca, LLVMConstInt, LLVMCountParamTypes, LLVMFunctionType, LLVMGetParamTypes, LLVMGetReturnType};
 use super::llvm_c::{LLVMGetTypeKind, LLVMGetUndef, LLVMIsFunctionVarArg, LLVMPointerType, LLVMSizeOfTypeInBits, LLVMTypeKind, LLVMTypeRef};
 
-#[derive(Clone, Copy, Hash, PartialEq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Type<'a> {
 	type_ref: LLVMTypeRef,
