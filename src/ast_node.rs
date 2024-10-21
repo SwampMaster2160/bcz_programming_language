@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
+use std::{array, cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
 
 use strum_macros::EnumDiscriminants;
 
@@ -285,7 +285,7 @@ impl AstNode {
 				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
 					operands[0].get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
-					operands[1].get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+					operands[1].get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 				}
 				// For an augmented assignment, we search the the l-value and r-value
 				Operator::Augmented(operation) => match operation {
@@ -670,7 +670,7 @@ impl AstNode {
 		let function = match file_build_data.built_global_function_signatures.get(name) {
 			Some(function) => function.clone(),
 			None => {
-				//Create function parameter type
+				// Create function parameter type
 				if parameters.len() > u16::MAX as usize {
 					return Err((Error::TooManyFunctionParameters, *start));
 				}
@@ -702,18 +702,47 @@ impl AstNode {
 					parameter_variable.build_store(&parameter_value, llvm_builder);
 					function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
 				}
-				//let mut inner_local_variables: Vec<HashMap<Box<str>, BuiltLValue<'a>>> = vec![function_parameter_variables];
 				let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
 					local_variables: function_parameter_variables,
 					basic_blocks: vec![basic_block],
 				}];
+				// Get the alloca count for the function body
+				let mut local_variables = HashSet::new();
+				for parameter in parameters.iter() {
+					match &parameter.variant {
+						AstNodeVariant::Identifier(name) => local_variables.insert(name.clone()),
+						_ => return Err((Error::ExpectedIdentifier, parameter.start)),
+					};
+				}
+				let mut overlapping_allocas = [0; 5];
+				let mut non_overlapping_allocas = [0; 5];
+				function_body.get_alloca_count(
+					main_data, &mut vec![local_variables], false, false, &mut overlapping_allocas, &mut non_overlapping_allocas
+				)?;
+				// Build alloca
+				let mut allocas: [Option<Value>; 5] = array::from_fn(|_| None);
+				for (index, alloca) in allocas.iter_mut().enumerate() {
+					let count = overlapping_allocas[index] + non_overlapping_allocas[index];
+					if count == 0 {
+						continue;
+					}
+					let alloca_type = match index {
+						0 => main_data.llvm_context.int_8_type(),
+						1 => main_data.llvm_context.int_16_type(),
+						2 => main_data.llvm_context.int_32_type(),
+						3 => main_data.llvm_context.int_64_type(),
+						4 => main_data.llvm_context.int_128_type(),
+						_ => unreachable!(),
+					}.array_type(count);
+					*alloca = Some(alloca_type.build_alloca(&llvm_builder, "alloca"))
+				}
 				// Build function body
-				//let function_body_built: Value<'a, 'a> = function_body
-				//	.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_local_variables, Some(&basic_block))?;
 				let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_block_stack, Some(&function))?;
 				function_body_built.build_return(llvm_builder);
 			}
 			true => {
+				let basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
+				llvm_builder.position_at_end(&basic_block);
 				// Get wrapped function type
 				let mut wrapped_function_parameter_types = Vec::with_capacity(parameters.len());
 				for parameter in parameters.iter() {
