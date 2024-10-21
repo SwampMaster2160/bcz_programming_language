@@ -333,14 +333,14 @@ impl AstNode {
 						for operand in operands {
 							operand.get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 						}
-						inner_overlapping_allocas[main_data.int_power_width as usize] = inner_overlapping_allocas[main_data.int_power_width as usize].max(1);
+						non_overlapping_allocas[main_data.int_power_width as usize] = non_overlapping_allocas[main_data.int_power_width as usize].max(1);
 					}
 					// Ternary operator
 					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
 						operands[0].get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 						operands[1].get_alloca_count(main_data,local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 						operands[2].get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
-						inner_overlapping_allocas[main_data.int_power_width as usize] = inner_overlapping_allocas[main_data.int_power_width as usize].max(1);
+						non_overlapping_allocas[main_data.int_power_width as usize] = non_overlapping_allocas[main_data.int_power_width as usize].max(1);
 					}
 				}
 				// For l-value assignments, we search the operands
