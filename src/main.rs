@@ -55,6 +55,8 @@ pub struct MainData<'a> {
 	llvm_target_triple: String,
 	/// How many bits width the target machine integer is.
 	int_bit_width: u8,
+	/// How many bytes the target machine integer is wide log 2.
+	int_power_width: u8,
 	/// The max value of the target machine's integer.
 	int_max_value: u64,
 	/// This value has the bit set that is the sign bit on the target machine's integer type.
@@ -97,6 +99,7 @@ impl<'a> MainData<'a> {
 			int_bit_width: 0,
 			int_max_value: 0,
 			sign_bit_mask: 0,
+			int_power_width: 0,
 			char_to_separator_mapping: Separator::get_symbols_map(),
 			str_to_operator_mapping: OperatorSymbol::get_symbols_map(),
 			operator_character_set: OperatorSymbol::get_character_set(),
@@ -173,6 +176,7 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	main_data.int_bit_width = int_type_width as u8;
 	main_data.int_max_value = ((1u128 << main_data.int_bit_width) - 1) as u64;
 	main_data.sign_bit_mask = main_data.int_max_value & !(main_data.int_max_value >> 1);
+	main_data.int_power_width = (main_data.int_bit_width / 8).ilog2() as u8;
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
 		let absolute_filepath = main_data.source_path.join(filepath);

@@ -232,11 +232,10 @@ impl AstNode {
 		local_variables: &mut Vec<HashSet<Box<str>>>,
 		is_l_value: bool,
 		is_link_function: bool,
-		overlapping_ints: &mut usize,
-		non_overlapping_ints: &mut usize,
-		overlapping_stack_uses: &mut HashMap<(Type<'a>, u64), usize>,
-		non_overlapping_stack_uses: &mut HashMap<(Type<'a>, u64), usize>,
+		overlapping_allocas: &mut [usize; 5],
+		non_overlapping_allocas: &mut [usize; 5],
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+		let mut inner_overlapping_allocas = [0; 5];
 		// Unpack
 		let AstNode {
 			variant,
@@ -258,48 +257,25 @@ impl AstNode {
 						}
 					}
 					local_variables.last_mut().unwrap().insert(name.clone());
-					*non_overlapping_ints += 1;
+					//*non_overlapping_ints += 1;
+					non_overlapping_allocas[main_data.int_power_width as usize] += 1;
 				}
 			}
 			AstNodeVariant::Block(sub_expressions, _) => {
 				match is_l_value {
 					false => {
-						let mut inner_non_overlapping_ints = 0;
-						let mut inner_overlapping_ints = 0;
-						let mut inner_overlapping_stack_uses: HashMap<(Type, u64), usize> = HashMap::new();
+						let mut block_non_overlapping_allocas = [0; 5];
+						// Add stack level
 						local_variables.push(HashSet::new());
+						// Run over each sub expression
 						for expression in sub_expressions {
-							let mut inner_overlapping_ints_result = 0;
-							let mut inner_overlapping_stack_uses_result = HashMap::new();
-							expression.get_alloca_count(
-								main_data,
-								local_variables,
-								false,
-								is_link_function,
-								&mut inner_overlapping_ints_result,
-								&mut inner_non_overlapping_ints,
-								&mut inner_overlapping_stack_uses_result,
-								overlapping_stack_uses,
-							)?;
-							inner_overlapping_ints = inner_overlapping_ints.max(inner_overlapping_ints_result);
-							for (type_count, count) in inner_overlapping_stack_uses_result.iter() {
-								match inner_overlapping_stack_uses.get_mut(type_count) {
-									Some(existing_count) => *existing_count = (*existing_count).max(*count),
-									None => {
-										inner_overlapping_stack_uses.insert(type_count.clone(), *count);
-									}
-								}
-							}
+							expression.get_alloca_count(main_data, local_variables, false, is_link_function, &mut inner_overlapping_allocas, &mut block_non_overlapping_allocas)?;
 						}
+						// Remove stack level
 						local_variables.pop();
-						*overlapping_ints += inner_non_overlapping_ints + inner_overlapping_ints;
-						for (type_count, count) in inner_overlapping_stack_uses.iter() {
-							match overlapping_stack_uses.get_mut(type_count) {
-								Some(existing_count) => *existing_count = (*existing_count).max(*count),
-								None => {
-									overlapping_stack_uses.insert(type_count.clone(), *count);
-								}
-							}
+						// All local variables in the block are now out of scope, so they can now overlap with stuff outside the block
+						for (index, count) in overlapping_allocas.iter_mut().enumerate() {
+							*count += block_non_overlapping_allocas[index];
 						}
 					}
 					true => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), *start)),
@@ -308,10 +284,8 @@ impl AstNode {
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
-					operands[0]
-						.get_alloca_count(main_data, local_variables, true, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
-					operands[1]
-						.get_alloca_count(main_data, local_variables, false, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+					operands[0].get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+					operands[1].get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 				}
 				// For an augmented assignment, we search the the l-value and r-value
 				Operator::Augmented(operation) => match operation {
@@ -325,10 +299,8 @@ impl AstNode {
 					Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
 					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
-						operands[0]
-							.get_alloca_count(main_data, local_variables, true, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
-						operands[1]
-							.get_alloca_count(main_data, local_variables, false, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+						operands[0].get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+						operands[1].get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 					}
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read | Operation::TakeReference |
 					Operation::BitwiseNot | Operation::LogicalNot
@@ -343,51 +315,57 @@ impl AstNode {
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
-					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd |
-					Operation::LogicalShortCircuitOr | Operation::TakeReference | Operation::BitwiseNot |
+					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor |
+					Operation::TakeReference | Operation::BitwiseNot |
 					Operation::LogicalNot |
 					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo  | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
 					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 					Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
 					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => for operand in operands {
-						operand.get_alloca_count(main_data, local_variables, false, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+						operand.get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 					}
 					// Operators that only have l-values as operands
 					Operation::Read => for operand in operands {
-						operand.get_alloca_count(main_data,local_variables, true, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+						operand.get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+					}
+					Operation::LogicalShortCircuitOr | Operation::LogicalShortCircuitAnd => {
+						for operand in operands {
+							operand.get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+						}
+						inner_overlapping_allocas[main_data.int_power_width as usize] = inner_overlapping_allocas[main_data.int_power_width as usize].max(1);
 					}
 					// Ternary operator
 					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
-						operands[0].get_alloca_count(main_data, local_variables, false, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
-						operands[1].get_alloca_count(main_data,local_variables, is_l_value, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
-						operands[2].get_alloca_count(main_data, local_variables, is_l_value, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+						operands[0].get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+						operands[1].get_alloca_count(main_data,local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+						operands[2].get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+						inner_overlapping_allocas[main_data.int_power_width as usize] = inner_overlapping_allocas[main_data.int_power_width as usize].max(1);
 					}
 				}
 				// For l-value assignments, we search the operands
 				Operator::LValueAssignment => for operand in operands {
-					operand.get_alloca_count(main_data, local_variables, true, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+					operand.get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 				}
 			}
 			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => child.get_alloca_count(main_data, local_variables, is_l_value, is_link_function, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?,
-				Metadata::Link => child.get_alloca_count(main_data, local_variables, is_l_value, true, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?,
+				Metadata::EntryPoint => child.get_alloca_count(main_data, local_variables, is_l_value, is_link_function, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+				Metadata::Link => child.get_alloca_count(main_data, local_variables, is_l_value, true, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
 			},
 			AstNodeVariant::FunctionCall(function, arguments) => {
 				if is_l_value {
 					return Err((Error::LValueFunctionCall, *start));
 				}
-				function
-					.get_alloca_count(main_data, local_variables, is_l_value, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+				function.get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 				for argument in arguments {
-					argument.get_alloca_count(main_data, local_variables, is_l_value, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+					argument.get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 				}
 			}
 			AstNodeVariant::FunctionDefinition(..) => {},
 			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
 				match function {
 					BuiltInFunctionCall::Write => for argument in arguments {
-						argument.get_alloca_count(main_data, local_variables, is_l_value, false, overlapping_ints, non_overlapping_ints, overlapping_stack_uses, non_overlapping_stack_uses)?;
+						argument.get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 					}
 					BuiltInFunctionCall::Stack => {
 						// Get arguments
@@ -406,28 +384,26 @@ impl AstNode {
 							None => 1,
 						};
 						// Get entry type
-						let entry_type = match entry_width {
-							Some(entry_width) => {
-								let entry_type = entry_width.type_from_width(main_data)?.0;
-								if entry_type.is_void() {
-									return Err((Error::VoidParameter, self.start));
-								}
-								entry_type
+						let entry_width = match entry_width {
+							Some(entry_width) => match entry_width.variant {
+								AstNodeVariant::Constant(entry_width) => entry_width,
+								_ => return Err((Error::ConstValueRequired, entry_width.start)),
 							}
-							None => main_data.int_type,
+							None => (main_data.int_bit_width / 8) as u64,
 						};
-						// Add to list
-						match non_overlapping_stack_uses.get_mut(&(entry_type, count)) {
-							Some(existing_count) => *existing_count += 1,
-							None => {
-								non_overlapping_stack_uses.insert((entry_type, count), 1);
-							}
+						if entry_width < 1 || entry_width > 16 || !entry_width.is_power_of_two() {
+							return Err((Error::InvalidTypeWidth, *start));
 						}
+						// Add to list
+						non_overlapping_allocas[entry_width.ilog2() as usize] += count as usize;
 					}
 				}
 			}
 		}
-		todo!()
+		for (index, count) in inner_overlapping_allocas.iter_mut().enumerate() {
+			*count = (*count).max(overlapping_allocas[index]);
+		}
+		Ok(())
 	}
 
 	/// Will search a global node and its children for global variable dependencies that need to be compiled before this node is.
