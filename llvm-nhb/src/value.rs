@@ -1,6 +1,6 @@
 use std::{ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
-use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildCondBr, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
+use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildCondBr, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -29,6 +29,15 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 	#[inline]
 	pub fn get_type(&self) -> Type<'c> {
 		unsafe { Type::from_ref(LLVMTypeOf(self.value_ref)) }
+	}
+
+	pub fn build_get_element_ptr(&self, builder: &Builder<'c, 'm>, element_type: Type<'c>, indices: &[Self], name: &str) -> Self {
+		let name = CString::new(name).unwrap();
+		let index_count = indices.len() as c_uint;
+		unsafe { Self::from_ref(LLVMBuildGEP2(
+			builder.get_ref(), element_type.get_ref(), self.value_ref, transmute(indices.as_ptr()), index_count, name.as_ptr()
+		)) };
+		todo!()
 	}
 
 	pub fn build_ptr_to_int(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {

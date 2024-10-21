@@ -106,6 +106,7 @@ extern "C" {
 	pub fn LLVMBuildICmp(B: LLVMBuilderRef, Op: LLVMIntPredicate, LHS: LLVMValueRef, RHS: LLVMValueRef, Name: *const c_char) -> LLVMValueRef;
 	pub fn LLVMBuildBr(B: LLVMBuilderRef, Dest: LLVMBasicBlockRef) -> LLVMValueRef;
 	pub fn LLVMBuildCondBr(B: LLVMBuilderRef, If: LLVMValueRef, Then: LLVMBasicBlockRef, Else: LLVMBasicBlockRef) -> LLVMValueRef;
+	pub fn LLVMBuildGEP2(B: LLVMBuilderRef, Ty: LLVMTypeRef, Pointer: LLVMValueRef, Indices: *mut LLVMValueRef, NumIndices: c_uint, Name: *const c_char) -> LLVMValueRef;
 	// Target information
 	pub fn LLVMInitializeX86TargetInfo() -> c_void;
 	pub fn LLVMInitializeX86Target() -> c_void;

@@ -702,10 +702,6 @@ impl AstNode {
 					parameter_variable.build_store(&parameter_value, llvm_builder);
 					function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
 				}
-				let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
-					local_variables: function_parameter_variables,
-					basic_blocks: vec![basic_block],
-				}];
 				// Get the alloca count for the function body
 				let mut local_variables = HashSet::new();
 				for parameter in parameters.iter() {
@@ -737,6 +733,11 @@ impl AstNode {
 					*alloca = Some(alloca_type.build_alloca(&llvm_builder, "alloca"))
 				}
 				// Build function body
+				let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
+					local_variables: function_parameter_variables,
+					basic_blocks: vec![basic_block],
+					allocas,
+				}];
 				let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_block_stack, Some(&function))?;
 				function_body_built.build_return(llvm_builder);
 			}
@@ -1069,9 +1070,11 @@ impl AstNode {
 				// Create a basic block to branch to after we are done with the BCZ block we are building
 				block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "block_end"));
 				// Push a new block level onto the block stack
+				let top_alloca_level = block_stack.last_mut().unwrap().allocas.clone();
 				block_stack.push(BlockLevel {
 					basic_blocks: vec![inner_basic_block],
 					local_variables: HashMap::new(),
+					allocas: top_alloca_level,
 				});
 				// Build each expression
 				let mut last_built_expression = None;
