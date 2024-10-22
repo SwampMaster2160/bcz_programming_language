@@ -717,7 +717,7 @@ impl AstNode {
 				)?;
 				// Build alloca
 				let mut allocas: [Option<Value>; 5] = array::from_fn(|_| None);
-				for (index, alloca) in allocas.iter_mut().enumerate() {
+				for (index, alloca) in allocas.iter_mut().enumerate().rev() {
 					let count = overlapping_allocas[index] + non_overlapping_allocas[index];
 					if count == 0 {
 						continue;
@@ -730,7 +730,9 @@ impl AstNode {
 						4 => main_data.llvm_context.int_128_type(),
 						_ => unreachable!(),
 					}.array_type(count);
-					*alloca = Some(alloca_type.build_alloca(&llvm_builder, "alloca"))
+					let alloca_created = alloca_type.build_alloca(&llvm_builder, "alloca")
+						.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "alloca_to_ptr_temp");
+					*alloca = Some(alloca_created);
 				}
 				// Build function body
 				let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
@@ -1181,15 +1183,17 @@ impl AstNode {
 							}
 							None => main_data.int_type,
 						};
-						// Get pointer to stack array
+						// Get pointer to top of alloca array
 						let alloca = block_stack.last_mut().unwrap()
 							.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
-						let alloca_part = alloca
-							.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "get_element_ptr_for_var_temp");
+						// Get the pointer that will be returned
+						let local_variable_ptr = alloca.clone();
+						// Re-point the alloca pointer so that the next use will point to after the array we allocated
 						*alloca = alloca.build_get_element_ptr(
 							llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
 						);
-						alloca_part
+						// Return pointer
+						local_variable_ptr
 					}
 				}
 			}
@@ -1233,13 +1237,16 @@ impl AstNode {
 						return Ok(variable.clone());
 					}
 				}
-				// Else create local variable
+				// Get pointer to top of alloca stack
 				let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
-				let alloca_part = alloca
-					.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "get_element_ptr_for_var_temp");
-				*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "get_element_ptr_temp");
-				block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::AllocaVariable(alloca_part.clone()));
-				BuiltLValue::AllocaVariable(alloca_part)
+				// Get the pointer to the variable we are creating
+				let local_variable_ptr = alloca.clone();
+				// Re-point the alloca pointer so that the next variable will be located after the variable we created
+				*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+				// Insert variable into list
+				block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::DereferencedPointer(local_variable_ptr.clone()));
+				// Return variable
+				BuiltLValue::AllocaVariable(local_variable_ptr)
 			}
 			AstNodeVariant::Constant(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::String(..) => return Err((Error::InvalidLValue, self.start)),
