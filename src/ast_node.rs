@@ -1181,9 +1181,15 @@ impl AstNode {
 							}
 							None => main_data.int_type,
 						};
-						// Get array type
-						let array_type = entry_type.array_type(count.try_into().unwrap());
-						array_type.build_alloca(llvm_builder, "stack_alloca_temp")
+						// Get pointer to stack array
+						let alloca = block_stack.last_mut().unwrap()
+							.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
+						let alloca_part = alloca
+							.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "get_element_ptr_for_var_temp");
+						*alloca = alloca.build_get_element_ptr(
+							llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
+						);
+						alloca_part
 					}
 				}
 			}
@@ -1228,10 +1234,12 @@ impl AstNode {
 					}
 				}
 				// Else create local variable
-				let variable = main_data.int_type.build_alloca(llvm_builder, &**name);
-				//local_variables.last_mut().unwrap().insert(name.clone(), BuiltLValue::AllocaVariable(variable.clone()));
-				block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::AllocaVariable(variable.clone()));
-				BuiltLValue::AllocaVariable(variable)
+				let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+				let alloca_part = alloca
+					.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "get_element_ptr_for_var_temp");
+				*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "get_element_ptr_temp");
+				block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::AllocaVariable(alloca_part.clone()));
+				BuiltLValue::AllocaVariable(alloca_part)
 			}
 			AstNodeVariant::Constant(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::String(..) => return Err((Error::InvalidLValue, self.start)),
