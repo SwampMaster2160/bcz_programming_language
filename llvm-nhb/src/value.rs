@@ -1,3 +1,4 @@
+use core::panic;
 use std::{ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
 use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildCondBr, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
@@ -32,12 +33,23 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 	}
 
 	pub fn build_get_element_ptr(&self, builder: &Builder<'c, 'm>, element_type: Type<'c>, indices: &[Self], name: &str) -> Self {
+		element_type.check_is_normal();
+		if indices.is_empty() {
+			panic!("Indices cannot be empty");
+		}
+		let mut expected_type = element_type;
+		for index in indices {
+			index.get_type().check_is_integer();
+			expected_type = expected_type.pointer_to();
+		}
+		if expected_type != self.get_type() {
+			panic!("Type mismatch");
+		}
 		let name = CString::new(name).unwrap();
-		let index_count = indices.len() as c_uint;
+		let index_count = indices.len().try_into().unwrap();
 		unsafe { Self::from_ref(LLVMBuildGEP2(
 			builder.get_ref(), element_type.get_ref(), self.value_ref, transmute(indices.as_ptr()), index_count, name.as_ptr()
-		)) };
-		todo!()
+		)) }
 	}
 
 	pub fn build_ptr_to_int(&self, builder: &Builder<'c, 'm>, dest_type: Type<'c>, name: &str) -> Self {

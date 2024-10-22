@@ -79,6 +79,25 @@ impl<'a> Type<'a> {
 	}
 
 	#[inline]
+	pub(crate) fn check_is_normal(self) {
+		if !self.is_normal() {
+			panic!("Invalid type kind {self:?}");
+		}
+	}
+
+	#[inline]
+	pub(crate) fn is_integer(self) -> bool {
+		matches!(self.type_kind(), LLVMTypeKind::LLVMIntegerTypeKind)
+	}
+
+	#[inline]
+	pub(crate) fn check_is_integer(self) {
+		if !self.is_integer() {
+			panic!("Invalid type kind {self:?}");
+		}
+	}
+
+	#[inline]
 	pub fn is_void(self) -> bool {
 		self.type_kind() == LLVMTypeKind::LLVMVoidTypeKind
 	}
