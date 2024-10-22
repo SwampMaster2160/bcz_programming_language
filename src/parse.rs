@@ -275,7 +275,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 								_ => unreachable!(),
 							}
 						}
-						Keyword::EntryPoint | Keyword::Link => break 'a,
+						Keyword::EntryPoint | Keyword::Link | Keyword::Loop => break 'a,
 					};
 					items_being_parsed.remove(index - 1);
 					// Get function parameters
@@ -532,6 +532,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		let metadata = match keyword {
 			Keyword::EntryPoint => Metadata::EntryPoint,
 			Keyword::Link => Metadata::Link,
+			Keyword::Loop => todo!(),
 			Keyword::Write => continue,
 			Keyword::Stack => continue,
 		};

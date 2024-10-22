@@ -54,6 +54,7 @@ pub enum Keyword {
 	Link,
 	Write,
 	Stack,
+	Loop,
 }
 
 impl Keyword {
@@ -63,6 +64,7 @@ impl Keyword {
 			Self::Link => "link",
 			Self::Write => "write",
 			Self::Stack => "stack",
+			Self::Loop => "loop",
 		}
 	}
 
