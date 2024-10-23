@@ -61,6 +61,7 @@ pub enum Error {
 	InvalidBuiltInFunctionArgumentCount,
 	ConstValueRequired,
 	UnmatchedTernary,
+	KeywordWithTwoChildren,
 }
 
 impl Display for Error {
@@ -125,6 +126,7 @@ impl Display for Error {
 			Error::InvalidTernaryOperator => write!(f, "Invalid ternary operator"),
 			Error::UnmatchedTernary => write!(f, "Unmatched ternary operator"),
 			Error::TernaryOperatorNotUsedOnExpressions => write!(f, "Ternary operator used on non-expressions"),
+			Error::KeywordWithTwoChildren => write!(f, "Keyword with two children"),
 		}
 	}
 }

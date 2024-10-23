@@ -2,7 +2,7 @@ use std::{array, cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, m
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{block_level::BlockLevel, built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, MainData};
+use crate::{block_level::BlockLevel, built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, token::Keyword, MainData};
 use llvm_nhb::{builder::Builder, enums::{CallingConvention, Comparison, Linkage}, module::Module, types::Type, value::Value};
 
 #[derive(Debug, Clone)]
@@ -62,17 +62,17 @@ pub enum Operator {
 	LValueAssignment,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Metadata {
-	EntryPoint,
-	Link,
-}
+//#[derive(Debug, Copy, Clone)]
+//pub enum Metadata {
+//	EntryPoint,
+//	Link,
+//}
 
-#[derive(Debug, Copy, Clone)]
-pub enum BuiltInFunctionCall {
-	Write,
-	Stack,
-}
+//#[derive(Debug, Copy, Clone)]
+//pub enum BuiltInFunctionCall {
+//	Write,
+//	Stack,
+//}
 
 #[derive(Debug, EnumDiscriminants, Clone)]
 pub enum AstNodeVariant {
@@ -86,14 +86,16 @@ pub enum AstNodeVariant {
 	Block(Box<[AstNode]>, bool),
 	/// A function pointer to call and the arguments passed in.
 	FunctionCall(Box<AstNode>, Box<[AstNode]>),
+	/// A keyword, arguments and an optional child node
+	Keyword(Keyword, Box<[AstNode]>, Option<Box<AstNode>>),
 	/// A built in function to call and the arguments passed in.
-	BuiltInFunctionCall(BuiltInFunctionCall, Box<[AstNode]>),
+	//BuiltInFunctionCall(BuiltInFunctionCall, Box<[AstNode]>),
 	/// A list of parameters for a function definition and the function body.
 	FunctionDefinition(Box<[AstNode]>, Box<AstNode>),
 	/// A string literal.
 	String(Box<str>),
-	/// Metadata about a child node.
-	Metadata(Metadata, Box<AstNode>),
+	// /// Metadata about a child node.
+	//Metadata(Metadata, Box<AstNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -115,12 +117,13 @@ impl AstNode {
 			AstNodeVariant::Block(_, result_is_undefined) => print!(", result_is_undefined: {result_is_undefined:?}"),
 			AstNodeVariant::Constant(value) => print!(", value: {value}"),
 			AstNodeVariant::FunctionCall(_, _) => {},
-			AstNodeVariant::BuiltInFunctionCall(function, _) => print!(", function: {function:?}"),
+			//AstNodeVariant::BuiltInFunctionCall(function, _) => print!(", function: {function:?}"),
 			AstNodeVariant::FunctionDefinition(_, _) => {},
 			AstNodeVariant::Identifier(name) => print!(", name: {name}"),
 			AstNodeVariant::String(string_value) => print!(", string_value: {string_value:?}"),
 			AstNodeVariant::Operator(operator, _) => print!(", operator: {operator:?}"),
-			AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {metadata:?}"),
+			//AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {metadata:?}"),
+			AstNodeVariant::Keyword(keyword, _, _) => print!(", keyword: {keyword:?}"),
 		}
 		println!(" {}", '}');
 		match &self.variant {
@@ -128,26 +131,40 @@ impl AstNode {
 				node.print_tree(level + 1);
 			}
 			AstNodeVariant::FunctionCall(function, arguments) => {
+				print!("p");
 				function.print_tree(level + 1);
 				for argument in arguments {
+					print!("a");
 					argument.print_tree(level + 1);
 				}
 			},
-			AstNodeVariant::BuiltInFunctionCall(_, arguments) => {
+			//AstNodeVariant::BuiltInFunctionCall(_, arguments) => {
+			//	for argument in arguments {
+			//		argument.print_tree(level + 1);
+			//	}
+			//},
+			AstNodeVariant::Keyword(_, arguments, child) => {
 				for argument in arguments {
+					print!("a");
 					argument.print_tree(level + 1);
 				}
-			},
+				if let Some(child) = child {
+					print!("c");
+					child.print_tree(level + 1);
+				}
+			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
 				for parameter in parameters {
+					print!("p");
 					parameter.print_tree(level + 1);
 				}
+				print!("b");
 				body.print_tree(level + 1);
-			},
+			}
 			AstNodeVariant::Operator(_, operands) => for operand in operands {
 				operand.print_tree(level + 1);
 			}
-			AstNodeVariant::Metadata(_, child) => child.print_tree(level + 1),
+			//AstNodeVariant::Metadata(_, child) => child.print_tree(level + 1),
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::Identifier(..) => {}
 			AstNodeVariant::String(..) => {}
@@ -202,7 +219,7 @@ impl AstNode {
 			AstNodeVariant::FunctionCall(..) => if will_be_discarded {
 				return Err((Error::DiscardedGlobalFunctionCall, start));
 			}
-			AstNodeVariant::BuiltInFunctionCall(..) => {}
+			//AstNodeVariant::BuiltInFunctionCall(..) => {}
 			AstNodeVariant::Block(children, is_result_undefined) => {
 				if *is_result_undefined && children.is_empty() {
 					return Ok(());
@@ -218,8 +235,16 @@ impl AstNode {
 			}
 			AstNodeVariant::FunctionDefinition(..) => {}
 			AstNodeVariant::Identifier(..) => {}
-			AstNodeVariant::Metadata(_, child) => child.separate_globals(global_list, will_be_discarded)?,
+			//AstNodeVariant::Metadata(_, child) => child.separate_globals(global_list, will_be_discarded)?,
 			AstNodeVariant::String(..) => {}
+			AstNodeVariant::Keyword(_, arguments, child) => {
+				for argument in arguments {
+					argument.separate_globals(global_list, will_be_discarded)?;
+				}
+				if let Some(child) = child {
+					child.separate_globals(global_list, will_be_discarded)?;
+				}
+			}
 		}
 		Ok(())
 	}
@@ -348,10 +373,10 @@ impl AstNode {
 					operand.get_alloca_count(main_data, local_variables, true, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 				}
 			}
-			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => child.get_alloca_count(main_data, local_variables, is_l_value, is_link_function, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
-				Metadata::Link => child.get_alloca_count(main_data, local_variables, is_l_value, true, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
-			},
+			//AstNodeVariant::Metadata(metadata, child) => match metadata {
+			//	Metadata::EntryPoint => child.get_alloca_count(main_data, local_variables, is_l_value, is_link_function, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+			//	Metadata::Link => child.get_alloca_count(main_data, local_variables, is_l_value, true, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+			//},
 			AstNodeVariant::FunctionCall(function, arguments) => {
 				if is_l_value {
 					return Err((Error::LValueFunctionCall, *start));
@@ -362,12 +387,12 @@ impl AstNode {
 				}
 			}
 			AstNodeVariant::FunctionDefinition(..) => {},
-			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
-				match function {
-					BuiltInFunctionCall::Write => for argument in arguments {
+			AstNodeVariant::Keyword(keyword, arguments, child) => {
+				match keyword {
+					Keyword::Write => for argument in arguments {
 						argument.get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
 					}
-					BuiltInFunctionCall::Stack => {
+					Keyword::Stack => {
 						// Get arguments
 						let (count, entry_width) = match arguments.len() {
 							0 => (None, None),
@@ -397,8 +422,57 @@ impl AstNode {
 						// Add to list
 						non_overlapping_allocas[entry_width.ilog2() as usize] += count as usize;
 					}
+					Keyword::Loop | Keyword::EntryPoint | Keyword::Link => {
+						if !arguments.is_empty() {
+							return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start));
+						}
+						let child = child.as_ref().unwrap();
+						match keyword {
+							Keyword::EntryPoint => child.get_alloca_count(main_data, local_variables, is_l_value, is_link_function, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+							Keyword::Link => child.get_alloca_count(main_data, local_variables, is_l_value, true, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+							Keyword::Loop => child.get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+							_ => unreachable!(),
+						}
+					},
 				}
 			}
+			//AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
+			//	match function {
+			//		BuiltInFunctionCall::Write => for argument in arguments {
+			//			argument.get_alloca_count(main_data, local_variables, is_l_value, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+			//		}
+			//		BuiltInFunctionCall::Stack => {
+			//			// Get arguments
+			//			let (count, entry_width) = match arguments.len() {
+			//				0 => (None, None),
+			//				1 => (Some(&arguments[0]), None),
+			//				2 => (Some(&arguments[0]), Some(&arguments[1])),
+			//				_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+			//			};
+			//			// Get entry count
+			//			let count = match count {
+			//				Some(count) => match count.variant {
+			//					AstNodeVariant::Constant(count) => count,
+			//					_ => return Err((Error::ConstValueRequired, count.start)),
+			//				}
+			//				None => 1,
+			//			};
+			//			// Get entry type
+			//			let entry_width = match entry_width {
+			//				Some(entry_width) => match entry_width.variant {
+			//					AstNodeVariant::Constant(entry_width) => entry_width,
+			//					_ => return Err((Error::ConstValueRequired, entry_width.start)),
+			//				}
+			//				None => (main_data.int_bit_width / 8) as u64,
+			//			};
+			//			if entry_width < 1 || entry_width > 16 || !entry_width.is_power_of_two() {
+			//				return Err((Error::InvalidTypeWidth, *start));
+			//			}
+			//			// Add to list
+			//			non_overlapping_allocas[entry_width.ilog2() as usize] += count as usize;
+			//		}
+			//	}
+			//}
 		}
 		for (index, count) in inner_overlapping_allocas.iter_mut().enumerate() {
 			*count = (*count).max(overlapping_allocas[index]);
@@ -459,13 +533,25 @@ impl AstNode {
 					)?;
 				}
 			}
-			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
-				match function {
-					BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => for argument in arguments {
+			//AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
+			//	match function {
+			//		BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => for argument in arguments {
+			//			argument.get_variable_dependencies(
+			//				variable_dependencies, import_dependencies, local_variables, false, false
+			//			)?;
+			//		}
+			//	}
+			//}
+			AstNodeVariant::Keyword(keyword, arguments, child) => {
+				match keyword {
+					Keyword::Write | Keyword::Stack => for argument in arguments {
 						argument.get_variable_dependencies(
 							variable_dependencies, import_dependencies, local_variables, false, false
 						)?;
 					}
+					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
+					Keyword::Link => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
+					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
@@ -523,10 +609,10 @@ impl AstNode {
 				}
 			}
 			// For metadata nodes, we just search the child node
-			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
-				Metadata::Link => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
-			},
+			//AstNodeVariant::Metadata(metadata, child) => match metadata {
+			//	Metadata::EntryPoint => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
+			//	Metadata::Link => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
+			//},
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
@@ -629,11 +715,18 @@ impl AstNode {
 				// Return
 				Ok(function)
 			}
-			AstNodeVariant::Metadata(metadata, child_node) => match metadata {
-				Metadata::EntryPoint =>
-					child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
-				Metadata::Link =>
-					child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+			//AstNodeVariant::Metadata(metadata, child_node) => match metadata {
+			//	Metadata::EntryPoint =>
+			//		child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+			//	Metadata::Link =>
+			//		child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+			//}
+			AstNodeVariant::Keyword(keyword, _, child_node) => match keyword {
+				Keyword::EntryPoint =>
+					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+				Keyword::Link =>
+					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+				_ => unreachable!(),
 			}
 			_ => unreachable!(),
 		}
@@ -659,11 +752,18 @@ impl AstNode {
 		// If we have a metadata node, then build the child node
 		let (parameters, function_body) = match variant {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
-			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint =>
-					return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
-				Metadata::Link =>
-					return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+			//AstNodeVariant::Metadata(metadata, child) => match metadata {
+			//	Metadata::EntryPoint =>
+			//		return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+			//	Metadata::Link =>
+			//		return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+			//}
+			AstNodeVariant::Keyword(keyword, _, child) => match keyword {
+				Keyword::EntryPoint =>
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+				Keyword::Link =>
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+				_ => unreachable!(),
 			}
 			_ => unreachable!(),
 		};
@@ -1121,9 +1221,9 @@ impl AstNode {
 				built_function_call
 			}
 			// For a built in function, building depends on the function
-			AstNodeVariant::BuiltInFunctionCall(built_in_function, arguments) => {
-				match built_in_function {
-					BuiltInFunctionCall::Write => {
+			AstNodeVariant::Keyword(keyword, arguments, _child) => {
+				match keyword {
+					Keyword::Write => {
 						// Get arguments
 						let (address_to_write_to, (write_type, is_signed), value_to_write) = match arguments.len() {
 							2 => {
@@ -1156,7 +1256,7 @@ impl AstNode {
 						// Expression yeilds the written value
 						value_to_write_built
 					}
-					BuiltInFunctionCall::Stack => {
+					Keyword::Stack => {
 						// Get arguments
 						let (count, entry_width) = match arguments.len() {
 							0 => (None, None),
@@ -1195,8 +1295,86 @@ impl AstNode {
 						// Return pointer
 						local_variable_ptr
 					}
+					Keyword::EntryPoint | Keyword::Link => unreachable!(),
+					Keyword::Loop => todo!(),
 				}
 			}
+			//AstNodeVariant::BuiltInFunctionCall(built_in_function, arguments) => {
+			//	match built_in_function {
+			//		BuiltInFunctionCall::Write => {
+			//			// Get arguments
+			//			let (address_to_write_to, (write_type, is_signed), value_to_write) = match arguments.len() {
+			//				2 => {
+			//					(&arguments[0], (main_data.int_type, false), &arguments[1])
+			//				}
+			//				3 => (&arguments[0], *(&arguments[1].type_from_width(main_data)?), &arguments[2]),
+			//				_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+			//			};
+			//			if write_type.is_void() {
+			//				return Err((Error::VoidParameter, self.start))
+			//			}
+			//			let write_type_ptr = write_type.pointer_to();
+			//			// Build arguments
+			//			let address_to_write_to_built = address_to_write_to
+			//				.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+			//				.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
+			//			let value_to_write_built = value_to_write
+			//				.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+			//			let value_to_write_built_cast = match main_data.int_bit_width
+			//				.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+			//				Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
+			//				Ordering::Equal => value_to_write_built.clone(),
+			//				Ordering::Less => match is_signed {
+			//					false => value_to_write_built.clone().build_zero_extend(llvm_builder, write_type, "zero_extend_temp"),
+			//					true => value_to_write_built.clone().build_sign_extend(llvm_builder, write_type, "sign_extend_temp"),
+			//				}
+			//			};
+			//			// Build write
+			//			address_to_write_to_built.build_store(&value_to_write_built_cast, llvm_builder);
+			//			// Expression yeilds the written value
+			//			value_to_write_built
+			//		}
+			//		BuiltInFunctionCall::Stack => {
+			//			// Get arguments
+			//			let (count, entry_width) = match arguments.len() {
+			//				0 => (None, None),
+			//				1 => (Some(&arguments[0]), None),
+			//				2 => (Some(&arguments[0]), Some(&arguments[1])),
+			//				_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+			//			};
+			//			// Get entry count
+			//			let count = match count {
+			//				Some(count) => match count.variant {
+			//					AstNodeVariant::Constant(count) => count,
+			//					_ => return Err((Error::ConstValueRequired, count.start)),
+			//				}
+			//				None => 1,
+			//			};
+			//			// Get entry type
+			//			let entry_type = match entry_width {
+			//				Some(entry_width) => {
+			//					let entry_type = entry_width.type_from_width(main_data)?.0;
+			//					if entry_type.is_void() {
+			//						return Err((Error::VoidParameter, self.start));
+			//					}
+			//					entry_type
+			//				}
+			//				None => main_data.int_type,
+			//			};
+			//			// Get pointer to top of alloca array
+			//			let alloca = block_stack.last_mut().unwrap()
+			//				.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
+			//			// Get the pointer that will be returned
+			//			let local_variable_ptr = alloca.clone();
+			//			// Re-point the alloca pointer so that the next use will point to after the array we allocated
+			//			*alloca = alloca.build_get_element_ptr(
+			//				llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
+			//			);
+			//			// Return pointer
+			//			local_variable_ptr
+			//		}
+			//	}
+			//}
 			// Build strings
 			AstNodeVariant::String(text) => {
 				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
@@ -1204,10 +1382,10 @@ impl AstNode {
 				string.build_ptr_to_int(llvm_builder, main_data.int_type, "str_ptr_to_int")
 			}
 			// For metadata nodes, we build the child nodes
-			AstNodeVariant::Metadata(metadata, _child) => match metadata {
-				Metadata::EntryPoint => unreachable!(),
-				Metadata::Link => unreachable!(),
-			}
+			//AstNodeVariant::Metadata(metadata, _child) => match metadata {
+			//	Metadata::EntryPoint => unreachable!(),
+			//	Metadata::Link => unreachable!(),
+			//}
 		})
 	}
 
@@ -1252,10 +1430,19 @@ impl AstNode {
 			AstNodeVariant::String(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::FunctionCall(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::FunctionDefinition(..) => return Err((Error::InvalidLValue, self.start)),
-			AstNodeVariant::Metadata(metadata, _) => match metadata {
-				Metadata::Link => return Err((Error::InvalidLValue, self.start)),
-				Metadata::EntryPoint => return Err((Error::InvalidLValue, self.start)),
-			},
+			//AstNodeVariant::Metadata(metadata, _) => match metadata {
+			//	Metadata::Link => return Err((Error::InvalidLValue, self.start)),
+			//	Metadata::EntryPoint => return Err((Error::InvalidLValue, self.start)),
+			//},
+			AstNodeVariant::Keyword(keyword, _arguments, _child) => {
+				match keyword {
+					Keyword::Link => return Err((Error::InvalidLValue, self.start)),
+					Keyword::EntryPoint => return Err((Error::InvalidLValue, self.start)),
+					Keyword::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
+					Keyword::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
+					Keyword::Loop => return Err((Error::InvalidLValue, self.start)),
+				}
+			}
 			AstNodeVariant::Block(..) => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), self.start)),
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				Operator::Assignment => return Err((Error::FeatureNotYetImplemented("L-value assignments".into()), self.start)),
@@ -1271,12 +1458,12 @@ impl AstNode {
 					_ => return Err((Error::FeatureNotYetImplemented("L-value operator".into()), self.start)),
 				}
 			}
-			AstNodeVariant::BuiltInFunctionCall(function, _arguments) => {
-				match function {
-					BuiltInFunctionCall::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
-					BuiltInFunctionCall::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
-				}
-			}
+			//AstNodeVariant::BuiltInFunctionCall(function, _arguments) => {
+			//	match function {
+			//		BuiltInFunctionCall::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
+			//		BuiltInFunctionCall::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
+			//	}
+			//}
 		})
 	}
 
@@ -1302,9 +1489,14 @@ impl AstNode {
 	pub fn is_function(&self) -> bool {
 		match &self.variant {
 			AstNodeVariant::FunctionDefinition(..) => true,
-			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => child.is_function(),
-				Metadata::Link => child.is_function(),
+			//AstNodeVariant::Metadata(metadata, child) => match metadata {
+			//	Metadata::EntryPoint => child.is_function(),
+			//	Metadata::Link => child.is_function(),
+			//}
+			AstNodeVariant::Keyword(keyword, _arguments, child) => match keyword {
+				Keyword::EntryPoint => child.as_ref().unwrap().is_function(),
+				Keyword::Link => child.as_ref().unwrap().is_function(),
+				_ => false,
 			}
 			_ => false,
 		}
@@ -1795,12 +1987,12 @@ impl AstNode {
 					}
 				}
 			}
-			AstNodeVariant::Metadata(metadata, child) => match metadata {
-				Metadata::EntryPoint => child
-					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
-				Metadata::Link => child
-					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
-			}
+			//AstNodeVariant::Metadata(metadata, child) => match metadata {
+			//	Metadata::EntryPoint => child
+			//		.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
+			//	Metadata::Link => child
+			//		.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
+			//}
 			AstNodeVariant::Block(sub_expressions, ..) => {
 				local_variables.push(HashMap::new());
 				if is_l_value {
@@ -1821,17 +2013,32 @@ impl AstNode {
 						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
 				}
 			}
-			AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
-				match function {
-					BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => {
+			AstNodeVariant::Keyword(keyword, arguments, child) => {
+				match keyword {
+					Keyword::Write | Keyword::Stack | Keyword::Loop => {
 						for argument in arguments {
 							argument.const_evaluate(
 								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
 							)?;
 						}
 					}
+					Keyword::EntryPoint => child.as_mut().unwrap()
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
+						Keyword::Link => child.as_mut().unwrap()
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
 				}
 			}
+			//AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
+			//	match function {
+			//		BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => {
+			//			for argument in arguments {
+			//				argument.const_evaluate(
+			//					main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
+			//				)?;
+			//			}
+			//		}
+			//	}
+			//}
 			AstNodeVariant::String(..) => {}
 			AstNodeVariant::Identifier(name) => 'a: {
 				if is_l_value {

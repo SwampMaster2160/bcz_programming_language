@@ -2,7 +2,7 @@ use std::{mem::take, num::NonZeroUsize};
 
 use auto_const_array::auto_const_array;
 
-use crate::{ast_node::{AstNode, AstNodeVariant, BuiltInFunctionCall, Metadata, Operation, Operator}, error::Error};
+use crate::{ast_node::{AstNode, AstNodeVariant, Operation, Operator}, error::Error};
 use crate::token::{Keyword, OperatorSymbol, OperatorType, Separator, Token, TokenVariant};
 
 #[derive(Debug)]
@@ -238,6 +238,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			let (_, arguments_end) = (*arguments_start, *arguments_end);
 			// Make sure the item to the left is not a parsed expression
 			match &items_being_parsed[index - 1] {
+				// User defined functions
 				ParseState::AstNode(..) => {
 					// Get function pointer
 					let function_pointer = items_being_parsed.remove(index - 1);
@@ -264,18 +265,23 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					index -= 1;
 					continue;
 				}
+				// Build in functions
 				ParseState::Token(Token { start, end: _, variant: TokenVariant::Keyword(keyword) }) => 'a: {
 					let start = *start;
 					// Get built in function
-					let function = match keyword {
-						Keyword::Write | Keyword::Stack => {
-							match keyword {
-								Keyword::Write => BuiltInFunctionCall::Write,
-								Keyword::Stack => BuiltInFunctionCall::Stack,
-								_ => unreachable!(),
-							}
-						}
-						Keyword::EntryPoint | Keyword::Link | Keyword::Loop => break 'a,
+					//let function = match keyword {
+					//	Keyword::Write | Keyword::Stack => {
+					//		match keyword {
+					//			Keyword::Write => BuiltInFunctionCall::Write,
+					//			Keyword::Stack => BuiltInFunctionCall::Stack,
+					//			_ => unreachable!(),
+					//		}
+					//	}
+					//	Keyword::EntryPoint | Keyword::Link | Keyword::Loop => break 'a,
+					//};
+					let keyword = match keyword {
+						Keyword::EntryPoint | Keyword::Link => break 'a,
+						keyword => *keyword
 					};
 					items_being_parsed.remove(index - 1);
 					// Get function parameters
@@ -287,7 +293,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					let operator_ast_node = AstNode {
 						start,
 						end: arguments_end,
-						variant: AstNodeVariant::BuiltInFunctionCall(function, parameters),
+						variant: AstNodeVariant::Keyword(keyword, parameters, None)//AstNodeVariant::BuiltInFunctionCall(function, parameters),
 					};
 					// Insert back into list
 					items_being_parsed[index - 1] = ParseState::AstNode(operator_ast_node);
@@ -298,6 +304,14 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			}
 		};
 		index += 1;
+	}
+	// Parse built in functions without arguments
+	for item in items_being_parsed.iter_mut() {
+		let (keyword, start, end) = match item {
+			ParseState::Token(Token { variant: TokenVariant::Keyword(keyword), start, end }) => (*keyword, *start, *end),
+			_ => continue,
+		};
+		*item = ParseState::AstNode(AstNode { variant: AstNodeVariant::Keyword(keyword, Box::new([]), None), start, end })
 	}
 	// Parse unary prefix operators
 	for index in (0..items_being_parsed.len().saturating_sub(1)).rev() {
@@ -524,18 +538,20 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	// Parse some metadata items
 	for index in (0..items_being_parsed.len()).rev() {
 		// Make sure we have a keyword
-		let (keyword, start, _) = match &items_being_parsed[index] {
-			ParseState::Token(Token { variant: TokenVariant::Keyword(keyword), start, end }) => (*keyword, *start, *end),
+		let (keyword, arguments, child, start) = match &mut items_being_parsed[index] {
+			//ParseState::Token(Token { variant: TokenVariant::Keyword(keyword), start, end }) => (*keyword, *start, *end),
+			ParseState::AstNode(AstNode { variant: AstNodeVariant::Keyword(keyword, arguments, child), start, end: _ }) => {
+					match keyword {
+						Keyword::EntryPoint | Keyword::Link | Keyword::Loop => {},
+						Keyword::Write | Keyword::Stack => continue,
+					};
+					(*keyword, take(arguments), take(child), *start)
+				}
 			_ => continue,
 		};
-		// Get the type of metadata the keyword represents
-		let metadata = match keyword {
-			Keyword::EntryPoint => Metadata::EntryPoint,
-			Keyword::Link => Metadata::Link,
-			Keyword::Loop => todo!(),
-			Keyword::Write => continue,
-			Keyword::Stack => continue,
-		};
+		if child.is_some() {
+			return Err((Error::KeywordWithTwoChildren, start));
+		}
 		// Take child node
 		let child_node = match items_being_parsed.remove(index + 1) {
 			ParseState::AstNode(ast_node) => ast_node,
@@ -545,7 +561,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		let metadata_ast_node = AstNode {
 			start,
 			end: child_node.end,
-			variant: AstNodeVariant::Metadata(metadata, Box::new(child_node)),
+			variant: AstNodeVariant::Keyword(keyword, arguments, Some(Box::new(child_node))),//AstNodeVariant::Metadata(metadata, Box::new(child_node)),
 		};
 		// Insert back into list
 		items_being_parsed[index] = ParseState::AstNode(metadata_ast_node);
