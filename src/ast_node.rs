@@ -430,7 +430,10 @@ impl AstNode {
 						match keyword {
 							Keyword::EntryPoint => child.get_alloca_count(main_data, local_variables, is_l_value, is_link_function, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
 							Keyword::Link => child.get_alloca_count(main_data, local_variables, is_l_value, true, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
-							Keyword::Loop => child.get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?,
+							Keyword::Loop => {
+								child.get_alloca_count(main_data, local_variables, false, false, &mut inner_overlapping_allocas, non_overlapping_allocas)?;
+								non_overlapping_allocas[main_data.int_power_width as usize] = non_overlapping_allocas[main_data.int_power_width as usize].max(1);
+							}
 							_ => unreachable!(),
 						}
 					},
@@ -1039,8 +1042,10 @@ impl AstNode {
 							_ => unreachable!()
 						};
 						let function_some = function.unwrap();
-						// Build the alloca to write the result to
-						let result = main_data.int_type.build_alloca(llvm_builder, "result");
+						// Get the stack ptr to write the result to
+						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+						let result = alloca.clone();
+						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
 						result.build_store(&left_value, llvm_builder);
 						// Build the basic block for getting the right value if we should and then the block to branch to at the end
 						let get_right_value_basic_block = function_some.append_basic_block(&main_data.llvm_context, "get_right_value");
@@ -1076,7 +1081,9 @@ impl AstNode {
 						let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
 						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
 						// Build the alloca to write the ternary result to
-						let ternary_result = main_data.int_type.build_alloca(llvm_builder, "ternary_result");
+						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+						let ternary_result = alloca.clone();
+						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
 						// Build the conditional branch to the then and else branches depending on the condition
 						condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
 						// Build then case
@@ -1105,7 +1112,9 @@ impl AstNode {
 						let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
 						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
 						// Build the alloca to write the ternary result to
-						let ternary_result = main_data.int_type.build_alloca(llvm_builder, "ternary_result");
+						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+						let ternary_result = alloca.clone();
+						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
 						// Build the conditional branch to the then and else branches depending on the condition
 						condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
 						// Build then case
@@ -1221,7 +1230,7 @@ impl AstNode {
 				built_function_call
 			}
 			// For a built in function, building depends on the function
-			AstNodeVariant::Keyword(keyword, arguments, _child) => {
+			AstNodeVariant::Keyword(keyword, arguments, child) => {
 				match keyword {
 					Keyword::Write => {
 						// Get arguments
@@ -1296,7 +1305,50 @@ impl AstNode {
 						local_variable_ptr
 					}
 					Keyword::EntryPoint | Keyword::Link => unreachable!(),
-					Keyword::Loop => todo!(),
+					Keyword::Loop => {
+						if !arguments.is_empty() {
+							return Err((Error::FeatureNotYetImplemented("Loop arguments".into()), self.start));
+						}
+						// If we are in the global scope
+						if block_stack.is_empty() {
+							return Err((Error::FeatureNotYetImplemented("Loop in global scope".into()), self.start));
+						}
+						// Get the variable for the loop result
+						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+						let loop_result = alloca.clone();
+						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+						// Create the first inner basic block for the BCZ block, then branch from the current basic block to it, then re-position the builder to the new basic block
+						let inner_basic_block = function.unwrap().append_basic_block(&main_data.llvm_context, "loop_start");
+						llvm_builder.build_branch(&inner_basic_block);
+						llvm_builder.position_at_end(&inner_basic_block);
+						// Create a basic block to branch to after we are done with the BCZ block we are building
+						block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "loop_end"));
+						// Push a new block level onto the block stack
+						let top_alloca_level = block_stack.last_mut().unwrap().allocas.clone();
+						block_stack.push(BlockLevel {
+							basic_blocks: vec![inner_basic_block],
+							local_variables: HashMap::new(),
+							allocas: top_alloca_level,
+						});
+						// Build child expression
+						child.as_ref().unwrap().build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						//let mut last_built_expression = None;
+						//for expression in block_expressions {
+						//	last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
+						//}
+						llvm_builder.build_branch(&block_stack.last().unwrap().basic_blocks[0]);
+						// Pop the scope we pushed
+						block_stack.pop();
+						// Branch to the basic block that was created before to branch to after the BCZ block was built and position the builder to it
+						//llvm_builder.build_branch(block_stack.last().unwrap().last_block());
+						llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+						// Return
+						loop_result.build_load(main_data.int_type, llvm_builder, "loop_result_temp")
+						//match (is_result_undefined, last_built_expression) {
+						//	(true, _) | (false, None) => main_data.int_type.undefined(),
+						//	(false, Some(last_built_expression)) => last_built_expression,
+						//}
+					}
 				}
 			}
 			//AstNodeVariant::BuiltInFunctionCall(built_in_function, arguments) => {
