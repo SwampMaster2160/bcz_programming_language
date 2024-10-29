@@ -793,6 +793,7 @@ impl AstNode {
 					allocas_in_use: HashSet::new(),
 					//allocas,
 				}];
+				llvm_builder.position_at_end(&body_basic_block);
 				//let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_block_stack, Some(&function))?;
 				let mut function_info = FunctionBuildData {
 					function: function.clone(),
