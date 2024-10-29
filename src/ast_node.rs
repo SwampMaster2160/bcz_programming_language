@@ -62,18 +62,6 @@ pub enum Operator {
 	LValueAssignment,
 }
 
-//#[derive(Debug, Copy, Clone)]
-//pub enum Metadata {
-//	EntryPoint,
-//	Link,
-//}
-
-//#[derive(Debug, Copy, Clone)]
-//pub enum BuiltInFunctionCall {
-//	Write,
-//	Stack,
-//}
-
 #[derive(Debug, EnumDiscriminants, Clone)]
 pub enum AstNodeVariant {
 	/// A constant.
@@ -88,14 +76,10 @@ pub enum AstNodeVariant {
 	FunctionCall(Box<AstNode>, Box<[AstNode]>),
 	/// A keyword, arguments and an optional child node
 	Keyword(Keyword, Box<[AstNode]>, Option<Box<AstNode>>),
-	/// A built in function to call and the arguments passed in.
-	//BuiltInFunctionCall(BuiltInFunctionCall, Box<[AstNode]>),
 	/// A list of parameters for a function definition and the function body.
 	FunctionDefinition(Box<[AstNode]>, Box<AstNode>),
 	/// A string literal.
 	String(Box<str>),
-	// /// Metadata about a child node.
-	//Metadata(Metadata, Box<AstNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -117,12 +101,10 @@ impl AstNode {
 			AstNodeVariant::Block(_, result_is_undefined) => print!(", result_is_undefined: {result_is_undefined:?}"),
 			AstNodeVariant::Constant(value) => print!(", value: {value}"),
 			AstNodeVariant::FunctionCall(_, _) => {},
-			//AstNodeVariant::BuiltInFunctionCall(function, _) => print!(", function: {function:?}"),
 			AstNodeVariant::FunctionDefinition(_, _) => {},
 			AstNodeVariant::Identifier(name) => print!(", name: {name}"),
 			AstNodeVariant::String(string_value) => print!(", string_value: {string_value:?}"),
 			AstNodeVariant::Operator(operator, _) => print!(", operator: {operator:?}"),
-			//AstNodeVariant::Metadata(metadata, _) => print!(", metadata: {metadata:?}"),
 			AstNodeVariant::Keyword(keyword, _, _) => print!(", keyword: {keyword:?}"),
 		}
 		println!(" {}", '}');
@@ -138,11 +120,6 @@ impl AstNode {
 					argument.print_tree(level + 1);
 				}
 			},
-			//AstNodeVariant::BuiltInFunctionCall(_, arguments) => {
-			//	for argument in arguments {
-			//		argument.print_tree(level + 1);
-			//	}
-			//},
 			AstNodeVariant::Keyword(_, arguments, child) => {
 				for argument in arguments {
 					print!("a");
@@ -164,7 +141,6 @@ impl AstNode {
 			AstNodeVariant::Operator(_, operands) => for operand in operands {
 				operand.print_tree(level + 1);
 			}
-			//AstNodeVariant::Metadata(_, child) => child.print_tree(level + 1),
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::Identifier(..) => {}
 			AstNodeVariant::String(..) => {}
@@ -219,7 +195,6 @@ impl AstNode {
 			AstNodeVariant::FunctionCall(..) => if will_be_discarded {
 				return Err((Error::DiscardedGlobalFunctionCall, start));
 			}
-			//AstNodeVariant::BuiltInFunctionCall(..) => {}
 			AstNodeVariant::Block(children, is_result_undefined) => {
 				if *is_result_undefined && children.is_empty() {
 					return Ok(());
@@ -235,7 +210,6 @@ impl AstNode {
 			}
 			AstNodeVariant::FunctionDefinition(..) => {}
 			AstNodeVariant::Identifier(..) => {}
-			//AstNodeVariant::Metadata(_, child) => child.separate_globals(global_list, will_be_discarded)?,
 			AstNodeVariant::String(..) => {}
 			AstNodeVariant::Keyword(_, arguments, child) => {
 				for argument in arguments {
@@ -536,15 +510,6 @@ impl AstNode {
 					)?;
 				}
 			}
-			//AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
-			//	match function {
-			//		BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => for argument in arguments {
-			//			argument.get_variable_dependencies(
-			//				variable_dependencies, import_dependencies, local_variables, false, false
-			//			)?;
-			//		}
-			//	}
-			//}
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
 				match keyword {
 					Keyword::Write | Keyword::Stack => for argument in arguments {
@@ -611,11 +576,6 @@ impl AstNode {
 					local_variables.last_mut().unwrap().insert(name.clone());
 				}
 			}
-			// For metadata nodes, we just search the child node
-			//AstNodeVariant::Metadata(metadata, child) => match metadata {
-			//	Metadata::EntryPoint => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
-			//	Metadata::Link => child.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
-			//},
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
@@ -718,12 +678,6 @@ impl AstNode {
 				// Return
 				Ok(function)
 			}
-			//AstNodeVariant::Metadata(metadata, child_node) => match metadata {
-			//	Metadata::EntryPoint =>
-			//		child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
-			//	Metadata::Link =>
-			//		child_node.build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
-			//}
 			AstNodeVariant::Keyword(keyword, _, child_node) => match keyword {
 				Keyword::EntryPoint =>
 					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
@@ -755,12 +709,6 @@ impl AstNode {
 		// If we have a metadata node, then build the child node
 		let (parameters, function_body) = match variant {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
-			//AstNodeVariant::Metadata(metadata, child) => match metadata {
-			//	Metadata::EntryPoint =>
-			//		return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
-			//	Metadata::Link =>
-			//		return child.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
-			//}
 			AstNodeVariant::Keyword(keyword, _, child) => match keyword {
 				Keyword::EntryPoint =>
 					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
@@ -790,8 +738,8 @@ impl AstNode {
 		// Build function body
 		match is_link_function {
 			false => {
-				let basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
-				llvm_builder.position_at_end(&basic_block);
+				let entry_basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
+				llvm_builder.position_at_end(&entry_basic_block);
 				let mut function_parameter_variables = HashMap::new();
 				for (parameter_index, parameter) in parameters.iter().enumerate() {
 					// Get parameter name
@@ -838,17 +786,24 @@ impl AstNode {
 				//	*alloca = Some(alloca_created);
 				//}
 				// Build function body
+				let body_basic_block = function.append_basic_block(&main_data.llvm_context, "function_body");
 				let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
 					local_variables: function_parameter_variables,
-					basic_blocks: vec![basic_block],
+					basic_blocks: vec![entry_basic_block.clone(), body_basic_block.clone()],
+					allocas_in_use: HashSet::new(),
 					//allocas,
 				}];
 				//let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_block_stack, Some(&function))?;
 				let mut function_info = FunctionBuildData {
-					function,
+					function: function.clone(),
 					block_stack: &mut inner_block_stack,
+					allocas_not_in_use: &mut HashSet::new(),
+					alloca_block: &entry_basic_block,
 				};
 				let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(&mut function_info))?;
+				llvm_builder.position_at_end(&entry_basic_block);
+				llvm_builder.build_branch(&body_basic_block);
+				llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
 				function_body_built.build_return(llvm_builder);
 			}
 			true => {
@@ -957,228 +912,272 @@ impl AstNode {
 			// For an identifier, we load the value stored in the variable it represents
 			//AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, block_stack, &*name),
 			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, function_build_data, &*name),
-			AstNodeVariant::Operator(operator, operands) => match operator {
-				// For an assignment, we build the l and r-values and then build a store instruction
-				Operator::Assignment => {
-					//let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-					let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
-					//let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-					let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
-					l_value.set_value(main_data, llvm_builder, &r_value);
-					return Ok(r_value);
-				}
-				// For a normal operator, we build the operands then build the operator instruction
-				Operator::Normal(operation) => match operation {
-					Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
-					Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
-					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitOr |
-					Operation::LogicalNotShortCircuitAnd | Operation::LogicalXor |
-					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo |
-					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
-					Operation::SignedLessThanOrEqualTo | Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan => {
-						//let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						//let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
-						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
-						let result = match operation {
-							Operation::IntegerAdd => left_value.build_add(&right_value, llvm_builder, "add_temp"),
-							Operation::IntegerSubtract => left_value.build_sub(&right_value, llvm_builder, "sub_temp"),
-							Operation::IntegerMultiply => left_value.build_mult(&right_value, llvm_builder, "mult_temp"),
-							Operation::UnsignedDivide => left_value.build_unsigned_div(&right_value, llvm_builder, "udiv_temp"),
-							Operation::UnsignedModulo => left_value.build_unsigned_modulo(&right_value, llvm_builder, "umod_temp"),
-							Operation::SignedDivide => left_value.build_signed_div(&right_value, llvm_builder, "sdiv_temp"),
-							Operation::SignedTruncatedModulo => left_value.build_signed_truncated_modulo(&right_value, llvm_builder, "stmod_temp"),
-							Operation::BitwiseAnd => left_value.build_bitwise_and(&right_value, llvm_builder, "band_temp"),
-							Operation::BitwiseOr | Operation::LogicalNotShortCircuitOr =>
-								left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
-							Operation::BitwiseXor => left_value.build_bitwise_xor(&right_value, llvm_builder, "bxor_temp"),
-							Operation::LogicalNotShortCircuitAnd => {
-								let zero_const = main_data.int_type.const_int(0, false);
-								let left_value_bool =
-									left_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
-								let right_value_bool =
-									right_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
-								left_value_bool.build_bitwise_and(&right_value_bool, llvm_builder, "band_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
-							}
-							Operation::LogicalXor => {
-								let zero_const = main_data.int_type.const_int(0, false);
-								let left_value_bool =
-									left_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
-								let right_value_bool =
-									right_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
-								left_value_bool.build_bitwise_xor(&right_value_bool, llvm_builder, "bxor_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
-							}
-							Operation::IntegerEqualTo =>
-								left_value.build_compare(&right_value, Comparison::Equal, llvm_builder, "eq_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::IntegerNotEqualTo =>
-								left_value.build_compare(&right_value, Comparison::NotEqual, llvm_builder, "neq_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::UnsignedLessThan =>
-								left_value.build_compare(&right_value, Comparison::UnsignedLessThan, llvm_builder, "ult_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::UnsignedLessThanOrEqualTo =>
-								left_value.build_compare(&right_value, Comparison::UnsignedLessThanOrEqualTo, llvm_builder, "ulteq_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::UnsignedGreaterThan =>
-								left_value.build_compare(&right_value, Comparison::UnsignedGreaterThan, llvm_builder, "ugt_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::UnsignedGreaterThanOrEqualTo =>
-								left_value.build_compare(&right_value, Comparison::UnsignedGreaterThanOrEqualTo, llvm_builder, "ugteq_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::SignedLessThan =>
-								left_value.build_compare(&right_value, Comparison::SignedLessThan, llvm_builder, "slt_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::SignedLessThanOrEqualTo =>
-								left_value.build_compare(&right_value, Comparison::SignedLessThanOrEqualTo, llvm_builder, "slteq_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::SignedGreaterThan =>
-								left_value.build_compare(&right_value, Comparison::SignedGreaterThan, llvm_builder, "sgt_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							Operation::SignedGreaterThanOrEqualTo =>
-								left_value.build_compare(&right_value, Comparison::SignedGreaterThanOrEqualTo, llvm_builder, "sgteq_temp")
-									.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
-							_ => unreachable!(),
-						};
-						result
+			AstNodeVariant::Operator(operator, operands) => {
+				let function_build_data = match function_build_data {
+					Some(function_build_data) => function_build_data,
+					None => return Err((Error::GlobalOperatorNotConstEvaluated, *start))
+				};
+				match operator {
+					// For an assignment, we build the l and r-values and then build a store instruction
+					Operator::Assignment => {
+						//let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+						//let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+						l_value.set_value(main_data, llvm_builder, &r_value);
+						return Ok(r_value);
 					}
-					Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
-						// TODO: Fix
-						// Get the left value
-						//let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
-						// Get if we should skip
-						let skip_condition = match operation {
-							Operation::LogicalShortCircuitAnd
-								=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::Equal, llvm_builder, "should_skip_temp"),
-							Operation::LogicalShortCircuitOr
-								=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "should_skip_temp"),
-							_ => unreachable!()
-						};
-						//let function_some = function.unwrap();
-						let function_some = function_build_data.unwrap().function;
-						// Get the stack ptr to write the result to
-						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
-						let result = alloca.clone();
-						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
-						result.build_store(&left_value, llvm_builder);
-						// Build the basic block for getting the right value if we should and then the block to branch to at the end
-						let get_right_value_basic_block = function_some.append_basic_block(&main_data.llvm_context, "get_right_value");
-						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "skip");
-						// Build a conditional branch that may or may not skip getting the right value
-						skip_condition.build_conditional_branch(&end_basic_block, &get_right_value_basic_block, &main_data.llvm_context, llvm_builder);
-						// Build getting right value
-						llvm_builder.position_at_end(&get_right_value_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(get_right_value_basic_block);
-						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let operation_result = match operation {
-							Operation::LogicalShortCircuitAnd => right_value,
-							Operation::LogicalShortCircuitOr => right_value,
-							_ => unreachable!()
-						};
-						result.build_store(&operation_result, llvm_builder);
-						llvm_builder.build_branch(&end_basic_block);
-						// Re-position builder at end
-						llvm_builder.position_at_end(&end_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
-						// Read result
-						result.build_load(main_data.int_type, llvm_builder, "read_result")
-					}
-					Operation::NotShortCircuitTernary => {
-						// Build operands
-						let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
-							.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
-						let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let function_some = function.unwrap();
-						// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
-						let then_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_then");
-						let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
-						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
-						// Build the alloca to write the ternary result to
-						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
-						let ternary_result = alloca.clone();
-						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
-						// Build the conditional branch to the then and else branches depending on the condition
-						condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
-						// Build then case
-						llvm_builder.position_at_end(&then_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
-						ternary_result.build_store(&then_case, llvm_builder);
-						llvm_builder.build_branch(&end_basic_block);
-						// Build else case
-						llvm_builder.position_at_end(&else_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
-						ternary_result.build_store(&else_case, llvm_builder);
-						llvm_builder.build_branch(&end_basic_block);
-						// Re-position builder at end
-						llvm_builder.position_at_end(&end_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
-						// Read ternary result
-						ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result")
-					}
-					Operation::ShortCircuitTernary => {
-						// Build the condition to an i1
-						let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
-							.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
-						let function_some = function.unwrap();
-						// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
-						let then_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_then");
-						let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
-						let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
-						// Build the alloca to write the ternary result to
-						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
-						let ternary_result = alloca.clone();
-						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
-						// Build the conditional branch to the then and else branches depending on the condition
-						condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
-						// Build then case
-						llvm_builder.position_at_end(&then_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
-						let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						ternary_result.build_store(&then_case, llvm_builder);
-						llvm_builder.build_branch(&end_basic_block);
-						// Build else case
-						llvm_builder.position_at_end(&else_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
-						let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						ternary_result.build_store(&else_case, llvm_builder);
-						llvm_builder.build_branch(&end_basic_block);
-						// Re-position builder at end
-						llvm_builder.position_at_end(&end_basic_block);
-						block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
-						// Read ternary result
-						ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result_temp")
-					}
-					Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
-						let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let result = match operation {
-							Operation::IntegerNegate => operand.build_negate(llvm_builder, "neg_temp"),
-							Operation::Dereference =>
-								operand.build_int_to_ptr(llvm_builder, main_data.int_type.pointer_to(), "int_to_ptr_for_deref_temp")
-									.build_load(main_data.int_type, llvm_builder, "load_for_deref_temp"),
-							Operation::BitwiseNot => operand.build_bitwise_not(llvm_builder, "bnot_temp"),
-							_ => unreachable!()
-						};
-						result
-					}
-					Operation::TakeReference | Operation::Read => {
-						let value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						match operation {
-							Operation::TakeReference => value
-								.get_pointer(main_data, llvm_builder)
-								.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref_temp"),
-							Operation::Read => value.get_value(main_data, llvm_builder),
-							_ => unreachable!(),
+					// For a normal operator, we build the operands then build the operator instruction
+					Operator::Normal(operation) => match operation {
+						Operation::IntegerAdd | Operation::IntegerSubtract | Operation::IntegerMultiply |
+						Operation::UnsignedDivide | Operation::UnsignedModulo | Operation::SignedDivide | Operation::SignedTruncatedModulo |
+						Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitOr |
+						Operation::LogicalNotShortCircuitAnd | Operation::LogicalXor |
+						Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo |
+						Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
+						Operation::SignedLessThanOrEqualTo | Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan => {
+							//let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							//let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let result = match operation {
+								Operation::IntegerAdd => left_value.build_add(&right_value, llvm_builder, "add_temp"),
+								Operation::IntegerSubtract => left_value.build_sub(&right_value, llvm_builder, "sub_temp"),
+								Operation::IntegerMultiply => left_value.build_mult(&right_value, llvm_builder, "mult_temp"),
+								Operation::UnsignedDivide => left_value.build_unsigned_div(&right_value, llvm_builder, "udiv_temp"),
+								Operation::UnsignedModulo => left_value.build_unsigned_modulo(&right_value, llvm_builder, "umod_temp"),
+								Operation::SignedDivide => left_value.build_signed_div(&right_value, llvm_builder, "sdiv_temp"),
+								Operation::SignedTruncatedModulo => left_value.build_signed_truncated_modulo(&right_value, llvm_builder, "stmod_temp"),
+								Operation::BitwiseAnd => left_value.build_bitwise_and(&right_value, llvm_builder, "band_temp"),
+								Operation::BitwiseOr | Operation::LogicalNotShortCircuitOr =>
+									left_value.build_bitwise_or(&right_value, llvm_builder, "bor_temp"),
+								Operation::BitwiseXor => left_value.build_bitwise_xor(&right_value, llvm_builder, "bxor_temp"),
+								Operation::LogicalNotShortCircuitAnd => {
+									let zero_const = main_data.int_type.const_int(0, false);
+									let left_value_bool =
+										left_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+									let right_value_bool =
+										right_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+									left_value_bool.build_bitwise_and(&right_value_bool, llvm_builder, "band_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
+								}
+								Operation::LogicalXor => {
+									let zero_const = main_data.int_type.const_int(0, false);
+									let left_value_bool =
+										left_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+									let right_value_bool =
+										right_value.build_compare(&zero_const, Comparison::NotEqual, llvm_builder, "itbneq_temp");
+									left_value_bool.build_bitwise_xor(&right_value_bool, llvm_builder, "bxor_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp")
+								}
+								Operation::IntegerEqualTo =>
+									left_value.build_compare(&right_value, Comparison::Equal, llvm_builder, "eq_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::IntegerNotEqualTo =>
+									left_value.build_compare(&right_value, Comparison::NotEqual, llvm_builder, "neq_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::UnsignedLessThan =>
+									left_value.build_compare(&right_value, Comparison::UnsignedLessThan, llvm_builder, "ult_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::UnsignedLessThanOrEqualTo =>
+									left_value.build_compare(&right_value, Comparison::UnsignedLessThanOrEqualTo, llvm_builder, "ulteq_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::UnsignedGreaterThan =>
+									left_value.build_compare(&right_value, Comparison::UnsignedGreaterThan, llvm_builder, "ugt_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::UnsignedGreaterThanOrEqualTo =>
+									left_value.build_compare(&right_value, Comparison::UnsignedGreaterThanOrEqualTo, llvm_builder, "ugteq_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::SignedLessThan =>
+									left_value.build_compare(&right_value, Comparison::SignedLessThan, llvm_builder, "slt_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::SignedLessThanOrEqualTo =>
+									left_value.build_compare(&right_value, Comparison::SignedLessThanOrEqualTo, llvm_builder, "slteq_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::SignedGreaterThan =>
+									left_value.build_compare(&right_value, Comparison::SignedGreaterThan, llvm_builder, "sgt_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								Operation::SignedGreaterThanOrEqualTo =>
+									left_value.build_compare(&right_value, Comparison::SignedGreaterThanOrEqualTo, llvm_builder, "sgteq_temp")
+										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
+								_ => unreachable!(),
+							};
+							result
 						}
+						Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
+							// Get the left value
+							//let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							// Get if we should skip
+							let skip_condition = match operation {
+								Operation::LogicalShortCircuitAnd
+									=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::Equal, llvm_builder, "should_skip_temp"),
+								Operation::LogicalShortCircuitOr
+									=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "should_skip_temp"),
+								_ => unreachable!()
+							};
+							//let function_some = function.unwrap();
+							//let function_some = function_build_data.unwrap().function;
+							// Get the stack ptr to write the result to
+							//let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+							let alloca = function_build_data.get_alloca(main_data, llvm_builder, "logical_short_circuit_value");
+							let result_alloca = alloca.clone();
+							//*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+							result_alloca.build_store(&left_value, llvm_builder);
+							// Build the basic block for getting the right value if we should and then the block to branch to at the end
+							let get_right_value_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "get_right_value");
+							let end_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "skip");
+							// Build a conditional branch that may or may not skip getting the right value
+							skip_condition.build_conditional_branch(&end_basic_block, &get_right_value_basic_block, &main_data.llvm_context, llvm_builder);
+							// Build getting right value
+							llvm_builder.position_at_end(&get_right_value_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(get_right_value_basic_block);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(get_right_value_basic_block);
+							//let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let operation_result = match operation {
+								Operation::LogicalShortCircuitAnd => right_value,
+								Operation::LogicalShortCircuitOr => right_value,
+								_ => unreachable!()
+							};
+							result_alloca.build_store(&operation_result, llvm_builder);
+							llvm_builder.build_branch(&end_basic_block);
+							// Re-position builder at end
+							llvm_builder.position_at_end(&end_basic_block);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+							// Read result
+							let result = result_alloca.build_load(main_data.int_type, llvm_builder, "read_result");
+							function_build_data.surrender_alloca(result_alloca);
+							result
+						}
+						Operation::NotShortCircuitTernary => {
+							// Build operands
+							//let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							//	.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
+							//let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							//let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
+							let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							//let function_some = function.unwrap();
+							// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
+							//let then_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_then");
+							//let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
+							//let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
+							let then_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_then");
+							let else_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_else");
+							let end_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_end");
+							// Build the alloca to write the ternary result to
+							//let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+							let result_alloca = function_build_data.get_alloca(main_data, llvm_builder, "non_short_circuit_result");
+							//let ternary_result = result_alloca.clone();
+							//*result_alloca = result_alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+							// Build the conditional branch to the then and else branches depending on the condition
+							condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
+							// Build then case
+							llvm_builder.position_at_end(&then_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
+							//ternary_result.build_store(&then_case, llvm_builder);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
+							result_alloca.build_store(&then_case, llvm_builder);
+							llvm_builder.build_branch(&end_basic_block);
+							// Build else case
+							llvm_builder.position_at_end(&else_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
+							//ternary_result.build_store(&else_case, llvm_builder);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
+							result_alloca.build_store(&else_case, llvm_builder);
+							llvm_builder.build_branch(&end_basic_block);
+							// Re-position builder at end
+							llvm_builder.position_at_end(&end_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+							// Read ternary result
+							//ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result")
+							let result = result_alloca.build_load(main_data.int_type, llvm_builder, "read_ternary_result");
+							function_build_data.surrender_alloca(result_alloca);
+							result
+						}
+						Operation::ShortCircuitTernary => {
+							// Build the condition to an i1
+							//let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							//	.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
+							//let function_some = function.unwrap();
+							let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
+							// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
+							//let then_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_then");
+							//let else_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_else");
+							//let end_basic_block = function_some.append_basic_block(&main_data.llvm_context, "ternary_end");
+							let then_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_then");
+							let else_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_else");
+							let end_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_end");
+							// Build the alloca to write the ternary result to
+							//let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+							//let ternary_result = alloca.clone();
+							//*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+							let result_alloca = function_build_data.get_alloca(main_data, llvm_builder, "short_circuit_result");
+							// Build the conditional branch to the then and else branches depending on the condition
+							condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
+							// Build then case
+							llvm_builder.position_at_end(&then_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
+							//let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							//ternary_result.build_store(&then_case, llvm_builder);
+							let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							result_alloca.build_store(&then_case, llvm_builder);
+							llvm_builder.build_branch(&end_basic_block);
+							// Build else case
+							llvm_builder.position_at_end(&else_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
+							//let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							//ternary_result.build_store(&else_case, llvm_builder);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
+							let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							result_alloca.build_store(&else_case, llvm_builder);
+							llvm_builder.build_branch(&end_basic_block);
+							// Re-position builder at end
+							llvm_builder.position_at_end(&end_basic_block);
+							//block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(end_basic_block);
+							// Read ternary result
+							//ternary_result.build_load(main_data.int_type, llvm_builder, "read_ternary_result_temp")
+							let result = result_alloca.build_load(main_data.int_type, llvm_builder, "read_ternary_result");
+							function_build_data.surrender_alloca(result_alloca);
+							result
+						}
+						Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
+							//let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let result = match operation {
+								Operation::IntegerNegate => operand.build_negate(llvm_builder, "neg_temp"),
+								Operation::Dereference =>
+									operand.build_int_to_ptr(llvm_builder, main_data.int_type.pointer_to(), "int_to_ptr_for_deref_temp")
+										.build_load(main_data.int_type, llvm_builder, "load_for_deref_temp"),
+								Operation::BitwiseNot => operand.build_bitwise_not(llvm_builder, "bnot_temp"),
+								_ => unreachable!()
+							};
+							result
+						}
+						Operation::TakeReference | Operation::Read => {
+							//let value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							let value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							match operation {
+								Operation::TakeReference => value
+									.get_pointer(main_data, llvm_builder)
+									.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref_temp"),
+								Operation::Read => value.get_value(main_data, llvm_builder),
+								_ => unreachable!(),
+							}
+						}
+						_ => return Err((Error::FeatureNotYetImplemented("This operator".into()), *start)),
 					}
-					_ => return Err((Error::FeatureNotYetImplemented("This operator".into()), *start)),
+					// TODO
+					Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), self.start)),
+					Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("L-value assignments".into()), self.start)),
 				}
-				// TODO
-				Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), self.start)),
-				Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("L-value assignments".into()), self.start)),
 			}
 			// We built function definitions at the start of this function
 			AstNodeVariant::FunctionDefinition(..) => unreachable!(),
@@ -1213,6 +1212,7 @@ impl AstNode {
 				function_build_data.block_stack.push(BlockLevel {
 					basic_blocks: vec![inner_basic_block],
 					local_variables: HashMap::new(),
+					allocas_in_use: HashSet::new(),
 				});
 				// Build each expression
 				let mut last_built_expression = None;
@@ -1222,6 +1222,12 @@ impl AstNode {
 				}
 				// Pop the scope we pushed
 				//block_stack.pop();
+				while !function_build_data.block_stack.last().unwrap().allocas_in_use.is_empty() {
+					function_build_data.surrender_alloca(function_build_data.block_stack.last().unwrap().allocas_in_use.iter().next().unwrap().clone());
+				}
+				//for alloca in function_build_data.block_stack.last().unwrap().allocas_in_use.iter() {
+				//	function_build_data.surrender_alloca(alloca.clone());
+				//}
 				function_build_data.block_stack.pop();
 				// Branch to the basic block that was created before to branch to after the BCZ block was built and position the builder to it
 				//llvm_builder.build_branch(block_stack.last().unwrap().last_block());
@@ -1270,7 +1276,10 @@ impl AstNode {
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
 				match keyword {
 					Keyword::Write => {
-						// TODO: Make sure we ar'nt global
+						let function_build_data = match function_build_data {
+							Some(function_build_data) => function_build_data,
+							None => return Err((Error::GlobalOperatorNotConstEvaluated, self.start))
+						};
 						// Get arguments
 						let (address_to_write_to, (write_type, is_signed), value_to_write) = match arguments.len() {
 							2 => {
@@ -1286,11 +1295,11 @@ impl AstNode {
 						// Build arguments
 						let address_to_write_to_built = address_to_write_to
 							//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
-							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
 							.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
 						let value_to_write_built = value_to_write
 							//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
 						let value_to_write_built_cast = match main_data.int_bit_width
 							.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 							Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
@@ -1306,85 +1315,100 @@ impl AstNode {
 						value_to_write_built
 					}
 					Keyword::Stack => {
-						// Get arguments
-						let (count, entry_width) = match arguments.len() {
-							0 => (None, None),
-							1 => (Some(&arguments[0]), None),
-							2 => (Some(&arguments[0]), Some(&arguments[1])),
-							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
-						};
-						// Get entry count
-						let count = match count {
-							Some(count) => match count.variant {
-								AstNodeVariant::Constant(count) => count,
-								_ => return Err((Error::ConstValueRequired, count.start)),
-							}
-							None => 1,
-						};
-						// Get entry type
-						let entry_type = match entry_width {
-							Some(entry_width) => {
-								let entry_type = entry_width.type_from_width(main_data)?.0;
-								if entry_type.is_void() {
-									return Err((Error::VoidParameter, self.start));
-								}
-								entry_type
-							}
-							None => main_data.int_type,
-						};
-						// Get pointer to top of alloca array
-						// TODO: Fix
-						let alloca = block_stack.last_mut().unwrap()
-							.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
-						// Get the pointer that will be returned
-						let local_variable_ptr = alloca.clone();
-						// Re-point the alloca pointer so that the next use will point to after the array we allocated
-						*alloca = alloca.build_get_element_ptr(
-							llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
-						);
-						// Return pointer
-						local_variable_ptr
+						todo!()
+						//// Get arguments
+						//let (count, entry_width) = match arguments.len() {
+						//	0 => (None, None),
+						//	1 => (Some(&arguments[0]), None),
+						//	2 => (Some(&arguments[0]), Some(&arguments[1])),
+						//	_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+						//};
+						//// Get entry count
+						//let count = match count {
+						//	Some(count) => match count.variant {
+						//		AstNodeVariant::Constant(count) => count,
+						//		_ => return Err((Error::ConstValueRequired, count.start)),
+						//	}
+						//	None => 1,
+						//};
+						//// Get entry type
+						//let entry_type = match entry_width {
+						//	Some(entry_width) => {
+						//		let entry_type = entry_width.type_from_width(main_data)?.0;
+						//		if entry_type.is_void() {
+						//			return Err((Error::VoidParameter, self.start));
+						//		}
+						//		entry_type
+						//	}
+						//	None => main_data.int_type,
+						//};
+						//// Get pointer to top of alloca array
+						//// TODO: Fix
+						//let alloca = block_stack.last_mut().unwrap()
+						//	.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
+						//// Get the pointer that will be returned
+						//let local_variable_ptr = alloca.clone();
+						//// Re-point the alloca pointer so that the next use will point to after the array we allocated
+						//*alloca = alloca.build_get_element_ptr(
+						//	llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
+						//);
+						//// Return pointer
+						//local_variable_ptr
 					}
 					Keyword::EntryPoint | Keyword::Link => unreachable!(),
 					Keyword::Loop => {
+						let function_build_data = match function_build_data {
+							Some(function_build_data) => function_build_data,
+							None => return Err((Error::GlobalOperatorNotConstEvaluated, self.start))
+						};
 						if !arguments.is_empty() {
 							return Err((Error::FeatureNotYetImplemented("Loop arguments".into()), self.start));
 						}
-						// If we are in the global scope
-						if block_stack.is_empty() {
-							return Err((Error::FeatureNotYetImplemented("Loop in global scope".into()), self.start));
-						}
 						// Get the variable for the loop result
-						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
-						let loop_result = alloca.clone();
-						*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+						//let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+						//let loop_result = alloca.clone();
+						//*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+						let result_alloca = function_build_data.get_alloca(main_data, llvm_builder, "loop_result");
 						// Create the first inner basic block for the BCZ block, then branch from the current basic block to it, then re-position the builder to the new basic block
-						let inner_basic_block = function.unwrap().append_basic_block(&main_data.llvm_context, "loop_start");
+						//let inner_basic_block = function.unwrap().append_basic_block(&main_data.llvm_context, "loop_start");
+						let inner_basic_block = &mut function_build_data.function.append_basic_block(&main_data.llvm_context, "loop_start");
 						llvm_builder.build_branch(&inner_basic_block);
 						llvm_builder.position_at_end(&inner_basic_block);
 						// Create a basic block to branch to after we are done with the BCZ block we are building
-						block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "loop_end"));
+						//block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "loop_end"));
+						function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(function_build_data.function.append_basic_block(&main_data.llvm_context, "loop_end"));
 						// Push a new block level onto the block stack
-						let top_alloca_level = block_stack.last_mut().unwrap().allocas.clone();
-						block_stack.push(BlockLevel {
-							basic_blocks: vec![inner_basic_block],
+						//let top_alloca_level = block_stack.last_mut().unwrap().allocas.clone();
+						//block_stack.push(BlockLevel {
+						//	basic_blocks: vec![inner_basic_block],
+						//	local_variables: HashMap::new(),
+						//	//allocas: top_alloca_level,
+						//});
+						function_build_data.block_stack.push(BlockLevel {
+							basic_blocks: vec![inner_basic_block.clone()],
 							local_variables: HashMap::new(),
+							allocas_in_use: HashSet::new(),
 							//allocas: top_alloca_level,
 						});
 						// Build child expression
-						child.as_ref().unwrap().build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						//child.as_ref().unwrap().build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						child.as_ref().unwrap().build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
 						//let mut last_built_expression = None;
 						//for expression in block_expressions {
 						//	last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
 						//}
-						llvm_builder.build_branch(&block_stack.last().unwrap().basic_blocks[0]);
+						//llvm_builder.build_branch(&block_stack.last().unwrap().basic_blocks[0]);
+						llvm_builder.build_branch(&function_build_data.block_stack.last().unwrap().basic_blocks[0]);
 						// Pop the scope we pushed
-						block_stack.pop();
+						function_build_data.block_stack.pop();
 						// Branch to the basic block that was created before to branch to after the BCZ block was built and position the builder to it
 						//llvm_builder.build_branch(block_stack.last().unwrap().last_block());
-						llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+						llvm_builder.position_at_end(function_build_data.block_stack.last().unwrap().last_block());
 						// Return
-						loop_result.build_load(main_data.int_type, llvm_builder, "loop_result_temp")
+						let result = result_alloca.build_load(main_data.int_type, llvm_builder, "loop_result_temp");
+						function_build_data.surrender_alloca(result_alloca);
+						result
+						//loop_result.build_load(main_data.int_type, llvm_builder, "loop_result_temp")
 						//match (is_result_undefined, last_built_expression) {
 						//	(true, _) | (false, None) => main_data.int_type.undefined(),
 						//	(false, Some(last_built_expression)) => last_built_expression,
@@ -1392,93 +1416,12 @@ impl AstNode {
 					}
 				}
 			}
-			//AstNodeVariant::BuiltInFunctionCall(built_in_function, arguments) => {
-			//	match built_in_function {
-			//		BuiltInFunctionCall::Write => {
-			//			// Get arguments
-			//			let (address_to_write_to, (write_type, is_signed), value_to_write) = match arguments.len() {
-			//				2 => {
-			//					(&arguments[0], (main_data.int_type, false), &arguments[1])
-			//				}
-			//				3 => (&arguments[0], *(&arguments[1].type_from_width(main_data)?), &arguments[2]),
-			//				_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
-			//			};
-			//			if write_type.is_void() {
-			//				return Err((Error::VoidParameter, self.start))
-			//			}
-			//			let write_type_ptr = write_type.pointer_to();
-			//			// Build arguments
-			//			let address_to_write_to_built = address_to_write_to
-			//				.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
-			//				.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
-			//			let value_to_write_built = value_to_write
-			//				.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-			//			let value_to_write_built_cast = match main_data.int_bit_width
-			//				.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
-			//				Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
-			//				Ordering::Equal => value_to_write_built.clone(),
-			//				Ordering::Less => match is_signed {
-			//					false => value_to_write_built.clone().build_zero_extend(llvm_builder, write_type, "zero_extend_temp"),
-			//					true => value_to_write_built.clone().build_sign_extend(llvm_builder, write_type, "sign_extend_temp"),
-			//				}
-			//			};
-			//			// Build write
-			//			address_to_write_to_built.build_store(&value_to_write_built_cast, llvm_builder);
-			//			// Expression yeilds the written value
-			//			value_to_write_built
-			//		}
-			//		BuiltInFunctionCall::Stack => {
-			//			// Get arguments
-			//			let (count, entry_width) = match arguments.len() {
-			//				0 => (None, None),
-			//				1 => (Some(&arguments[0]), None),
-			//				2 => (Some(&arguments[0]), Some(&arguments[1])),
-			//				_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
-			//			};
-			//			// Get entry count
-			//			let count = match count {
-			//				Some(count) => match count.variant {
-			//					AstNodeVariant::Constant(count) => count,
-			//					_ => return Err((Error::ConstValueRequired, count.start)),
-			//				}
-			//				None => 1,
-			//			};
-			//			// Get entry type
-			//			let entry_type = match entry_width {
-			//				Some(entry_width) => {
-			//					let entry_type = entry_width.type_from_width(main_data)?.0;
-			//					if entry_type.is_void() {
-			//						return Err((Error::VoidParameter, self.start));
-			//					}
-			//					entry_type
-			//				}
-			//				None => main_data.int_type,
-			//			};
-			//			// Get pointer to top of alloca array
-			//			let alloca = block_stack.last_mut().unwrap()
-			//				.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
-			//			// Get the pointer that will be returned
-			//			let local_variable_ptr = alloca.clone();
-			//			// Re-point the alloca pointer so that the next use will point to after the array we allocated
-			//			*alloca = alloca.build_get_element_ptr(
-			//				llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
-			//			);
-			//			// Return pointer
-			//			local_variable_ptr
-			//		}
-			//	}
-			//}
 			// Build strings
 			AstNodeVariant::String(text) => {
 				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
 				string.set_initializer(&main_data.llvm_context.const_string(text, true));
 				string.build_ptr_to_int(llvm_builder, main_data.int_type, "str_ptr_to_int")
 			}
-			// For metadata nodes, we build the child nodes
-			//AstNodeVariant::Metadata(metadata, _child) => match metadata {
-			//	Metadata::EntryPoint => unreachable!(),
-			//	Metadata::Link => unreachable!(),
-			//}
 		})
 	}
 
@@ -1503,12 +1446,14 @@ impl AstNode {
 		Ok(match variant {
 			// For an identifier, we create or return a local variable
 			AstNodeVariant::Identifier(name) => {
+				let function_build_data = match function_build_data {
+					Some(function_build_data) => function_build_data,
+					None => return Err((Error::GlobalOperatorNotConstEvaluated, self.start)),
+				};
 				// Get local variable if it exists
-				if let Some(function_build_data) = function_build_data {
-					for scope_level in function_build_data.block_stack.iter().rev() {
-						if let Some(variable) = scope_level.local_variables.get(name) {
-							return Ok(variable.clone());
-						}
+				for scope_level in function_build_data.block_stack.iter().rev() {
+					if let Some(variable) = scope_level.local_variables.get(name) {
+						return Ok(variable.clone());
 					}
 				}
 				//for scope_level in block_stack.iter().rev() {
@@ -1517,25 +1462,21 @@ impl AstNode {
 				//	}
 				//}
 				// Get pointer to top of alloca stack
-				// TODO: Fix
-				let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
+				//let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
 				// Get the pointer to the variable we are creating
-				let local_variable_ptr = alloca.clone();
+				//let local_variable_ptr = alloca.clone();
 				// Re-point the alloca pointer so that the next variable will be located after the variable we created
-				*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+				//*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
+				let alloca = function_build_data.get_alloca(main_data, llvm_builder, "local_variable");
 				// Insert variable into list
-				block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::DereferencedPointer(local_variable_ptr.clone()));
+				function_build_data.block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::AllocaVariable(alloca.clone()));
 				// Return variable
-				BuiltLValue::AllocaVariable(local_variable_ptr)
+				BuiltLValue::AllocaVariable(alloca)
 			}
 			AstNodeVariant::Constant(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::String(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::FunctionCall(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::FunctionDefinition(..) => return Err((Error::InvalidLValue, self.start)),
-			//AstNodeVariant::Metadata(metadata, _) => match metadata {
-			//	Metadata::Link => return Err((Error::InvalidLValue, self.start)),
-			//	Metadata::EntryPoint => return Err((Error::InvalidLValue, self.start)),
-			//},
 			AstNodeVariant::Keyword(keyword, _arguments, _child) => {
 				match keyword {
 					Keyword::Link => return Err((Error::InvalidLValue, self.start)),
@@ -1562,12 +1503,6 @@ impl AstNode {
 					_ => return Err((Error::FeatureNotYetImplemented("L-value operator".into()), self.start)),
 				}
 			}
-			//AstNodeVariant::BuiltInFunctionCall(function, _arguments) => {
-			//	match function {
-			//		BuiltInFunctionCall::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
-			//		BuiltInFunctionCall::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
-			//	}
-			//}
 		})
 	}
 
@@ -1594,10 +1529,6 @@ impl AstNode {
 	pub fn is_function(&self) -> bool {
 		match &self.variant {
 			AstNodeVariant::FunctionDefinition(..) => true,
-			//AstNodeVariant::Metadata(metadata, child) => match metadata {
-			//	Metadata::EntryPoint => child.is_function(),
-			//	Metadata::Link => child.is_function(),
-			//}
 			AstNodeVariant::Keyword(keyword, _arguments, child) => match keyword {
 				Keyword::EntryPoint => child.as_ref().unwrap().is_function(),
 				Keyword::Link => child.as_ref().unwrap().is_function(),
@@ -2092,12 +2023,6 @@ impl AstNode {
 					}
 				}
 			}
-			//AstNodeVariant::Metadata(metadata, child) => match metadata {
-			//	Metadata::EntryPoint => child
-			//		.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
-			//	Metadata::Link => child
-			//		.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
-			//}
 			AstNodeVariant::Block(sub_expressions, ..) => {
 				local_variables.push(HashMap::new());
 				if is_l_value {
@@ -2133,17 +2058,6 @@ impl AstNode {
 						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
 				}
 			}
-			//AstNodeVariant::BuiltInFunctionCall(function, arguments) => {
-			//	match function {
-			//		BuiltInFunctionCall::Write | BuiltInFunctionCall::Stack => {
-			//			for argument in arguments {
-			//				argument.const_evaluate(
-			//					main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
-			//				)?;
-			//			}
-			//		}
-			//	}
-			//}
 			AstNodeVariant::String(..) => {}
 			AstNodeVariant::Identifier(name) => 'a: {
 				if is_l_value {

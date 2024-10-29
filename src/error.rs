@@ -62,6 +62,7 @@ pub enum Error {
 	ConstValueRequired,
 	UnmatchedTernary,
 	KeywordWithTwoChildren,
+	GlobalOperatorNotConstEvaluated,
 }
 
 impl Display for Error {
@@ -127,6 +128,7 @@ impl Display for Error {
 			Error::UnmatchedTernary => write!(f, "Unmatched ternary operator"),
 			Error::TernaryOperatorNotUsedOnExpressions => write!(f, "Ternary operator used on non-expressions"),
 			Error::KeywordWithTwoChildren => write!(f, "Keyword with two children"),
+			Error::GlobalOperatorNotConstEvaluated => write!(f, "Global operator not const-evaluated"),
 		}
 	}
 }

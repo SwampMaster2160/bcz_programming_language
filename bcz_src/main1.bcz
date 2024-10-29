@@ -10,15 +10,15 @@
 //};
 
 main = @entry_point () {
-	utf_16_str = @stack(3, 2);
-	@write(utf_16_str, 2, 'H');
-	@write(utf_16_str + 2, 2, 'i');
-	@write(utf_16_str + 4, 2, '\n');
+	//utf_16_str = @stack(3, 2);
+	//@write(utf_16_str, 2, 'H');
+	//@write(utf_16_str + 2, 2, 'i');
+	//@write(utf_16_str + 4, 2, '\n');
 	handle = GetStdHandle(-11);
 	Beep(500, 1000);
 	{
 		result = 0;
-		WriteConsoleW(handle, utf_16_str, 3, &result, 0);
+		//WriteConsoleW(handle, utf_16_str, 3, &result, 0);
 	};
 	Beep(600, 1000);
 	//main();

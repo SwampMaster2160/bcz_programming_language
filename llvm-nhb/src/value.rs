@@ -9,7 +9,7 @@ use super::llvm_c::{LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSEx
 use super::llvm_c::{LLVMBuildUDiv, LLVMBuildURem, LLVMBuildZExt, LLVMCountParams, LLVMGetParam, LLVMGetValueKind, LLVMTypeOf, LLVMSetFunctionCallConv};
 use super::llvm_c::{LLVMTypeKind, LLVMLinkage, LLVMValueKind, LLVMValueRef};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Value<'c, 'm> {
 	value_ref: LLVMValueRef,
