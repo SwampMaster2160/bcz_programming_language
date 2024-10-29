@@ -1,8 +1,8 @@
-use std::{array, cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{block_level::BlockLevel, built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, token::Keyword, MainData};
+use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, function_building_data::{BlockLevel, FunctionBuildData}, token::Keyword, MainData};
 use llvm_nhb::{builder::Builder, enums::{CallingConvention, Comparison, Linkage}, module::Module, types::Type, value::Value};
 
 #[derive(Debug, Clone)]
@@ -249,9 +249,9 @@ impl AstNode {
 		Ok(())
 	}
 
-	/// Count how many stack allocations an expression needs.
-	/// Returns the amount of overlapping and non-overlapping ints as well as uses of @stack.
-	pub fn get_alloca_count<'a>(
+	// /// Count how many stack allocations an expression needs.
+	// /// Returns the amount of overlapping and non-overlapping ints as well as uses of @stack.
+	/*pub fn get_alloca_count<'a>(
 		&'a self,
 		main_data: &'a MainData<'a>,
 		local_variables: &mut Vec<HashSet<Box<str>>>,
@@ -481,7 +481,7 @@ impl AstNode {
 			*count = (*count).max(overlapping_allocas[index]);
 		}
 		Ok(())
-	}
+	}*/*/
 
 	/// Will search a global node and its children for global variable dependencies that need to be compiled before this node is.
 	///
@@ -806,44 +806,49 @@ impl AstNode {
 					function_parameter_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
 				}
 				// Get the alloca count for the function body
-				let mut local_variables = HashSet::new();
-				for parameter in parameters.iter() {
-					match &parameter.variant {
-						AstNodeVariant::Identifier(name) => local_variables.insert(name.clone()),
-						_ => return Err((Error::ExpectedIdentifier, parameter.start)),
-					};
-				}
-				let mut overlapping_allocas = [0; 5];
-				let mut non_overlapping_allocas = [0; 5];
-				function_body.get_alloca_count(
-					main_data, &mut vec![local_variables], false, false, &mut overlapping_allocas, &mut non_overlapping_allocas
-				)?;
-				// Build alloca
-				let mut allocas: [Option<Value>; 5] = array::from_fn(|_| None);
-				for (index, alloca) in allocas.iter_mut().enumerate().rev() {
-					let count = overlapping_allocas[index] + non_overlapping_allocas[index];
-					if count == 0 {
-						continue;
-					}
-					let alloca_type = match index {
-						0 => main_data.llvm_context.int_8_type(),
-						1 => main_data.llvm_context.int_16_type(),
-						2 => main_data.llvm_context.int_32_type(),
-						3 => main_data.llvm_context.int_64_type(),
-						4 => main_data.llvm_context.int_128_type(),
-						_ => unreachable!(),
-					}.array_type(count);
-					let alloca_created = alloca_type.build_alloca(&llvm_builder, "alloca")
-						.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "alloca_to_ptr_temp");
-					*alloca = Some(alloca_created);
-				}
+				//let mut local_variables = HashSet::new();
+				//for parameter in parameters.iter() {
+				//	match &parameter.variant {
+				//		AstNodeVariant::Identifier(name) => local_variables.insert(name.clone()),
+				//		_ => return Err((Error::ExpectedIdentifier, parameter.start)),
+				//	};
+				//}
+				//let mut overlapping_allocas = [0; 5];
+				//let mut non_overlapping_allocas = [0; 5];
+				//function_body.get_alloca_count(
+				//	main_data, &mut vec![local_variables], false, false, &mut overlapping_allocas, &mut non_overlapping_allocas
+				//)?;
+				//// Build alloca
+				//let mut allocas: [Option<Value>; 5] = array::from_fn(|_| None);
+				//for (index, alloca) in allocas.iter_mut().enumerate().rev() {
+				//	let count = overlapping_allocas[index] + non_overlapping_allocas[index];
+				//	if count == 0 {
+				//		continue;
+				//	}
+				//	let alloca_type = match index {
+				//		0 => main_data.llvm_context.int_8_type(),
+				//		1 => main_data.llvm_context.int_16_type(),
+				//		2 => main_data.llvm_context.int_32_type(),
+				//		3 => main_data.llvm_context.int_64_type(),
+				//		4 => main_data.llvm_context.int_128_type(),
+				//		_ => unreachable!(),
+				//	}.array_type(count);
+				//	let alloca_created = alloca_type.build_alloca(&llvm_builder, "alloca")
+				//		.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(0, false)], "alloca_to_ptr_temp");
+				//	*alloca = Some(alloca_created);
+				//}
 				// Build function body
 				let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
 					local_variables: function_parameter_variables,
 					basic_blocks: vec![basic_block],
-					allocas,
+					//allocas,
 				}];
-				let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_block_stack, Some(&function))?;
+				//let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut inner_block_stack, Some(&function))?;
+				let mut function_info = FunctionBuildData {
+					function,
+					block_stack: &mut inner_block_stack,
+				};
+				let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(&mut function_info))?;
 				function_body_built.build_return(llvm_builder);
 			}
 			true => {
@@ -920,8 +925,9 @@ impl AstNode {
 		file_build_data: &mut FileBuildData<'a, 'a>,
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
-		block_stack: &'b mut Vec<BlockLevel<'a>>,
-		function: Option<&Value<'a, 'a>>
+		function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
+		//block_stack: &'b mut Vec<BlockLevel<'a>>,
+		//function: Option<&Value<'a, 'a>>
 	)
 	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
@@ -937,7 +943,10 @@ impl AstNode {
 				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false
 			)?;
 			// The function will have positioned the builder pos to one of it's basic blocks, so re-position it back
-			llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+			//llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+			if let Some(function_info) = function_build_data {
+				llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
+			}
 			// Return
 			return Ok(out);
 		}
@@ -946,12 +955,15 @@ impl AstNode {
 			// Constants build an int constant
 			AstNodeVariant::Constant(value) => main_data.int_type.const_int(*value as u128, false),
 			// For an identifier, we load the value stored in the variable it represents
-			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, block_stack, &*name),
+			//AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, block_stack, &*name),
+			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, function_build_data, &*name),
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we build the l and r-values and then build a store instruction
 				Operator::Assignment => {
-					let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-					let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+					//let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+					let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
+					//let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+					let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
 					l_value.set_value(main_data, llvm_builder, &r_value);
 					return Ok(r_value);
 				}
@@ -964,8 +976,10 @@ impl AstNode {
 					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo |
 					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 					Operation::SignedLessThanOrEqualTo | Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan => {
-						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
-						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						//let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						//let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
+						let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
 						let result = match operation {
 							Operation::IntegerAdd => left_value.build_add(&right_value, llvm_builder, "add_temp"),
 							Operation::IntegerSubtract => left_value.build_sub(&right_value, llvm_builder, "sub_temp"),
@@ -1031,8 +1045,10 @@ impl AstNode {
 						result
 					}
 					Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
+						// TODO: Fix
 						// Get the left value
-						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						//let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+						let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
 						// Get if we should skip
 						let skip_condition = match operation {
 							Operation::LogicalShortCircuitAnd
@@ -1041,7 +1057,8 @@ impl AstNode {
 								=> left_value.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "should_skip_temp"),
 							_ => unreachable!()
 						};
-						let function_some = function.unwrap();
+						//let function_some = function.unwrap();
+						let function_some = function_build_data.unwrap().function;
 						// Get the stack ptr to write the result to
 						let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
 						let result = alloca.clone();
@@ -1171,32 +1188,46 @@ impl AstNode {
 				if *is_result_undefined && block_expressions.is_empty() {
 					return Ok(main_data.int_type.undefined());
 				}
-				if block_stack.is_empty() {
-					return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start));
-				}
+				let function_build_data = match function_build_data {
+					Some(function_build_data) => function_build_data,
+					None => return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start)),
+				};
+				//if block_stack.is_empty() {
+				//	return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start));
+				//}
 				// Create the first inner basic block for the BCZ block, then branch from the current basic block to it, then re-position the builder to the new basic block
-				let inner_basic_block = function.unwrap().append_basic_block(&main_data.llvm_context, "block_start");
+				//let inner_basic_block = function.unwrap().append_basic_block(&main_data.llvm_context, "block_start");
+				let inner_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "block_start");
 				llvm_builder.build_branch(&inner_basic_block);
 				llvm_builder.position_at_end(&inner_basic_block);
 				// Create a basic block to branch to after we are done with the BCZ block we are building
-				block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "block_end"));
+				//block_stack.last_mut().unwrap().basic_blocks.push(function.unwrap().append_basic_block(&main_data.llvm_context, "block_end"));
+				function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(function_build_data.function.append_basic_block(&main_data.llvm_context, "block_end"));
 				// Push a new block level onto the block stack
-				let top_alloca_level = block_stack.last_mut().unwrap().allocas.clone();
-				block_stack.push(BlockLevel {
+				//let top_alloca_level = block_stack.last_mut().unwrap().allocas.clone();
+				//block_stack.push(BlockLevel {
+				//	basic_blocks: vec![inner_basic_block],
+				//	local_variables: HashMap::new(),
+				//	//allocas: top_alloca_level,
+				//});
+				function_build_data.block_stack.push(BlockLevel {
 					basic_blocks: vec![inner_basic_block],
 					local_variables: HashMap::new(),
-					allocas: top_alloca_level,
 				});
 				// Build each expression
 				let mut last_built_expression = None;
 				for expression in block_expressions {
-					last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
+					//last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
+					last_built_expression = Some(expression.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?);
 				}
 				// Pop the scope we pushed
-				block_stack.pop();
+				//block_stack.pop();
+				function_build_data.block_stack.pop();
 				// Branch to the basic block that was created before to branch to after the BCZ block was built and position the builder to it
-				llvm_builder.build_branch(block_stack.last().unwrap().last_block());
-				llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+				//llvm_builder.build_branch(block_stack.last().unwrap().last_block());
+				//llvm_builder.position_at_end(block_stack.last().unwrap().last_block());
+				llvm_builder.build_branch(function_build_data.block_stack.last().unwrap().last_block());
+				llvm_builder.position_at_end(function_build_data.block_stack.last().unwrap().last_block());
 				// Return
 				match (is_result_undefined, last_built_expression) {
 					(true, _) | (false, None) => main_data.int_type.undefined(),
@@ -1205,18 +1236,24 @@ impl AstNode {
 			}
 			// For a function call, we build the expression that yeilds the function pointer and the ones that yeild the function arguments and then build the call.
 			AstNodeVariant::FunctionCall(function_to_call, arguments) => {
-				if block_stack.is_empty() {
-					return Err((Error::FeatureNotYetImplemented("Global function calls".into()), self.start))
-				}
+				//if block_stack.is_empty() {
+				//	return Err((Error::FeatureNotYetImplemented("Global function calls".into()), self.start))
+				//}
+				let function_build_data = match function_build_data {
+					Some(function_build_data) => function_build_data,
+					None => return Err((Error::FeatureNotYetImplemented("Global function calls".into()), self.start))
+				};
 				if arguments.len() > u16::MAX as usize {
 					return Err((Error::TooManyFunctionArguments, self.start))
 				}
 				// Build function body and arguments
 				let function_pointer_built = function_to_call
-					.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+					//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+					.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
 				let mut arguments_built = Vec::with_capacity(arguments.len());
 				for argument in arguments {
-					arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
+					//arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?);
+					arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?);
 				}
 				// Build types
 				let argument_types: Box<[Type]> = repeat(main_data.int_type).take(arguments.len()).collect();
@@ -1233,6 +1270,7 @@ impl AstNode {
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
 				match keyword {
 					Keyword::Write => {
+						// TODO: Make sure we ar'nt global
 						// Get arguments
 						let (address_to_write_to, (write_type, is_signed), value_to_write) = match arguments.len() {
 							2 => {
@@ -1247,10 +1285,12 @@ impl AstNode {
 						let write_type_ptr = write_type.pointer_to();
 						// Build arguments
 						let address_to_write_to_built = address_to_write_to
-							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?
 							.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
 						let value_to_write_built = value_to_write
-							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?;
 						let value_to_write_built_cast = match main_data.int_bit_width
 							.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 							Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
@@ -1293,6 +1333,7 @@ impl AstNode {
 							None => main_data.int_type,
 						};
 						// Get pointer to top of alloca array
+						// TODO: Fix
 						let alloca = block_stack.last_mut().unwrap()
 							.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
 						// Get the pointer that will be returned
@@ -1328,7 +1369,7 @@ impl AstNode {
 						block_stack.push(BlockLevel {
 							basic_blocks: vec![inner_basic_block],
 							local_variables: HashMap::new(),
-							allocas: top_alloca_level,
+							//allocas: top_alloca_level,
 						});
 						// Build child expression
 						child.as_ref().unwrap().build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?;
@@ -1448,8 +1489,9 @@ impl AstNode {
 		file_build_data: &mut FileBuildData<'a, 'a>,
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
-		block_stack: &'b mut Vec<BlockLevel<'a>>,
-		function: Option<&Value<'a, 'a>>,
+		//block_stack: &'b mut Vec<BlockLevel<'a>>,
+		//function: Option<&Value<'a, 'a>>,
+		function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
 	) -> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
@@ -1462,12 +1504,20 @@ impl AstNode {
 			// For an identifier, we create or return a local variable
 			AstNodeVariant::Identifier(name) => {
 				// Get local variable if it exists
-				for scope_level in block_stack.iter().rev() {
-					if let Some(variable) = scope_level.local_variables.get(name) {
-						return Ok(variable.clone());
+				if let Some(function_build_data) = function_build_data {
+					for scope_level in function_build_data.block_stack.iter().rev() {
+						if let Some(variable) = scope_level.local_variables.get(name) {
+							return Ok(variable.clone());
+						}
 					}
 				}
+				//for scope_level in block_stack.iter().rev() {
+				//	if let Some(variable) = scope_level.local_variables.get(name) {
+				//		return Ok(variable.clone());
+				//	}
+				//}
 				// Get pointer to top of alloca stack
+				// TODO: Fix
 				let alloca = block_stack.last_mut().unwrap().allocas[main_data.int_power_width as usize].as_mut().unwrap();
 				// Get the pointer to the variable we are creating
 				let local_variable_ptr = alloca.clone();
@@ -1503,7 +1553,9 @@ impl AstNode {
 				Operator::Normal(operation) => match operation {
 					Operation::Dereference => {
 						let pointer = operands[0]
-							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							//.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, block_stack, function)?
+							// TODO: Not global
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?
 							.build_int_to_ptr(llvm_builder, main_data.int_type, "int_to_ptr_for_deref");
 						BuiltLValue::DereferencedPointer(pointer)
 					}
@@ -1529,7 +1581,8 @@ impl AstNode {
 				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
 			return Ok(function);
 		}
-		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut Vec::new(), None)?;
+		//let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, &mut Vec::new(), None)?;
+		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, None)?;
 		// Assign to global variable
 		let global = llvm_module.add_global(main_data.int_type, name);
 		global.set_initializer(&r_value);
@@ -2129,12 +2182,20 @@ fn get_variable_by_name<'a, 'b>(
 	main_data: &MainData<'a>,
 	file_build_data: &mut FileBuildData<'a, 'a>,
 	llvm_builder: &Builder<'a, 'a>,
-	block_stack: &'b mut Vec<BlockLevel<'a>>,
+	//block_stack: &'b mut Vec<BlockLevel<'a>>,
+	function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
 	name: &str
 ) -> Value<'a, 'a> {
-	for scope_level in block_stack.iter().rev() {
-		if let Some(variable) = scope_level.local_variables.get(name) {
-			return variable.get_value(main_data, llvm_builder);
+	//for scope_level in block_stack.iter().rev() {
+	//	if let Some(variable) = scope_level.local_variables.get(name) {
+	//		return variable.get_value(main_data, llvm_builder);
+	//	}
+	//}
+	if let Some(function_build_data) = function_build_data {
+		for scope_level in function_build_data.block_stack.iter().rev() {
+			if let Some(variable) = scope_level.local_variables.get(name) {
+				return variable.get_value(main_data, llvm_builder);
+			}
 		}
 	}
 	if let Some(built_global) = file_build_data.built_globals.get(name) {
