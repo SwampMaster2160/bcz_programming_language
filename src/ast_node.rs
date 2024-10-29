@@ -1468,7 +1468,7 @@ impl AstNode {
 				//let local_variable_ptr = alloca.clone();
 				// Re-point the alloca pointer so that the next variable will be located after the variable we created
 				//*alloca = alloca.build_get_element_ptr(llvm_builder, main_data.int_type, &[main_data.int_type.const_int(1, false)], "ptr_to_next_var_temp");
-				let alloca = function_build_data.get_alloca(main_data, llvm_builder, "local_variable");
+				let alloca = function_build_data.get_alloca(main_data, llvm_builder, name);
 				// Insert variable into list
 				function_build_data.block_stack.last_mut().unwrap().local_variables.insert(name.clone(), BuiltLValue::AllocaVariable(alloca.clone()));
 				// Return variable
