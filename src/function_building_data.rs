@@ -62,31 +62,30 @@ impl<'a, 'b> FunctionBuildData<'a, 'b> {
 					}
 				};
 				allocas_of_type.insert(alloca.clone());
-				//top_block.array_allocas_in_use..insert(alloca.clone());
 				llvm_builder.position_at_end(top_block.last_block());
 				alloca
 			}
 		}
 	}
 
-	pub fn surrender_array_alloca(&mut self, alloca: Value<'a, 'a>) {
-		for block in self.block_stack.iter_mut().rev() {
-			for (array_type, arrays) in block.array_allocas_in_use.iter_mut() {
-				if arrays.remove(&alloca) {
-					let allocas_of_type = match self.array_allocas_not_in_use.get_mut(&array_type) {
-						Some(allocas_of_type) => allocas_of_type,
-						None => {
-							self.array_allocas_not_in_use.insert(array_type.clone(), HashSet::new());
-							self.array_allocas_not_in_use.get_mut(&array_type).unwrap()
-						}
-					};
-					allocas_of_type.insert(alloca.clone());
-					return;
-				}
-			}
-		}
-		panic!()
-	}
+	//pub fn surrender_array_alloca(&mut self, alloca: Value<'a, 'a>) {
+	//	for block in self.block_stack.iter_mut().rev() {
+	//		for (array_type, arrays) in block.array_allocas_in_use.iter_mut() {
+	//			if arrays.remove(&alloca) {
+	//				let allocas_of_type = match self.array_allocas_not_in_use.get_mut(&array_type) {
+	//					Some(allocas_of_type) => allocas_of_type,
+	//					None => {
+	//						self.array_allocas_not_in_use.insert(array_type.clone(), HashSet::new());
+	//						self.array_allocas_not_in_use.get_mut(&array_type).unwrap()
+	//					}
+	//				};
+	//				allocas_of_type.insert(alloca.clone());
+	//				return;
+	//			}
+	//		}
+	//	}
+	//	panic!()
+	//}
 }
 
 pub struct BlockLevel<'a> {

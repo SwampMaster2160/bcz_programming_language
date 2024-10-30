@@ -9,6 +9,8 @@
 //	a? b: c
 //};
 
+a = (a, b) a + b;
+
 main = @entry_point () {
 	utf_16_str = @stack(3, 2);
 	@write(utf_16_str, 2, 'H');
