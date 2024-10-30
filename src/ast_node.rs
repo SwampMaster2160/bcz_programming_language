@@ -791,6 +791,7 @@ impl AstNode {
 					local_variables: function_parameter_variables,
 					basic_blocks: vec![entry_basic_block.clone(), body_basic_block.clone()],
 					allocas_in_use: HashSet::new(),
+					array_allocas_in_use: HashMap::new(),
 					//allocas,
 				}];
 				llvm_builder.position_at_end(&body_basic_block);
@@ -800,6 +801,7 @@ impl AstNode {
 					block_stack: &mut inner_block_stack,
 					allocas_not_in_use: &mut HashSet::new(),
 					alloca_block: &entry_basic_block,
+					array_allocas_not_in_use: &mut HashMap::new(),
 				};
 				let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(&mut function_info))?;
 				llvm_builder.position_at_end(&entry_basic_block);
@@ -1214,6 +1216,7 @@ impl AstNode {
 					basic_blocks: vec![inner_basic_block],
 					local_variables: HashMap::new(),
 					allocas_in_use: HashSet::new(),
+					array_allocas_in_use: HashMap::new(),
 				});
 				// Build each expression
 				let mut last_built_expression = None;
@@ -1223,12 +1226,37 @@ impl AstNode {
 				}
 				// Pop the scope we pushed
 				//block_stack.pop();
-				while !function_build_data.block_stack.last().unwrap().allocas_in_use.is_empty() {
-					function_build_data.surrender_alloca(function_build_data.block_stack.last().unwrap().allocas_in_use.iter().next().unwrap().clone());
-				}
+				//while !function_build_data.block_stack.last().unwrap().allocas_in_use.is_empty() {
+				//	function_build_data.surrender_alloca(function_build_data.block_stack.last().unwrap().allocas_in_use.iter().next().unwrap().clone());
+				//}
+				//while !function_build_data.block_stack.last().unwrap().array_allocas_in_use.is_empty() {
+				//	while !function_build_data.block_stack.last().unwrap().array_allocas_in_use.is_empty() {
+				//		function_build_data.surrender_array_alloca(function_build_data.block_stack.last().unwrap().array_allocas_in_use.iter().next().unwrap().clone());
+				//	}
+				//}
 				//for alloca in function_build_data.block_stack.last().unwrap().allocas_in_use.iter() {
 				//	function_build_data.surrender_alloca(alloca.clone());
 				//}
+				let top_block = function_build_data.block_stack.last().unwrap();
+				for alloca in top_block.allocas_in_use.iter() {
+					function_build_data.allocas_not_in_use.insert(alloca.clone());
+				}
+				for (array_type, arrays) in top_block.array_allocas_in_use.iter() {
+					let to_append_to = match function_build_data.array_allocas_not_in_use.get_mut(array_type) {
+						Some(to_append_to) => to_append_to,
+						None => {
+							function_build_data.array_allocas_not_in_use.insert(array_type.clone(), HashSet::new());
+							function_build_data.array_allocas_not_in_use.get_mut(array_type).unwrap()
+						}
+					};
+					for array in arrays {
+						to_append_to.insert(array.clone());
+					}
+					//if !function_build_data.array_allocas_not_in_use.contains_key(array_type) {
+					//	function_build_data.array_allocas_not_in_use.insert(array_type.clone(), HashSet::new());
+					//}
+					//function_build_data.allocas_not_in_use.insert(alloca.clone());
+				}
 				function_build_data.block_stack.pop();
 				// Branch to the basic block that was created before to branch to after the BCZ block was built and position the builder to it
 				//llvm_builder.build_branch(block_stack.last().unwrap().last_block());
@@ -1316,44 +1344,48 @@ impl AstNode {
 						value_to_write_built
 					}
 					Keyword::Stack => {
-						todo!()
-						//// Get arguments
-						//let (count, entry_width) = match arguments.len() {
-						//	0 => (None, None),
-						//	1 => (Some(&arguments[0]), None),
-						//	2 => (Some(&arguments[0]), Some(&arguments[1])),
-						//	_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
-						//};
-						//// Get entry count
-						//let count = match count {
-						//	Some(count) => match count.variant {
-						//		AstNodeVariant::Constant(count) => count,
-						//		_ => return Err((Error::ConstValueRequired, count.start)),
-						//	}
-						//	None => 1,
-						//};
-						//// Get entry type
-						//let entry_type = match entry_width {
-						//	Some(entry_width) => {
-						//		let entry_type = entry_width.type_from_width(main_data)?.0;
-						//		if entry_type.is_void() {
-						//			return Err((Error::VoidParameter, self.start));
-						//		}
-						//		entry_type
-						//	}
-						//	None => main_data.int_type,
-						//};
-						//// Get pointer to top of alloca array
-						//// TODO: Fix
+						let function_build_data = match function_build_data {
+							Some(function_build_data) => function_build_data,
+							None => return Err((Error::GlobalOperatorNotConstEvaluated, self.start))
+						};
+						// Get arguments
+						let (count, entry_width) = match arguments.len() {
+							0 => (None, None),
+							1 => (Some(&arguments[0]), None),
+							2 => (Some(&arguments[0]), Some(&arguments[1])),
+							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+						};
+						// Get entry count
+						let count = match count {
+							Some(count) => match count.variant {
+								AstNodeVariant::Constant(count) => count,
+								_ => return Err((Error::ConstValueRequired, count.start)),
+							}
+							None => 1,
+						};
+						// Get entry type
+						let entry_type = match entry_width {
+							Some(entry_width) => {
+								let entry_type = entry_width.type_from_width(main_data)?.0;
+								if entry_type.is_void() {
+									return Err((Error::VoidParameter, self.start));
+								}
+								entry_type
+							}
+							None => main_data.int_type,
+						};
+						// Get pointer to top of alloca array
 						//let alloca = block_stack.last_mut().unwrap()
 						//	.allocas[(entry_type.size_in_bits(main_data.llvm_data_layout) / 8).ilog2() as usize].as_mut().unwrap();
-						//// Get the pointer that will be returned
+						let alloca = function_build_data.get_array_alloca(entry_type, count, llvm_builder, "stack");
+						// Get the pointer that will be returned
 						//let local_variable_ptr = alloca.clone();
-						//// Re-point the alloca pointer so that the next use will point to after the array we allocated
+						// Re-point the alloca pointer so that the next use will point to after the array we allocated
 						//*alloca = alloca.build_get_element_ptr(
 						//	llvm_builder, main_data.int_type, &[main_data.int_type.const_int(count as u128, false)], "get_element_ptr_temp"
 						//);
-						//// Return pointer
+						// Return pointer
+						alloca
 						//local_variable_ptr
 					}
 					Keyword::EntryPoint | Keyword::Link => unreachable!(),
@@ -1389,6 +1421,7 @@ impl AstNode {
 							basic_blocks: vec![inner_basic_block.clone()],
 							local_variables: HashMap::new(),
 							allocas_in_use: HashSet::new(),
+							array_allocas_in_use: HashMap::new(),
 							//allocas: top_alloca_level,
 						});
 						// Build child expression
