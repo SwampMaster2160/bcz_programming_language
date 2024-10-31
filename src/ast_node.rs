@@ -286,6 +286,9 @@ impl AstNode {
 					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
 					Keyword::Link => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
 					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
+					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
+						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
+					}
 				}
 			}
 			AstNodeVariant::FunctionDefinition(parameters, body) => {
@@ -516,6 +519,7 @@ impl AstNode {
 					basic_blocks: vec![body_basic_block.clone()],
 					allocas_in_use: HashSet::new(),
 					array_allocas_in_use: HashMap::new(),
+					is_loop: false,
 				}];
 				let mut function_info = FunctionBuildData {
 					function: function.clone(),
@@ -890,6 +894,7 @@ impl AstNode {
 					local_variables: HashMap::new(),
 					allocas_in_use: HashSet::new(),
 					array_allocas_in_use: HashMap::new(),
+					is_loop: false,
 				});
 				// Build each expression
 				let mut last_built_expression = None;
@@ -1048,6 +1053,7 @@ impl AstNode {
 							local_variables: HashMap::new(),
 							allocas_in_use: HashSet::new(),
 							array_allocas_in_use: HashMap::new(),
+							is_loop: true,
 						});
 						// Build child expression
 						child.as_ref().unwrap().build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
@@ -1061,6 +1067,40 @@ impl AstNode {
 						let result = result_alloca.build_load(main_data.int_type, llvm_builder, "loop_result_temp");
 						function_build_data.surrender_alloca(result_alloca);
 						result
+					}
+					Keyword::Break => {
+						let function_build_data = match function_build_data {
+							Some(function_build_data) => function_build_data,
+							None => return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start)),
+						};
+						let mut last_was_loop = false;
+						for block_level in function_build_data.block_stack.iter().rev() {
+							if last_was_loop {
+								llvm_builder.build_branch(&block_level.last_block());
+								let unreachable_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "break_unreachable");
+								llvm_builder.position_at_end(&unreachable_basic_block);
+								function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(unreachable_basic_block);
+								return Ok(main_data.int_type.undefined());
+							}
+							last_was_loop = block_level.is_loop;
+						}
+						return Err((Error::NotUsedInsideLoop, self.start));
+					}
+					Keyword::Continue => {
+						let function_build_data = match function_build_data {
+							Some(function_build_data) => function_build_data,
+							None => return Err((Error::FeatureNotYetImplemented("Blocks in global scope".into()), self.start)),
+						};
+						for block_level in function_build_data.block_stack.iter().rev() {
+							if block_level.is_loop {
+								llvm_builder.build_branch(&block_level.basic_blocks[0]);
+								let unreachable_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "continue_unreachable");
+								llvm_builder.position_at_end(&unreachable_basic_block);
+								function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(unreachable_basic_block);
+								return Ok(main_data.int_type.undefined());
+							}
+						}
+						return Err((Error::NotUsedInsideLoop, self.start));
 					}
 				}
 			}
@@ -1119,7 +1159,9 @@ impl AstNode {
 					Keyword::EntryPoint => return Err((Error::InvalidLValue, self.start)),
 					Keyword::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
 					Keyword::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
-					Keyword::Loop => return Err((Error::InvalidLValue, self.start)),
+					Keyword::Loop => return Err((Error::FeatureNotYetImplemented("L-value loop".into()), self.start)),
+					Keyword::Break => return Err((Error::FeatureNotYetImplemented("L-value break".into()), self.start)),
+					Keyword::Continue => return Err((Error::FeatureNotYetImplemented("L-value continue".into()), self.start)),
 				}
 			}
 			AstNodeVariant::Block(..) => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), self.start)),
@@ -1688,8 +1730,11 @@ impl AstNode {
 					}
 					Keyword::EntryPoint => child.as_mut().unwrap()
 						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
-						Keyword::Link => child.as_mut().unwrap()
+					Keyword::Link => child.as_mut().unwrap()
 						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
+					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
+						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
+					}
 				}
 			}
 			AstNodeVariant::String(..) => {}

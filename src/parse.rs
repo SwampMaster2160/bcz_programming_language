@@ -538,14 +538,13 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 	// Parse some metadata items
 	for index in (0..items_being_parsed.len()).rev() {
 		// Make sure we have a keyword
-		let (keyword, arguments, child, start) = match &mut items_being_parsed[index] {
-			//ParseState::Token(Token { variant: TokenVariant::Keyword(keyword), start, end }) => (*keyword, *start, *end),
-			ParseState::AstNode(AstNode { variant: AstNodeVariant::Keyword(keyword, arguments, child), start, end: _ }) => {
+		let (keyword, arguments, child, start, keyword_end) = match &mut items_being_parsed[index] {
+			ParseState::AstNode(AstNode { variant: AstNodeVariant::Keyword(keyword, arguments, child), start, end: keyword_end }) => {
 					match keyword {
-						Keyword::EntryPoint | Keyword::Link | Keyword::Loop => {},
+						Keyword::EntryPoint | Keyword::Link | Keyword::Loop | Keyword::Break | Keyword::Continue => {},
 						Keyword::Write | Keyword::Stack => continue,
 					};
-					(*keyword, take(arguments), take(child), *start)
+					(*keyword, take(arguments), take(child), *start, *keyword_end)
 				}
 			_ => continue,
 		};
@@ -553,15 +552,24 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 			return Err((Error::KeywordWithTwoChildren, start));
 		}
 		// Take child node
-		let child_node = match items_being_parsed.remove(index + 1) {
-			ParseState::AstNode(ast_node) => ast_node,
-			_ => return Err((Error::MetadataItemWithoutChildNode, start)),
+		let child_node = match (index + 1) < items_being_parsed.len() {
+			true => Some(match items_being_parsed.remove(index + 1) {
+				ParseState::AstNode(ast_node) => ast_node,
+				_ => return Err((Error::MetadataItemWithoutChildNode, start)),
+			}),
+			false => None,
 		};
 		// Construct new node
 		let metadata_ast_node = AstNode {
 			start,
-			end: child_node.end,
-			variant: AstNodeVariant::Keyword(keyword, arguments, Some(Box::new(child_node))),//AstNodeVariant::Metadata(metadata, Box::new(child_node)),
+			end: match &child_node {
+				Some(child_node) => child_node.end,
+				None => match arguments.last() {
+					Some(argument) => argument.end,
+					None => keyword_end,
+				}
+			},
+			variant: AstNodeVariant::Keyword(keyword, arguments, child_node.map(|child_node| Box::new(child_node))),
 		};
 		// Insert back into list
 		items_being_parsed[index] = ParseState::AstNode(metadata_ast_node);

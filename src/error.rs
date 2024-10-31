@@ -63,6 +63,7 @@ pub enum Error {
 	UnmatchedTernary,
 	KeywordWithTwoChildren,
 	GlobalOperatorNotConstEvaluated,
+	NotUsedInsideLoop,
 }
 
 impl Display for Error {
@@ -129,6 +130,7 @@ impl Display for Error {
 			Error::TernaryOperatorNotUsedOnExpressions => write!(f, "Ternary operator used on non-expressions"),
 			Error::KeywordWithTwoChildren => write!(f, "Keyword with two children"),
 			Error::GlobalOperatorNotConstEvaluated => write!(f, "Global operator not const-evaluated"),
+			Error::NotUsedInsideLoop => write!(f, "Not used inside loop"),
 		}
 	}
 }

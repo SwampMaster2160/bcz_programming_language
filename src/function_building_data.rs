@@ -93,7 +93,7 @@ pub struct BlockLevel<'a> {
 	pub basic_blocks: Vec<BasicBlock<'a, 'a>>,
 	pub allocas_in_use: HashSet<Value<'a, 'a>>,
 	pub array_allocas_in_use: HashMap<(Type<'a>, u64), HashSet<Value<'a, 'a>>>,
-	//pub allocas: [Option<Value<'a, 'a>>; 5],
+	pub is_loop: bool,
 }
 
 impl<'a> BlockLevel<'a> {
