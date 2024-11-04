@@ -57,6 +57,8 @@ pub enum Keyword {
 	Loop,
 	Break,
 	Continue,
+	Import,
+	Export,
 }
 
 impl Keyword {
@@ -69,6 +71,8 @@ impl Keyword {
 			Self::Loop => "loop",
 			Self::Break => "break",
 			Self::Continue => "continue",
+			Self::Import => "import",
+			Self::Export => "export",
 		}
 	}
 

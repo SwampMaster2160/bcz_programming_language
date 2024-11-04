@@ -1,31 +1,33 @@
-WORD_BYTES = 8;
+myVar = 69;
 
-Void = 0;
-Ptr = WORD_BYTES;
-
-B = 5;
-
-main = @entry_point () {
-	handle = GetStdHandle(-11);
-	number_of_chars_written = 0;
-	WriteConsoleA(handle, "Hi\n", 3, &number_of_chars_written, 0);
-	FillConsoleOutputCharacterA(handle, 'a', 10, 4 + 2 * 0x10000, &number_of_chars_written);
-	Beep(500, 1000);
-	a = 2 + B;
-	420 + aFn(a, 2)
-};
-
-aFn = (a, b) {
-	a + b
-};
-
-// user32.dll
-
-BOOL = -4;
-DWORD = 4;
-
-Beep = @link (DWORD, DWORD) BOOL;
-GetStdHandle = @link (4) 8;
-FillConsoleOutputCharacterA = @link (8, 1, 4, 4, 8) -4;
-SetConsoleScreenBufferSize = @link (8, 2, 2) -4;
-WriteConsoleA = @link (8, 8, 4, 8, 8) -4;
+//WORD_BYTES = 8;
+//
+//Void = 0;
+//Ptr = WORD_BYTES;
+//
+//B = 5;
+//
+//main = @entry_point () {
+//	handle = GetStdHandle(-11);
+//	number_of_chars_written = 0;
+//	WriteConsoleA(handle, "Hi\n", 3, &number_of_chars_written, 0);
+//	FillConsoleOutputCharacterA(handle, 'a', 10, 4 + 2 * 0x10000, &number_of_chars_written);
+//	Beep(500, 1000);
+//	a = 2 + B;
+//	420 + aFn(a, 2)
+//};
+//
+//aFn = (a, b) {
+//	a + b
+//};
+//
+//// user32.dll
+//
+//BOOL = -4;
+//DWORD = 4;
+//
+//Beep = @link (DWORD, DWORD) BOOL;
+//GetStdHandle = @link (4) 8;
+//FillConsoleOutputCharacterA = @link (8, 1, 4, 4, 8) -4;
+//SetConsoleScreenBufferSize = @link (8, 2, 2) -4;
+//WriteConsoleA = @link (8, 8, 4, 8, 8) -4;

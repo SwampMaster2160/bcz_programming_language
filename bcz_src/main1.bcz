@@ -1,3 +1,9 @@
+a = @import("main.bcz", "myVar");
+
+main = @entry_point () {
+	a
+}
+
 //main = @entry_point () {
 //	fnB(1, 420, 69)
 //	//0? 0: 0
@@ -11,37 +17,37 @@
 
 //a = (a, b) a + b;
 
-main = @entry_point () {
-	x = 0;
-	@loop {
-		x > 9? @break: {};
-		Beep(500, 1000);
-		x = x + 1;
-	}
-	//utf_16_str = @stack(3, 2);
-	//@write(utf_16_str, 2, 'H');
-	//@write(utf_16_str + 2, 2, 'i');
-	//@write(utf_16_str + 4, 2, '\n');
-	//handle = GetStdHandle(-11);
-	//Beep(500, 1000);
-	//{
-	//	result = 0;
-	//	WriteConsoleW(handle, utf_16_str, 3, &result, 0);
-	//};
-	//Beep(600, 1000);
-	//main();
-	//a = 1 + 2 + 3;
-	//b = {2 == 2};
-	//a * 2 + b
-};
-
-// user32.dll
-
-BOOL = -4;
-DWORD = 4;
-
-Beep = @link (DWORD, DWORD) BOOL;
-GetStdHandle = @link (4) 8;
-WriteConsoleW = @link (8, 8, DWORD, 8, 8) BOOL;
-
-//a = 0;
+//main = @entry_point () {
+//	x = 0;
+//	@loop {
+//		x > 9? @break: {};
+//		Beep(500, 1000);
+//		x = x + 1;
+//	}
+//	//utf_16_str = @stack(3, 2);
+//	//@write(utf_16_str, 2, 'H');
+//	//@write(utf_16_str + 2, 2, 'i');
+//	//@write(utf_16_str + 4, 2, '\n');
+//	//handle = GetStdHandle(-11);
+//	//Beep(500, 1000);
+//	//{
+//	//	result = 0;
+//	//	WriteConsoleW(handle, utf_16_str, 3, &result, 0);
+//	//};
+//	//Beep(600, 1000);
+//	//main();
+//	//a = 1 + 2 + 3;
+//	//b = {2 == 2};
+//	//a * 2 + b
+//};
+//
+//// user32.dll
+//
+//BOOL = -4;
+//DWORD = 4;
+//
+//Beep = @link (DWORD, DWORD) BOOL;
+//GetStdHandle = @link (4) 8;
+//WriteConsoleW = @link (8, 8, DWORD, 8, 8) BOOL;
+//
+////a = 0;

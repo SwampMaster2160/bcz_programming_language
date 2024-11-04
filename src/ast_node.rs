@@ -285,9 +285,24 @@ impl AstNode {
 					}
 					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
 					Keyword::Link => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
+					Keyword::Export => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
 					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?,
 					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
 						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
+					}
+					Keyword::Import => {
+						for argument in arguments {
+							argument.get_variable_dependencies(
+								variable_dependencies, import_dependencies, local_variables, false, false
+							)?;
+						}
+						let import_name = &arguments[0];
+						let import_name = match &import_name.variant {
+							AstNodeVariant::Identifier(import_name) => &**import_name,
+							AstNodeVariant::String(import_name) => &**import_name,
+							_ => return Err((Error::ExpectedIdentifier, import_name.start)),
+						};
+						import_dependencies.insert(import_name.into());
 					}
 				}
 			}
@@ -467,7 +482,8 @@ impl AstNode {
 		llvm_builder: &'a Builder,
 		name: &str,
 		is_link_function: bool,
-		is_entry_point: bool
+		is_entry_point: bool,
+		is_export_function: bool,
 	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack function definition node
 		let Self {
@@ -480,9 +496,11 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
 			AstNodeVariant::Keyword(keyword, _, child) => match keyword {
 				Keyword::EntryPoint =>
-					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true, is_export_function),
 				Keyword::Link =>
-					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point, is_export_function),
+				Keyword::Export =>
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, is_entry_point, true),
 				_ => unreachable!(),
 			}
 			_ => unreachable!(),
@@ -504,6 +522,9 @@ impl AstNode {
 				llvm_module.add_function(function_type, &*mangled_name)
 			}
 		};
+		if is_export_function {
+			todo!()
+		}
 		// Build function body
 		match is_link_function {
 			false => {
@@ -625,8 +646,7 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
 		function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
-	)
-	-> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
+	) -> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
 			start,
@@ -637,7 +657,7 @@ impl AstNode {
 		if self.is_function() {
 			// Build function
 			let out = self.build_function_definition(
-				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false
+				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false, false
 			)?;
 			// The function will have positioned the builder pos to one of it's basic blocks, so re-position it back
 			if let Some(function_info) = function_build_data {
@@ -1030,7 +1050,7 @@ impl AstNode {
 						// Get alloca
 						function_build_data.get_array_alloca(entry_type, count, llvm_builder, "stack")
 					}
-					Keyword::EntryPoint | Keyword::Link => unreachable!(),
+					Keyword::EntryPoint | Keyword::Link | Keyword::Export => unreachable!(),
 					Keyword::Loop => {
 						let function_build_data = match function_build_data {
 							Some(function_build_data) => function_build_data,
@@ -1102,6 +1122,30 @@ impl AstNode {
 						}
 						return Err((Error::NotUsedInsideLoop, self.start));
 					}
+					Keyword::Import => {
+						//let function_build_data = match function_build_data {
+						//	Some(function_build_data) => function_build_data,
+						//	None => return Err((Error::GlobalOperatorNotConstEvaluated, self.start))
+						//};
+						// Get arguments
+						let (filepath, global_variable_name) = match arguments.len() {
+							2 => (&arguments[0], &arguments[1]),
+							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+						};
+						// Get filepath
+						let _filepath = match &filepath.variant {
+							AstNodeVariant::String(filepath) => &**filepath,
+							AstNodeVariant::Identifier(filepath) => &**filepath,
+							_ => return Err((Error::ConstValueRequired, filepath.start)),
+						};
+						// Get global variable name
+						let global_variable_name = match &global_variable_name.variant {
+							AstNodeVariant::String(global_variable_name) => &**global_variable_name,
+							AstNodeVariant::Identifier(global_variable_name) => &**global_variable_name,
+							_ => return Err((Error::ConstValueRequired, global_variable_name.start)),
+						};
+						llvm_module.add_global(main_data.int_type, global_variable_name)
+					}
 				}
 			}
 			// Build strings
@@ -1155,8 +1199,7 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(..) => return Err((Error::InvalidLValue, self.start)),
 			AstNodeVariant::Keyword(keyword, _arguments, _child) => {
 				match keyword {
-					Keyword::Link => return Err((Error::InvalidLValue, self.start)),
-					Keyword::EntryPoint => return Err((Error::InvalidLValue, self.start)),
+					Keyword::Link | Keyword::EntryPoint | Keyword::Import | Keyword::Export => return Err((Error::InvalidLValue, self.start)),
 					Keyword::Write => return Err((Error::FeatureNotYetImplemented("L-value write".into()), self.start)),
 					Keyword::Stack => return Err((Error::FeatureNotYetImplemented("L-value stack".into()), self.start)),
 					Keyword::Loop => return Err((Error::FeatureNotYetImplemented("L-value loop".into()), self.start)),
@@ -1190,7 +1233,7 @@ impl AstNode {
 		// Build r-value/function
 		if self.is_function() {
 			let function =
-				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
+				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false, false)?;
 			return Ok(function);
 		}
 		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, None)?;
@@ -1208,6 +1251,7 @@ impl AstNode {
 			AstNodeVariant::Keyword(keyword, _arguments, child) => match keyword {
 				Keyword::EntryPoint => child.as_ref().unwrap().is_function(),
 				Keyword::Link => child.as_ref().unwrap().is_function(),
+				Keyword::Export => child.as_ref().unwrap().is_function(),
 				_ => false,
 			}
 			_ => false,
@@ -1721,7 +1765,7 @@ impl AstNode {
 			}
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
 				match keyword {
-					Keyword::Write | Keyword::Stack | Keyword::Loop => {
+					Keyword::Write | Keyword::Stack | Keyword::Loop | Keyword::Import => {
 						for argument in arguments {
 							argument.const_evaluate(
 								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
@@ -1735,6 +1779,8 @@ impl AstNode {
 					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
 						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
 					}
+					Keyword::Export => child.as_mut().unwrap()
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
 				}
 			}
 			AstNodeVariant::String(..) => {}

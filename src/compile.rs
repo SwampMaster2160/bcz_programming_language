@@ -61,6 +61,11 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 		globals_and_dependencies.insert(name, (expression, variable_dependencies));
 	}
+	// Compile imports
+	for import_dependency in import_dependencies.iter() {
+		let dependency_filepath = filepath.parent().unwrap().join(&**import_dependency);
+		compile_file(main_data, &dependency_filepath)?;
+	}
 	// Print global variables if commanded to do so
 	if main_data.print_after_analyzer {
 		println!("Globals of {}:", filepath.display());
