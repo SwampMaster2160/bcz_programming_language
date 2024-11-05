@@ -1,7 +1,7 @@
 a = @import("main.bcz", "myVar");
 
 main = @entry_point () {
-	a
+	a()
 }
 
 //main = @entry_point () {

@@ -31,3 +31,18 @@ impl<'a> BuiltLValue<'a> {
 		}
 	}
 }
+
+#[derive(Clone, Debug)]
+pub enum BuiltRValue<'a> {
+	Value(Value<'a, 'a>),
+	ImportedConstant(Value<'a, 'a>),
+}
+
+impl<'a> BuiltRValue<'a> {
+	pub fn get_value(&self, main_data: &MainData<'a>, llvm_builder: &Builder<'a, 'a>) -> Value<'a, 'a> {
+		match self {
+			Self::Value(value) => value.clone(),
+			Self::ImportedConstant(value) => value.build_load(main_data.int_type, llvm_builder, "global_constant_read_temp"),
+		}
+	}
+}

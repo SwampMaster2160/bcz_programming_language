@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{sw
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::BuiltLValue, error::Error, file_build_data::FileBuildData, function_building_data::{BlockLevel, FunctionBuildData}, token::Keyword, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, function_building_data::{BlockLevel, FunctionBuildData}, token::Keyword, MainData};
 use llvm_nhb::{builder::Builder, enums::{CallingConvention, Comparison, Linkage}, module::Module, types::Type, value::Value};
 
 #[derive(Debug, Clone)]
@@ -569,7 +569,7 @@ impl AstNode {
 				llvm_builder.build_branch(&body_basic_block);
 				// Build return
 				llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
-				function_body_built.build_return(llvm_builder);
+				BuiltRValue::Value(function_body_built.get_value(main_data, llvm_builder).build_return(llvm_builder));
 			}
 			true => {
 				let basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
@@ -646,7 +646,7 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
 		function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
-	) -> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
+	) -> Result<BuiltRValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
 			start,
@@ -664,12 +664,12 @@ impl AstNode {
 				llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
 			}
 			// Return
-			return Ok(out);
+			return Ok(BuiltRValue::Value(out));
 		}
 		// Building depends on node variant
 		Ok(match variant {
 			// Constants build an int constant
-			AstNodeVariant::Constant(value) => main_data.int_type.const_int(*value as u128, false),
+			AstNodeVariant::Constant(value) => BuiltRValue::Value(main_data.int_type.const_int(*value as u128, false)),
 			// For an identifier, we load the value stored in the variable it represents
 			AstNodeVariant::Identifier(name) => get_variable_by_name(main_data, file_build_data, llvm_builder, function_build_data, &*name),
 			AstNodeVariant::Operator(operator, operands) => {
@@ -682,7 +682,7 @@ impl AstNode {
 					Operator::Assignment => {
 						let r_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
 						let l_value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
-						l_value.set_value(main_data, llvm_builder, &r_value);
+						l_value.set_value(main_data, llvm_builder, &r_value.get_value(main_data, llvm_builder));
 						return Ok(r_value);
 					}
 					// For a normal operator, we build the operands then build the operator instruction
@@ -694,8 +694,10 @@ impl AstNode {
 						Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo |
 						Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 						Operation::SignedLessThanOrEqualTo | Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan => {
-							let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
-							let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
+							let right_value = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
 							let result = match operation {
 								Operation::IntegerAdd => left_value.build_add(&right_value, llvm_builder, "add_temp"),
 								Operation::IntegerSubtract => left_value.build_sub(&right_value, llvm_builder, "sub_temp"),
@@ -758,11 +760,12 @@ impl AstNode {
 										.build_zero_extend(llvm_builder, main_data.int_type, "bool_to_int_temp"),
 								_ => unreachable!(),
 							};
-							result
+							BuiltRValue::Value(result)
 						}
 						Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr => {
 							// Get the left value
-							let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let left_value = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
 							// Get if we should skip
 							let skip_condition = match operation {
 								Operation::LogicalShortCircuitAnd
@@ -787,7 +790,7 @@ impl AstNode {
 								Operation::LogicalShortCircuitOr => right_value,
 								_ => unreachable!()
 							};
-							result_alloca.build_store(&operation_result, llvm_builder);
+							result_alloca.build_store(&operation_result.get_value(main_data, llvm_builder), llvm_builder);
 							llvm_builder.build_branch(&end_basic_block);
 							// Re-position builder at end
 							llvm_builder.position_at_end(&end_basic_block);
@@ -795,14 +798,17 @@ impl AstNode {
 							// Read result
 							let result = result_alloca.build_load(main_data.int_type, llvm_builder, "read_result");
 							function_build_data.surrender_alloca(result_alloca);
-							result
+							BuiltRValue::Value(result)
 						}
 						Operation::NotShortCircuitTernary => {
 							// Build operands
 							let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder)
 								.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
-							let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
-							let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
+							let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
 							// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
 							let then_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_then");
 							let else_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_else");
@@ -827,11 +833,12 @@ impl AstNode {
 							// Read ternary result
 							let result = result_alloca.build_load(main_data.int_type, llvm_builder, "read_ternary_result");
 							function_build_data.surrender_alloca(result_alloca);
-							result
+							BuiltRValue::Value(result)
 						}
 						Operation::ShortCircuitTernary => {
 							// Build the condition to an i1
 							let condition = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder)
 								.build_compare(&main_data.int_type.const_int(0, false), Comparison::NotEqual, llvm_builder, "int_to_bool_temp");
 							// Build the basic blocks for the then and else cases and an end basic block to jump to when they have been executed
 							let then_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_then");
@@ -844,13 +851,15 @@ impl AstNode {
 							// Build then case
 							llvm_builder.position_at_end(&then_basic_block);
 							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(then_basic_block);
-							let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let then_case = operands[1].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
 							result_alloca.build_store(&then_case, llvm_builder);
 							llvm_builder.build_branch(&end_basic_block);
 							// Build else case
 							llvm_builder.position_at_end(&else_basic_block);
 							function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(else_basic_block);
-							let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let else_case = operands[2].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
 							result_alloca.build_store(&else_case, llvm_builder);
 							llvm_builder.build_branch(&end_basic_block);
 							// Re-position builder at end
@@ -859,10 +868,11 @@ impl AstNode {
 							// Read ternary result
 							let result = result_alloca.build_load(main_data.int_type, llvm_builder, "read_ternary_result");
 							function_build_data.surrender_alloca(result_alloca);
-							result
+							BuiltRValue::Value(result)
 						}
 						Operation::IntegerNegate | Operation::Dereference | Operation::BitwiseNot => {
-							let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							let operand = operands[0].build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+								.get_value(main_data, llvm_builder);
 							let result = match operation {
 								Operation::IntegerNegate => operand.build_negate(llvm_builder, "neg_temp"),
 								Operation::Dereference =>
@@ -871,15 +881,15 @@ impl AstNode {
 								Operation::BitwiseNot => operand.build_bitwise_not(llvm_builder, "bnot_temp"),
 								_ => unreachable!()
 							};
-							result
+							BuiltRValue::Value(result)
 						}
 						Operation::TakeReference | Operation::Read => {
 							let value = operands[0].build_l_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
 							match operation {
-								Operation::TakeReference => value
+								Operation::TakeReference => BuiltRValue::Value(value
 									.get_pointer(main_data, llvm_builder)
-									.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref_temp"),
-								Operation::Read => value.get_value(main_data, llvm_builder),
+									.build_ptr_to_int(llvm_builder, main_data.int_type, "ptr_to_int_for_take_ref_temp")),
+								Operation::Read => BuiltRValue::Value(value.get_value(main_data, llvm_builder)),
 								_ => unreachable!(),
 							}
 						}
@@ -896,7 +906,7 @@ impl AstNode {
 			AstNodeVariant::Block(block_expressions, is_result_undefined) => {
 				// If we are in the global scope
 				if *is_result_undefined && block_expressions.is_empty() {
-					return Ok(main_data.int_type.undefined());
+					return Ok(BuiltRValue::Value(main_data.int_type.undefined()));
 				}
 				let function_build_data = match function_build_data {
 					Some(function_build_data) => function_build_data,
@@ -945,7 +955,7 @@ impl AstNode {
 				llvm_builder.position_at_end(function_build_data.block_stack.last().unwrap().last_block());
 				// Return
 				match (is_result_undefined, last_built_expression) {
-					(true, _) | (false, None) => main_data.int_type.undefined(),
+					(true, _) | (false, None) => BuiltRValue::Value(main_data.int_type.undefined()),
 					(false, Some(last_built_expression)) => last_built_expression,
 				}
 			}
@@ -963,7 +973,7 @@ impl AstNode {
 					.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
 				let mut arguments_built = Vec::with_capacity(arguments.len());
 				for argument in arguments {
-					arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?);
+					arguments_built.push(argument.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?.get_value(main_data, llvm_builder));
 				}
 				// Build types
 				let argument_types: Box<[Type]> = repeat(main_data.int_type).take(arguments.len()).collect();
@@ -971,10 +981,11 @@ impl AstNode {
 				let function_pointer_type = function_type.pointer_to();
 				// Build function call
 				let function_pointer = function_pointer_built
+					.get_value(main_data, llvm_builder)
 					.build_int_to_ptr(llvm_builder, function_pointer_type, "int_to_ptr_temp");
 				let built_function_call = function_pointer
 					.build_call(arguments_built.as_slice(), function_type, llvm_builder, "function_call_temp");
-				built_function_call
+				BuiltRValue::Value(built_function_call)
 			}
 			// For a built in function, building depends on the function
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
@@ -999,9 +1010,11 @@ impl AstNode {
 						// Build arguments
 						let address_to_write_to_built = address_to_write_to
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+							.get_value(main_data, llvm_builder)
 							.build_int_to_ptr(llvm_builder, write_type_ptr, "int_to_ptr_temp");
 						let value_to_write_built = value_to_write
-							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?;
+							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(function_build_data))?
+							.get_value(main_data, llvm_builder);
 						let value_to_write_built_cast = match main_data.int_bit_width
 							.cmp(&(write_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
 							Ordering::Greater => value_to_write_built.clone().build_truncate(llvm_builder, write_type, "truncate_temp"),
@@ -1014,7 +1027,7 @@ impl AstNode {
 						// Build write
 						address_to_write_to_built.build_store(&value_to_write_built_cast, llvm_builder);
 						// Expression yeilds the written value
-						value_to_write_built
+						BuiltRValue::Value(value_to_write_built)
 					}
 					Keyword::Stack => {
 						let function_build_data = match function_build_data {
@@ -1048,7 +1061,7 @@ impl AstNode {
 							None => main_data.int_type,
 						};
 						// Get alloca
-						function_build_data.get_array_alloca(entry_type, count, llvm_builder, "stack")
+						BuiltRValue::Value(function_build_data.get_array_alloca(entry_type, count, llvm_builder, "stack"))
 					}
 					Keyword::EntryPoint | Keyword::Link | Keyword::Export => unreachable!(),
 					Keyword::Loop => {
@@ -1086,7 +1099,7 @@ impl AstNode {
 						// Return
 						let result = result_alloca.build_load(main_data.int_type, llvm_builder, "loop_result_temp");
 						function_build_data.surrender_alloca(result_alloca);
-						result
+						BuiltRValue::Value(result)
 					}
 					Keyword::Break => {
 						let function_build_data = match function_build_data {
@@ -1100,7 +1113,7 @@ impl AstNode {
 								let unreachable_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "break_unreachable");
 								llvm_builder.position_at_end(&unreachable_basic_block);
 								function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(unreachable_basic_block);
-								return Ok(main_data.int_type.undefined());
+								return Ok(BuiltRValue::Value(main_data.int_type.undefined()));
 							}
 							last_was_loop = block_level.is_loop;
 						}
@@ -1117,7 +1130,7 @@ impl AstNode {
 								let unreachable_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "continue_unreachable");
 								llvm_builder.position_at_end(&unreachable_basic_block);
 								function_build_data.block_stack.last_mut().unwrap().basic_blocks.push(unreachable_basic_block);
-								return Ok(main_data.int_type.undefined());
+								return Ok(BuiltRValue::Value(main_data.int_type.undefined()));
 							}
 						}
 						return Err((Error::NotUsedInsideLoop, self.start));
@@ -1144,7 +1157,7 @@ impl AstNode {
 							AstNodeVariant::Identifier(global_variable_name) => &**global_variable_name,
 							_ => return Err((Error::ConstValueRequired, global_variable_name.start)),
 						};
-						llvm_module.add_global(main_data.int_type, global_variable_name)
+						BuiltRValue::ImportedConstant(llvm_module.add_global(main_data.int_type, global_variable_name))
 					}
 				}
 			}
@@ -1152,7 +1165,7 @@ impl AstNode {
 			AstNodeVariant::String(text) => {
 				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
 				string.set_initializer(&main_data.llvm_context.const_string(text, true));
-				string.build_ptr_to_int(llvm_builder, main_data.int_type, "str_ptr_to_int")
+				BuiltRValue::Value(string.build_ptr_to_int(llvm_builder, main_data.int_type, "str_ptr_to_int"))
 			}
 		})
 	}
@@ -1217,6 +1230,7 @@ impl AstNode {
 						let pointer = operands[0]
 							// TODO: Not global
 							.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, function_build_data)?
+							.get_value(main_data, llvm_builder)
 							.build_int_to_ptr(llvm_builder, main_data.int_type, "int_to_ptr_for_deref");
 						BuiltLValue::DereferencedPointer(pointer)
 					}
@@ -1229,17 +1243,23 @@ impl AstNode {
 	/// Build a global variable into LLVM IR code.
 	pub fn build_global_assignment<'a>(
 		&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str
-	) -> Result<Value, (Error, (NonZeroUsize, NonZeroUsize))> {
+	) -> Result<BuiltRValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Build r-value/function
 		if self.is_function() {
 			let function =
 				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false, false)?;
-			return Ok(function);
+			return Ok(BuiltRValue::Value(function));
 		}
 		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, None)?;
+			//.get_value(main_data, llvm_builder);
 		// Assign to global variable
-		let global = llvm_module.add_global(main_data.int_type, name);
-		global.set_initializer(&r_value);
+		match &r_value {
+			BuiltRValue::Value(value) => {
+				let global = llvm_module.add_global(main_data.int_type, name);
+				global.set_initializer(value);
+			}
+			BuiltRValue::ImportedConstant(..) => {}
+		}
 		// Return
 		return Ok(r_value);
 	}
@@ -1823,16 +1843,17 @@ fn get_variable_by_name<'a, 'b>(
 	llvm_builder: &Builder<'a, 'a>,
 	function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
 	name: &str
-) -> Value<'a, 'a> {
+) -> BuiltRValue<'a> {
 	if let Some(function_build_data) = function_build_data {
 		for scope_level in function_build_data.block_stack.iter().rev() {
 			if let Some(variable) = scope_level.local_variables.get(name) {
-				return variable.get_value(main_data, llvm_builder);
+				return BuiltRValue::Value(variable.get_value(main_data, llvm_builder));
 			}
 		}
 	}
 	if let Some(built_global) = file_build_data.built_globals.get(name) {
+		//return built_global.build_load(main_data.int_type, llvm_builder, "load_temp");
 		return built_global.clone();
 	}
-	file_build_data.built_global_function_signatures[name].build_ptr_to_int(llvm_builder, main_data.int_type, "fn_ptr_to_int_temp")
+	BuiltRValue::Value(file_build_data.built_global_function_signatures[name].build_ptr_to_int(llvm_builder, main_data.int_type, "fn_ptr_to_int_temp"))
 }
