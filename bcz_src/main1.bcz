@@ -1,7 +1,9 @@
-a = @import("main.bcz", "myVar");
+a = @import("main.bcz", "myFn");
+MY_VAR = @import("main.bcz", "MY_VAR");
+b = () 1;
 
 main = @entry_point () {
-	a()
+	a() + b() + MY_VAR
 }
 
 //main = @entry_point () {

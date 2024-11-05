@@ -1,4 +1,5 @@
-myVar = t = () 420;
+@export myFn = () 420;
+@export MY_VAR = 69;
 
 //WORD_BYTES = 8;
 //

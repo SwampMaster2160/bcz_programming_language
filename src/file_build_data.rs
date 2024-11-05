@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use llvm_nhb::value::Value;
 
@@ -8,4 +8,5 @@ pub struct FileBuildData<'a, 'b> {
 	pub built_globals: HashMap<Box<str>, BuiltRValue<'a>>,
 	pub built_global_function_signatures: HashMap<Box<str>, Value<'a, 'b>>,
 	pub entrypoint: Option<Value<'a, 'b>>,
+	pub filepath: &'a PathBuf,
 }

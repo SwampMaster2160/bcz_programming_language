@@ -53,13 +53,13 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	// Get dependencies for each global variable
 	let mut import_dependencies = HashSet::new();
-	let mut globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
-	for (name, expression) in globals.into_iter() {
+	let mut globals_and_dependencies: HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)> = HashMap::new();
+	for (name, (expression, is_exported)) in globals.into_iter() {
 		let mut variable_dependencies = HashSet::new();
 		expression.get_variable_dependencies(
 			&mut variable_dependencies, &mut import_dependencies, &mut Vec::new(), false, false
 		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
-		globals_and_dependencies.insert(name, (expression, variable_dependencies));
+		globals_and_dependencies.insert(name, (expression, is_exported, variable_dependencies));
 	}
 	// Compile imports
 	for import_dependency in import_dependencies.iter() {
@@ -69,7 +69,10 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	// Print global variables if commanded to do so
 	if main_data.print_after_analyzer {
 		println!("Globals of {}:", filepath.display());
-		for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
+		for (name, (global, is_exported, variable_dependencies)) in globals_and_dependencies.iter() {
+			if *is_exported {
+				print!("export ");
+			}
 			print!("{name} -> {:?} = ", variable_dependencies);
 			global.print_tree(0);
 		}
@@ -80,16 +83,16 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	}
 	// Const evaluate globals
 	let mut global_function_list = HashSet::new();
-	for (name, (global, _)) in globals_and_dependencies.iter_mut() {
+	for (name, (global, _is_exported, _)) in globals_and_dependencies.iter_mut() {
 		if !global.is_function() {
 			continue;
 		}
 		global_function_list.insert(name.clone());
 	}
-	let mut globals_and_dependencies_after_const_evaluate: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)> = HashMap::new();
+	let mut globals_and_dependencies_after_const_evaluate: HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)> = HashMap::new();
 	while globals_and_dependencies.len() > globals_and_dependencies_after_const_evaluate.len() {
 		let mut globals_have_been_const_evaluated_this_round = false;
-		'a: for (name, (global, variable_dependencies)) in globals_and_dependencies.iter_mut() {
+		'a: for (name, (global, is_exported, variable_dependencies)) in globals_and_dependencies.iter_mut() {
 			// Make sure that the dependencies are const evaluated
 			if globals_and_dependencies_after_const_evaluate.contains_key(name) {
 				continue 'a;
@@ -107,7 +110,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 				&mut new_variable_dependencies, &mut Vec::new(), false, false
 			).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 			// Add to list
-			globals_and_dependencies_after_const_evaluate.insert(name.clone(), (new_global, new_variable_dependencies));
+			globals_and_dependencies_after_const_evaluate.insert(name.clone(), (new_global, *is_exported, new_variable_dependencies));
 			globals_have_been_const_evaluated_this_round = true;
 		}
 		// If we did not const evaluate anything this round, there is a cyclic dependency
@@ -120,7 +123,10 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	// Print const evaluated globals if commanded to do so
 	if main_data.print_after_const_evaluate {
 		println!("Const evaluated globals of {}:", filepath.display());
-		for (name, (global, variable_dependencies)) in globals_and_dependencies_after_const_evaluate.iter() {
+		for (name, (global, is_exported, variable_dependencies)) in globals_and_dependencies_after_const_evaluate.iter() {
+			if *is_exported {
+				print!("export ");
+			}
 			print!("{name} -> {:?} = ", variable_dependencies);
 			global.print_tree(0);
 		}
@@ -187,7 +193,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: N
 }
 
 /// Take in a list of global variables and build them into a LLVM module.
-fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>, filepath: &PathBuf)
+fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)>, filepath: &PathBuf)
 	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 	// Set up module
 	llvm_module.set_target_triple(main_data.llvm_target_triple.as_str());
@@ -198,9 +204,10 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		built_globals: HashMap::new(),
 		built_global_function_signatures: HashMap::new(),
 		entrypoint: None,
+		filepath,
 	};
 	// Build function signatures
-	for (name, (global, _)) in globals_and_dependencies.iter() {
+	for (name, (global, _is_exported, _)) in globals_and_dependencies.iter() {
 		if !global.is_function() {
 			continue;
 		}
@@ -217,7 +224,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 	while globals_and_dependencies.len() > globals_built.len() {
 		// Build all globals this round if their dependencies are built
 		let mut globals_built_this_round = HashSet::new();
-		'a: for (name, (global, variable_dependencies)) in globals_and_dependencies.iter() {
+		'a: for (name, (global, is_exported, variable_dependencies)) in globals_and_dependencies.iter() {
 			if globals_built.contains(name) {
 				continue 'a;
 			}
@@ -228,7 +235,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 				}
 			}
 			// Build
-			let built_result = global.build_global_assignment(main_data, llvm_module, &llvm_builder, &mut file_build_data, name)?;
+			let built_result = global.build_global_assignment(main_data, llvm_module, &llvm_builder, &mut file_build_data, name, *is_exported)?;
 			// Add to list
 			file_build_data.built_globals.insert(name.clone(), built_result);
 			globals_built_this_round.insert(name.clone());
@@ -240,7 +247,6 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		// Remove built globals from the to build list
 		for name in globals_built_this_round.iter() {
 			globals_built.insert(name.clone());
-			//globals_and_dependencies.remove(name);
 		}
 	}
 	// Build entry point

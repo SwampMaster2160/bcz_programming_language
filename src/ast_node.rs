@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, hash::{DefaultHasher, Hash, Hasher}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
 
 use strum_macros::EnumDiscriminants;
 
@@ -148,7 +148,7 @@ impl AstNode {
 	}
 
 	/// Removes global assignments nodes and puts them into a `(name, node)` hash map, replacing them with an identifier node.
-	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, Self>, will_be_discarded: bool) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+	pub fn separate_globals(&mut self, global_list: &mut HashMap<Box<str>, (Self, bool)>, will_be_discarded: bool) -> Result<bool, (Error, (NonZeroUsize, NonZeroUsize))> {
 		let start = self.start;
 		match &mut self.variant {
 			AstNodeVariant::Operator(operator, operands) => match operator {
@@ -163,6 +163,7 @@ impl AstNode {
 					};
 					swap(&mut operands[0], &mut identifier_node);
 					swap(&mut operands[1], &mut operand_node);
+					let is_exported = identifier_node.separate_globals(global_list, false)?;
 					operand_node.separate_globals(global_list, false)?;
 					// Get name to assign to
 					let AstNode {
@@ -175,7 +176,7 @@ impl AstNode {
 						_ => return Err((Error::GlobalAssignmentToNonIdentifier, start)),
 					};
 					// Pop out global assignment into global variable list
-					match global_list.insert(name, operand_node) {
+					match global_list.insert(name, (operand_node, is_exported)) {
 						Some(..) => return Err((Error::GlobalVariableConflict(match variant {
 							AstNodeVariant::Identifier(name) => name.clone().into(),
 							_ => return Err((Error::GlobalAssignmentToNonIdentifier, start)),
@@ -197,7 +198,7 @@ impl AstNode {
 			}
 			AstNodeVariant::Block(children, is_result_undefined) => {
 				if *is_result_undefined && children.is_empty() {
-					return Ok(());
+					return Ok(false);
 				}
 				if children.len() != 1 || (*is_result_undefined && children.len() != 0) {
 					return Err((Error::FeatureNotYetImplemented("Global blocks".into()), start));
@@ -211,16 +212,33 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(..) => {}
 			AstNodeVariant::Identifier(..) => {}
 			AstNodeVariant::String(..) => {}
-			AstNodeVariant::Keyword(_, arguments, child) => {
-				for argument in arguments {
-					argument.separate_globals(global_list, will_be_discarded)?;
-				}
-				if let Some(child) = child {
+			AstNodeVariant::Keyword(keyword, arguments, child) => match keyword {
+				Keyword::Export => {
+					if !arguments.is_empty() {
+						return Err((Error::InvalidBuiltInFunctionArgumentCount, start));
+					}
+					let child = match child {
+						Some(child) => child,
+						None => return Err((Error::InvalidBuiltInFunctionArgumentCount, start)),
+					};
 					child.separate_globals(global_list, will_be_discarded)?;
+					let dummy_number = NonZeroUsize::new(1).unwrap();
+					let mut child_taken = AstNode { start: (dummy_number, dummy_number), end: (dummy_number, dummy_number), variant: AstNodeVariant::Constant(0) };
+					swap(&mut **child, &mut child_taken);
+					*self = child_taken;
+					return Ok(true);
+				}
+				_ => {
+					for argument in arguments {
+						argument.separate_globals(global_list, will_be_discarded)?;
+					}
+					if let Some(child) = child {
+						child.separate_globals(global_list, will_be_discarded)?;
+					}
 				}
 			}
 		}
-		Ok(())
+		Ok(false)
 	}
 
 	/// Will search a global node and its children for global variable dependencies that need to be compiled before this node is.
@@ -483,7 +501,6 @@ impl AstNode {
 		name: &str,
 		is_link_function: bool,
 		is_entry_point: bool,
-		is_export_function: bool,
 	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack function definition node
 		let Self {
@@ -496,11 +513,11 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
 			AstNodeVariant::Keyword(keyword, _, child) => match keyword {
 				Keyword::EntryPoint =>
-					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true, is_export_function),
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, true),
 				Keyword::Link =>
-					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point, is_export_function),
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
 				Keyword::Export =>
-					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, is_entry_point, true),
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, is_link_function, is_entry_point),
 				_ => unreachable!(),
 			}
 			_ => unreachable!(),
@@ -522,9 +539,6 @@ impl AstNode {
 				llvm_module.add_function(function_type, &*mangled_name)
 			}
 		};
-		if is_export_function {
-			todo!()
-		}
 		// Build function body
 		match is_link_function {
 			false => {
@@ -657,7 +671,7 @@ impl AstNode {
 		if self.is_function() {
 			// Build function
 			let out = self.build_function_definition(
-				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false, false
+				main_data, file_build_data, llvm_module, llvm_builder, "__bcz__unnamedFunction", false, false
 			)?;
 			// The function will have positioned the builder pos to one of it's basic blocks, so re-position it back
 			if let Some(function_info) = function_build_data {
@@ -1136,28 +1150,28 @@ impl AstNode {
 						return Err((Error::NotUsedInsideLoop, self.start));
 					}
 					Keyword::Import => {
-						//let function_build_data = match function_build_data {
-						//	Some(function_build_data) => function_build_data,
-						//	None => return Err((Error::GlobalOperatorNotConstEvaluated, self.start))
-						//};
 						// Get arguments
 						let (filepath, global_variable_name) = match arguments.len() {
 							2 => (&arguments[0], &arguments[1]),
 							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
 						};
 						// Get filepath
-						let _filepath = match &filepath.variant {
+						let filepath = match &filepath.variant {
 							AstNodeVariant::String(filepath) => &**filepath,
 							AstNodeVariant::Identifier(filepath) => &**filepath,
 							_ => return Err((Error::ConstValueRequired, filepath.start)),
 						};
+						let filepath_buff = file_build_data.filepath.parent().unwrap().join(filepath);
+						let mut hasher = DefaultHasher::new();
+						filepath_buff.hash(&mut hasher);
+						let hash = hasher.finish();
 						// Get global variable name
 						let global_variable_name = match &global_variable_name.variant {
 							AstNodeVariant::String(global_variable_name) => &**global_variable_name,
 							AstNodeVariant::Identifier(global_variable_name) => &**global_variable_name,
 							_ => return Err((Error::ConstValueRequired, global_variable_name.start)),
 						};
-						BuiltRValue::ImportedConstant(llvm_module.add_global(main_data.int_type, global_variable_name))
+						BuiltRValue::ImportedConstant(llvm_module.add_global(main_data.int_type, &format!("__export__{hash}__{global_variable_name}")))
 					}
 				}
 			}
@@ -1242,26 +1256,41 @@ impl AstNode {
 
 	/// Build a global variable into LLVM IR code.
 	pub fn build_global_assignment<'a>(
-		&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str
+		&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str,
+		is_exported: bool,
 	) -> Result<BuiltRValue, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Build r-value/function
-		if self.is_function() {
+		let r_value = if self.is_function() {
 			let function =
-				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false, false)?;
-			return Ok(BuiltRValue::Value(function));
+				self.build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, false, false)?;
+			BuiltRValue::Value(function)
 		}
-		let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, None)?;
-			//.get_value(main_data, llvm_builder);
-		// Assign to global variable
-		match &r_value {
-			BuiltRValue::Value(value) => {
-				let global = llvm_module.add_global(main_data.int_type, name);
-				global.set_initializer(value);
+		else {
+			let r_value = self.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, None)?;
+			// Assign to global variable
+			match &r_value {
+				BuiltRValue::Value(value) => {
+					let global = llvm_module.add_global(main_data.int_type, name);
+					global.set_initializer(value);
+				}
+				BuiltRValue::ImportedConstant(..) => {}
 			}
-			BuiltRValue::ImportedConstant(..) => {}
+			r_value
+		};
+		if is_exported {
+			let mut hasher = DefaultHasher::new();
+			file_build_data.filepath.hash(&mut hasher);
+			let hash = hasher.finish();
+			let global = llvm_module.add_global(main_data.int_type, &format!("__export__{hash}__{name}"));
+			match &r_value {
+				BuiltRValue::Value(value) => {
+					global.set_initializer(value);
+				}
+				BuiltRValue::ImportedConstant(..) => return  Err((Error::FeatureNotYetImplemented("Re-exporting".into()), self.start))
+			}
 		}
 		// Return
-		return Ok(r_value);
+		Ok(r_value)
 	}
 
 	/// Returns if the expression can be built into a function.
@@ -1310,7 +1339,7 @@ impl AstNode {
 	pub fn const_evaluate(
 		&mut self,
 		main_data: &mut MainData,
-		const_evaluated_globals: &HashMap<Box<str>, (AstNode, HashSet<Box<str>>)>,
+		const_evaluated_globals: &HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)>,
 		variable_dependencies: &mut HashSet<Box<str>>,
 		local_variables: &mut Vec<HashMap<Box<str>, Option<u64>>>,
 		is_link_function: bool,
