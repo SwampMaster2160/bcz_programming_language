@@ -48,7 +48,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	// Separate global variables out
 	let mut globals = HashMap::new();
 	for ast_node in ast_nodes.iter_mut() {
-		ast_node.separate_globals(&mut globals, true)
+		ast_node.separate_globals(&mut globals, true, false)
 			.map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 	}
 	// Get dependencies for each global variable
@@ -57,7 +57,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	for (name, (expression, is_exported)) in globals.into_iter() {
 		let mut variable_dependencies = HashSet::new();
 		expression.get_variable_dependencies(
-			&mut variable_dependencies, &mut import_dependencies, &mut Vec::new(), false, false
+			&mut variable_dependencies, &mut import_dependencies, &mut Vec::new(), false/*, false*/
 		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 		globals_and_dependencies.insert(name, (expression, is_exported, variable_dependencies));
 	}
@@ -211,7 +211,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		if !global.is_function() {
 			continue;
 		}
-		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name, false, false)?;
+		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name/*, false, false*/)?;
 		file_build_data.built_global_function_signatures.insert(name.clone(), function_signature);
 	}
 	// Dump module if commanded to do so after building function signatures

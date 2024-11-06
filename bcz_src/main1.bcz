@@ -1,10 +1,10 @@
-a = @import("main.bcz", "myFn");
-MY_VAR = @import("main.bcz", "MY_VAR");
-b = () 1;
-
-main = @entry_point () {
-	a() + b() + MY_VAR
-}
+//a = @import("main.bcz", "myFn");
+//MY_VAR = @import("main.bcz", "MY_VAR");
+//b = () 1;
+//
+//main = @entry_point () {
+//	a() + b() + MY_VAR
+//}
 
 //main = @entry_point () {
 //	fnB(1, 420, 69)
@@ -45,9 +45,10 @@ main = @entry_point () {
 //
 //// user32.dll
 //
-//BOOL = -4;
-//DWORD = 4;
+BOOL = -4;
+DWORD = 4;
 //
+win32_Beep = @link("Beep", DWORD, DWORD, BOOL);
 //Beep = @link (DWORD, DWORD) BOOL;
 //GetStdHandle = @link (4) 8;
 //WriteConsoleW = @link (8, 8, DWORD, 8, 8) BOOL;

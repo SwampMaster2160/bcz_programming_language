@@ -64,6 +64,7 @@ pub enum Error {
 	KeywordWithTwoChildren,
 	GlobalOperatorNotConstEvaluated,
 	NotUsedInsideLoop,
+	InvalidExport,
 }
 
 impl Display for Error {
@@ -131,6 +132,7 @@ impl Display for Error {
 			Error::KeywordWithTwoChildren => write!(f, "Keyword with two children"),
 			Error::GlobalOperatorNotConstEvaluated => write!(f, "Global operator not const-evaluated"),
 			Error::NotUsedInsideLoop => write!(f, "Not used inside loop"),
+			Error::InvalidExport => write!(f, "Invalid export"),
 		}
 	}
 }

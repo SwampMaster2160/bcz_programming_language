@@ -280,7 +280,7 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 					//	Keyword::EntryPoint | Keyword::Link | Keyword::Loop => break 'a,
 					//};
 					let keyword = match keyword {
-						Keyword::EntryPoint | Keyword::Link => break 'a,
+						Keyword::EntryPoint/* | Keyword::Link*/ => break 'a,
 						keyword => *keyword
 					};
 					items_being_parsed.remove(index - 1);
@@ -541,8 +541,8 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		let (keyword, arguments, child, start, keyword_end) = match &mut items_being_parsed[index] {
 			ParseState::AstNode(AstNode { variant: AstNodeVariant::Keyword(keyword, arguments, child), start, end: keyword_end }) => {
 					match keyword {
-						Keyword::EntryPoint | Keyword::Link | Keyword::Loop | Keyword::Break | Keyword::Continue | Keyword::Export => {},
-						Keyword::Write | Keyword::Stack | Keyword::Import => continue,
+						Keyword::EntryPoint | Keyword::Loop | Keyword::Break | Keyword::Continue | Keyword::Export => {},
+						Keyword::Write | Keyword::Stack | Keyword::Import | Keyword::Link => continue,
 					};
 					(*keyword, take(arguments), take(child), *start, *keyword_end)
 				}
