@@ -5,6 +5,18 @@ use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Mod
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUsize, Option<NonZeroUsize>)>)>)> {
+	// Get output path
+	let filepath_stem: PathBuf = filepath.file_stem().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?.into();
+	let mut output_filepath = main_data.binary_path.clone();
+	output_filepath.push(match filepath_stem.strip_prefix(&main_data.source_path) {
+		Ok(relative) => relative,
+		Err(_) => &filepath_stem,
+	});
+	output_filepath.set_extension("o");
+	// Skip if this file is already compiled
+	if main_data.object_files_to_link.contains(&output_filepath) {
+		return Ok(());
+	}
 	// Open file
 	let file = File::open(filepath)
 		.map_err(|error| (Error::CouldNotOpenFile(error), Some((filepath.clone(), None))))?;
@@ -61,11 +73,6 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 		globals_and_dependencies.insert(name, (expression, is_exported, variable_dependencies));
 	}
-	// Compile imports
-	for import_dependency in import_dependencies.iter() {
-		let dependency_filepath = filepath.parent().unwrap().join(&**import_dependency);
-		compile_file(main_data, &dependency_filepath)?;
-	}
 	// Print global variables if commanded to do so
 	if main_data.print_after_analyzer {
 		println!("Globals of {}:", filepath.display());
@@ -77,9 +84,14 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			global.print_tree(0);
 		}
 		println!("Import dependencies of {}:", filepath.display());
-		for import_dependency in import_dependencies {
+		for import_dependency in import_dependencies.iter() {
 			println!("{import_dependency}");
 		}
+	}
+	// Compile imports
+	for import_dependency in import_dependencies.iter() {
+		let dependency_filepath = filepath.parent().unwrap().join(&**import_dependency);
+		compile_file(main_data, &dependency_filepath)?;
 	}
 	// Const evaluate globals
 	let mut global_function_list = HashSet::new();
@@ -131,7 +143,6 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			global.print_tree(0);
 		}
 	}
-	// TODO: compile import dependencies
 	// Build LLVM module
 	let module_name = match filepath.file_stem() {
 		None => "invalid_name",
@@ -144,13 +155,6 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	build_llvm_module(main_data, &llvm_module, globals_and_dependencies_after_const_evaluate, filepath)
 		.map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 	// Write .o file
-	let filepath_stem: PathBuf = filepath.file_stem().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?.into();
-	let mut output_filepath = main_data.binary_path.clone();
-	output_filepath.push(match filepath_stem.strip_prefix(&main_data.source_path) {
-		Ok(relative) => relative,
-		Err(_) => &filepath_stem,
-	});
-	output_filepath.set_extension("o");
 	let directory: PathBuf = output_filepath.parent().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?.into();
 	if !directory.exists() {
 		create_dir_all(directory).map_err(|_| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?;

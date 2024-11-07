@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, hash::{DefaultHasher, Hash, Hasher}, iter::repeat, mem::{swap, take}, num::NonZeroUsize};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, hash::{DefaultHasher, Hash, Hasher}, iter::{repeat, repeat_n}, mem::{swap, take}, num::NonZeroUsize};
 
 use strum_macros::EnumDiscriminants;
 
@@ -1103,7 +1103,80 @@ impl AstNode {
 					}
 					Keyword::EntryPoint | Keyword::Export => unreachable!(),
 					Keyword::Link => {
-						todo!()
+						if function_build_data.is_some() {
+							return Err((Error::FeatureNotYetImplemented("Link in function".into()), self.start));
+						}
+						if arguments.len() < 2 {
+							return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start));
+						}
+						if arguments.len() > u16::MAX as usize {
+							return Err((Error::TooManyFunctionParameters, *start));
+						}
+						// Get wrapped function name
+						let wrapped_function_name = &arguments[0];
+						let wrapped_function_name: &str = match &wrapped_function_name.variant {
+							AstNodeVariant::String(link_function_name) => &**link_function_name,
+							AstNodeVariant::Identifier(link_function_name) => &**link_function_name,
+							_ => return Err((Error::ConstValueRequired, wrapped_function_name.start)),
+						};
+						// Create wrapped function type
+						let parameter_count = arguments.len() - 2;
+						let mut wrapped_parameter_types = Vec::with_capacity(parameter_count);
+						for parameter in &arguments[2..] {
+							let parameter_type = parameter.type_from_width(main_data)?.0;
+							if parameter_type.is_void() {
+								return Err((Error::VoidParameter, self.start));
+							}
+							wrapped_parameter_types.push(parameter_type);
+						}
+						let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = arguments[1].type_from_width(main_data)?;
+						let wrapped_function_type = wrapped_function_return_type.function_type(&*wrapped_parameter_types, false);
+						// Create wrapped function
+						let wrapped_function = llvm_module.add_function(wrapped_function_type, &*wrapped_function_name);
+						wrapped_function.set_linkage(Linkage::DLLImport);
+						wrapped_function.set_calling_convention(CallingConvention::Win64);
+						// Create wrapper function type
+						let wrapper_function_parameter_types: Box<[Type]> = repeat_n(main_data.int_type, parameter_count).collect();
+						let wrapper_function_type = main_data.int_type.function_type(&wrapper_function_parameter_types, false);
+						// Create wrapper function
+						let wrapper_function = llvm_module.add_function(wrapper_function_type, &format!("__link__{wrapped_function_name}"));
+						// Build casts
+						let basic_block = wrapper_function.append_basic_block(&main_data.llvm_context, "entry");
+						llvm_builder.position_at_end(&basic_block);
+						let mut arguments_converted = Vec::new();
+						for (parameter_index, parameter) in (&arguments[2..]).iter().enumerate() {
+							let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
+							let argument = wrapper_function.get_parameter(parameter_index);
+								let argument_converted = match main_data.int_bit_width
+									.cmp(&(parameter_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+								Ordering::Less => match is_signed {
+									false => argument.build_zero_extend(llvm_builder, parameter_type, "z_extend_temp"),
+									true => argument.build_sign_extend(llvm_builder, parameter_type, "s_extend_temp"),
+								}
+								Ordering::Equal => argument,
+								Ordering::Greater => argument.build_truncate(llvm_builder, parameter_type, "truncate_temp"),
+							};
+							arguments_converted.push(argument_converted);
+						}
+						let call_result = wrapped_function.build_call(arguments_converted.as_slice(), wrapped_function_type, llvm_builder, "wrapped_function_call_temp");
+						// Build return
+						if wrapped_function_return_type.is_void() {
+							llvm_builder.build_return_void();
+						}
+						else {
+							let call_result_converted = match main_data.int_bit_width
+								.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
+								Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
+								Ordering::Equal => call_result,
+								Ordering::Greater => match wrapped_function_return_type_is_signed {
+									false => call_result.build_zero_extend(llvm_builder, main_data.int_type, "zero_extend_temp"),
+									true => call_result.build_sign_extend(llvm_builder, main_data.int_type, "sign_extend_temp"),
+								}
+							};
+							call_result_converted.build_return(llvm_builder);
+						}
+						// Return wrapper function as int
+						BuiltRValue::Value(wrapper_function.build_ptr_to_int(llvm_builder, main_data.int_type, "link_fn_to_int_temp"))
 					}
 					Keyword::Loop => {
 						let function_build_data = match function_build_data {
