@@ -19,6 +19,9 @@
 
 //a = (a, b) a + b;
 
+T_VAR = @import("a/t.bcz", "T_VAR");
+A_VAR = @import("main1.bcz", "A_VAR");
+
 main = @entry_point () {
 	/*x = 0;
 	@loop {

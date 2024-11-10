@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, io::{BufRead, BufReader}, num::NonZeroUsize, path::PathBuf};
+use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, hash::{DefaultHasher, Hash, Hasher}, io::{BufRead, BufReader}, num::NonZeroUsize, path::PathBuf};
 
 use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, parse::parse_tokens, token::Token, MainData};
 use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module};
@@ -8,6 +8,9 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	// Get output path
 	let filepath_stem: PathBuf = filepath.file_stem().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?.into();
 	let mut output_filepath = main_data.binary_path.clone();
+	let mut hasher = DefaultHasher::new();
+	filepath.parent().unwrap().hash(&mut hasher);
+	output_filepath.push(&format!("{}", hasher.finish()));
 	output_filepath.push(match filepath_stem.strip_prefix(&main_data.source_path) {
 		Ok(relative) => relative,
 		Err(_) => &filepath_stem,
