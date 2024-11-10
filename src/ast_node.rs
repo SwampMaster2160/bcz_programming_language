@@ -255,7 +255,6 @@ impl AstNode {
 		import_dependencies: &mut HashSet<Box<str>>,
 		local_variables: &mut Vec<HashSet<Box<str>>>,
 		is_l_value: bool,
-		//is_link_function: bool,
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let AstNode {
@@ -263,10 +262,6 @@ impl AstNode {
 			start,
 			end: _,
 		} = self;
-		// @link keyword must be used on a function
-		//if is_link_function && !self.is_function() {
-		//	return Err((Error::LinkNotUsedOnFunction, *start))
-		//}
 		// Search depends on type of node
 		match variant {
 			// For a block we search each sub-expression in the block
@@ -275,7 +270,6 @@ impl AstNode {
 					false => {
 						local_variables.push(HashSet::new());
 						for expression in sub_expressions {
-							//expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
 							expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 						}
 						local_variables.pop();
@@ -291,10 +285,10 @@ impl AstNode {
 					return Err((Error::LValueFunctionCall, *start));
 				}
 				function
-					.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false/*, false*/)?;
+					.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
 				for argument in arguments {
 					argument.get_variable_dependencies(
-						variable_dependencies, import_dependencies, local_variables, false/*, false*/
+						variable_dependencies, import_dependencies, local_variables, false
 					)?;
 				}
 			}
@@ -302,28 +296,25 @@ impl AstNode {
 				match keyword {
 					Keyword::Write | Keyword::Stack => for argument in arguments {
 						argument.get_variable_dependencies(
-							variable_dependencies, import_dependencies, local_variables, false/*, false*/
+							variable_dependencies, import_dependencies, local_variables, false
 						)?;
 					}
-					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value/*, is_link_function*/)?,
-					//Keyword::Link => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, true)?,
+					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?,
 					Keyword::Link => {
 						for argument in arguments {
 							argument.get_variable_dependencies(
-								variable_dependencies, import_dependencies, local_variables, false/*, false*/
+								variable_dependencies, import_dependencies, local_variables, false
 							)?;
 						}
 					}
-					Keyword::Export => unreachable!(),//child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value, is_link_function)?,
-					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false/*, false*/)?,
+					Keyword::Export => unreachable!(),
+					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?,
 					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
 						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
 					}
 					Keyword::Import => {
 						for argument in arguments {
-							argument.get_variable_dependencies(
-								variable_dependencies, import_dependencies, local_variables, false/*, false*/
-							)?;
+							argument.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 						}
 						let import_name = &arguments[0];
 						let import_name = match &import_name.variant {
@@ -339,34 +330,6 @@ impl AstNode {
 				if is_l_value {
 					return Err((Error::LValueFunctionDefinition, *start));
 				}
-				//match is_link_function {
-				//	// For the definition of a non-link function, we create a new list of local variables that the the function does not depend on
-				//	// Then we search the function body with the new local variable list
-				//	false => {
-				//		let mut local_variables_top = HashSet::new();
-				//		for parameter in parameters {
-				//			match &parameter.variant {
-				//				AstNodeVariant::Identifier(name) => {
-				//					local_variables_top.insert(name.clone());
-				//				}
-				//				_ => return Err((Error::ExpectedIdentifier, parameter.start)),
-				//			}
-				//		}
-				//		let mut local_variables = vec![local_variables_top];
-				//		body.get_variable_dependencies(
-				//			variable_dependencies, import_dependencies, &mut local_variables, false, false
-				//		)?;
-				//	}
-				//	// For a link-function, we search the function parameters and body
-				//	true => {
-				//		for parameter in parameters {
-				//			parameter.get_variable_dependencies(
-				//				variable_dependencies, import_dependencies, local_variables, false, false
-				//			)?;
-				//		}
-				//		body.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false, false)?;
-				//	}
-				//}
 				let mut local_variables_top = HashSet::new();
 				for parameter in parameters {
 					match &parameter.variant {
@@ -378,7 +341,7 @@ impl AstNode {
 				}
 				let mut local_variables = vec![local_variables_top];
 				body.get_variable_dependencies(
-					variable_dependencies, import_dependencies, &mut local_variables, false/*, false*/
+					variable_dependencies, import_dependencies, &mut local_variables, false
 				)?;
 			}
 			AstNodeVariant::Identifier(name) => match is_l_value {
@@ -405,8 +368,8 @@ impl AstNode {
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
-					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true/*, false*/)?;
-					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false/*, false*/)?;
+					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 				}
 				// For an augmented assignment, we search the the l-value and r-value
 				Operator::Augmented(operation) => match operation {
@@ -421,9 +384,9 @@ impl AstNode {
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
 					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
 						operands[0]
-							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true/*, false*/)?;
+							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
 						operands[1]
-							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false/*, false*/)?;
+							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 					}
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read | Operation::TakeReference |
 					Operation::BitwiseNot | Operation::LogicalNot
@@ -447,22 +410,22 @@ impl AstNode {
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
 					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan
 						 => for operand in operands {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false/*, false*/)?;
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
 					}
 					// Operators that only have l-values as operands
 					Operation::Read => for operand in operands {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true/*, false*/)?;
+						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
 					}
 					// Ternary operator
 					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
-						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false/*, false*/)?;
-						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value/*, false*/)?;
-						operands[2].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value/*, false*/)?;
+						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?;
+						operands[2].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?;
 					}
 				}
 				// For l-value assignments, we search the operands
 				Operator::LValueAssignment => for operand in operands {
-					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true/*, false*/)?;
+					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
 				}
 			}
 			// Strings, just like constants, can't have dependencies
@@ -478,8 +441,6 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder,
 		name: &str,
-		//is_link_function: bool,
-		//is_entry_point: bool
 	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack node
 		let Self {
@@ -496,20 +457,13 @@ impl AstNode {
 				let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
 				let function_type = main_data.int_type.function_type(&*parameter_types, false);
 				// Build function value
-				//let mangled_name: Box<str> = match is_link_function {
-				//	false => name.into(),
-				//	true => "__bcz__link__".chars().chain(name.chars()).collect(),
-				//};
-				//let function = llvm_module.add_function(function_type, &*mangled_name);
 				let function = llvm_module.add_function(function_type, &*name);
 				// Return
 				Ok(function)
 			}
 			AstNodeVariant::Keyword(keyword, _, child_node) => match keyword {
 				Keyword::EntryPoint =>
-					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name/*, is_link_function, true*/),
-				//Keyword::Link =>
-				//	child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name),
 				_ => unreachable!(),
 			}
 			_ => unreachable!(),
@@ -524,7 +478,6 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder,
 		name: &str,
-		//is_link_function: bool,
 		is_entry_point: bool,
 	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack function definition node
@@ -538,9 +491,7 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(function_parameters, function_body) => (function_parameters, function_body),
 			AstNodeVariant::Keyword(keyword, _, child) => match keyword {
 				Keyword::EntryPoint =>
-					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name/*, is_link_function*/, true),
-				//Keyword::Link =>
-					//return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true, is_entry_point),
+					return child.as_ref().unwrap().build_function_definition(main_data, file_build_data, llvm_module, llvm_builder, name, true),
 				_ => unreachable!(),
 			}
 			_ => unreachable!(),
@@ -555,116 +506,52 @@ impl AstNode {
 				let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
 				let function_type = main_data.int_type.function_type(&*parameter_types, false);
 				// Build function value
-				//let mangled_name: Box<str> = match is_link_function {
-				//	false => name.into(),
-				//	true => "__bcz__link__".chars().chain(name.chars()).collect(),
-				//};
-				//llvm_module.add_function(function_type, &*mangled_name)
 				llvm_module.add_function(function_type, &*name)
 			}
 		};
 		// Build function body
-		//match is_link_function {
-			//false => {
-			// Build the entry basic block where allocas will be added to
-			let entry_basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
-			llvm_builder.position_at_end(&entry_basic_block);
-			// Build the first basic block that we will be building the function body on
-			let body_basic_block = function.append_basic_block(&main_data.llvm_context, "function_body");
-			llvm_builder.position_at_end(&body_basic_block);
-			// Build the function info struct
-			let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
-				local_variables: HashMap::new(),
-				basic_blocks: vec![body_basic_block.clone()],
-				allocas_in_use: HashSet::new(),
-				array_allocas_in_use: HashMap::new(),
-				is_loop: false,
-			}];
-			let mut function_info = FunctionBuildData {
-				function: function.clone(),
-				block_stack: &mut inner_block_stack,
-				allocas_not_in_use: &mut HashSet::new(),
-				alloca_block: &entry_basic_block,
-				array_allocas_not_in_use: &mut HashMap::new(),
+		// Build the entry basic block where allocas will be added to
+		let entry_basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
+		llvm_builder.position_at_end(&entry_basic_block);
+		// Build the first basic block that we will be building the function body on
+		let body_basic_block = function.append_basic_block(&main_data.llvm_context, "function_body");
+		llvm_builder.position_at_end(&body_basic_block);
+		// Build the function info struct
+		let mut inner_block_stack: Vec<BlockLevel<'_,>> = vec![BlockLevel {
+			local_variables: HashMap::new(),
+			basic_blocks: vec![body_basic_block.clone()],
+			allocas_in_use: HashSet::new(),
+			array_allocas_in_use: HashMap::new(),
+			is_loop: false,
+		}];
+		let mut function_info = FunctionBuildData {
+			function: function.clone(),
+			block_stack: &mut inner_block_stack,
+			allocas_not_in_use: &mut HashSet::new(),
+			alloca_block: &entry_basic_block,
+			array_allocas_not_in_use: &mut HashMap::new(),
+		};
+		// Build function parameters
+		for (parameter_index, parameter) in parameters.iter().enumerate() {
+			// Get parameter name
+			let parameter_name = match &parameter.variant {
+				AstNodeVariant::Identifier(name) => name,
+				_ => return Err((Error::ExpectedIdentifier, parameter.start)),
 			};
-			// Build function parameters
-			for (parameter_index, parameter) in parameters.iter().enumerate() {
-				// Get parameter name
-				let parameter_name = match &parameter.variant {
-					AstNodeVariant::Identifier(name) => name,
-					_ => return Err((Error::ExpectedIdentifier, parameter.start)),
-				};
-				// Add parameter to local scope
-				let parameter_value = function.get_parameter(parameter_index);
-				let parameter_variable = function_info.get_alloca(main_data, llvm_builder, parameter_name);
-				parameter_variable.build_store(&parameter_value, llvm_builder);
-				function_info.block_stack.last_mut().unwrap().local_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
-			}
-			// Build function body
-			let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(&mut function_info))?;
-			// Build branch from entry block to first body block
-			llvm_builder.position_at_end(&entry_basic_block);
-			llvm_builder.build_branch(&body_basic_block);
-			// Build return
-			llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
-			BuiltRValue::Value(function_body_built.get_value(main_data, llvm_builder).build_return(llvm_builder));
-			//}
-			//true => {
-			//	let basic_block = function.append_basic_block(&main_data.llvm_context, "entry");
-			//	llvm_builder.position_at_end(&basic_block);
-			//	// Get wrapped function type
-			//	let mut wrapped_function_parameter_types = Vec::with_capacity(parameters.len());
-			//	for parameter in parameters.iter() {
-			//		let (parameter_type, _) = parameter.type_from_width(main_data)?;
-			//		if parameter_type.is_void() {
-			//			return Err((Error::VoidParameter, parameter.start));
-			//		}
-			//		wrapped_function_parameter_types.push(parameter_type);
-			//	}
-			//	let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = function_body.type_from_width(main_data)?;
-			//	let wrapped_function_return_type_is_void = wrapped_function_return_type.is_void();
-			//	let wrapped_function_type = wrapped_function_return_type
-			//		.function_type(wrapped_function_parameter_types.as_slice(), false);
-			//	// Link to wrapped function
-			//	let wrapped_function = llvm_module.add_function(wrapped_function_type, name);
-			//	wrapped_function.set_linkage(Linkage::DLLImport);
-			//	wrapped_function.set_calling_convention(CallingConvention::Win64);
-			//	// Cast arguments to the types of the wrapped function parameters
-			//	let mut arguments = Vec::with_capacity(parameters.len());
-			//	for (parameter_index, parameter) in parameters.iter().enumerate() {
-			//		let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
-			//		let argument = function.get_parameter(parameter_index);
-			//			let argument_converted = match main_data.int_bit_width
-			//				.cmp(&(parameter_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
-			//			Ordering::Less => match is_signed {
-			//				false => argument.build_zero_extend(llvm_builder, parameter_type, "z_extend_temp"),
-			//				true => argument.build_sign_extend(llvm_builder, parameter_type, "s_extend_temp"),
-			//			}
-			//			Ordering::Equal => argument,
-			//			Ordering::Greater => argument.build_truncate(llvm_builder, parameter_type, "truncate_temp"),
-			//		};
-			//		arguments.push(argument_converted);
-			//	}
-			//	// Call wrapped function
-			//	let call_result = wrapped_function.build_call(arguments.as_slice(), wrapped_function_type, llvm_builder, name);
-			//	// Build return
-			//	if wrapped_function_return_type_is_void {
-			//		llvm_builder.build_return_void();
-			//	}
-			//	else {
-			//		let call_result_converted = match main_data.int_bit_width
-			//			.cmp(&(wrapped_function_return_type.size_in_bits(&main_data.llvm_data_layout) as u8)) {
-			//			Ordering::Less => call_result.build_truncate(llvm_builder, main_data.int_type, "truncate_temp"),
-			//			Ordering::Equal => call_result,
-			//			Ordering::Greater => match wrapped_function_return_type_is_signed {
-			//				false => call_result.build_zero_extend(llvm_builder, main_data.int_type, "zero_extend_temp"),
-			//				true => call_result.build_sign_extend(llvm_builder, main_data.int_type, "sign_extend_temp"),
-			//			}
-			//		};
-			//		call_result_converted.build_return(llvm_builder);
-			//	}
-			//}
-		//}
+			// Add parameter to local scope
+			let parameter_value = function.get_parameter(parameter_index);
+			let parameter_variable = function_info.get_alloca(main_data, llvm_builder, parameter_name);
+			parameter_variable.build_store(&parameter_value, llvm_builder);
+			function_info.block_stack.last_mut().unwrap().local_variables.insert(parameter_name.clone(), BuiltLValue::AllocaVariable(parameter_variable));
+		}
+		// Build function body
+		let function_body_built = function_body.build_r_value(main_data, file_build_data, llvm_module, llvm_builder, Some(&mut function_info))?;
+		// Build branch from entry block to first body block
+		llvm_builder.position_at_end(&entry_basic_block);
+		llvm_builder.build_branch(&body_basic_block);
+		// Build return
+		llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
+		BuiltRValue::Value(function_body_built.get_value(main_data, llvm_builder).build_return(llvm_builder));
 		// Return
 		let result = function.build_ptr_to_int(llvm_builder, main_data.int_type, "fn_ptr_to_int");
 		if is_entry_point {
@@ -1402,8 +1289,6 @@ impl AstNode {
 			AstNodeVariant::FunctionDefinition(..) => true,
 			AstNodeVariant::Keyword(keyword, _arguments, child) => match keyword {
 				Keyword::EntryPoint => child.as_ref().unwrap().is_function(),
-				//Keyword::Link => child.as_ref().unwrap().is_function(),
-				//Keyword::Export => child.as_ref().unwrap().is_function(),
 				_ => false,
 			}
 			_ => false,
@@ -1926,14 +1811,10 @@ impl AstNode {
 					}
 					Keyword::EntryPoint => child.as_mut().unwrap()
 						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
-					//Keyword::Link => child.as_mut().unwrap()
-						//.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, true, is_l_value)?,
 					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
 						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
 					}
 					Keyword::Export => unimplemented!(),
-					//Keyword::Export => child.as_mut().unwrap()
-					//	.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
 				}
 			}
 			AstNodeVariant::String(..) => {}
@@ -1985,7 +1866,6 @@ fn get_variable_by_name<'a, 'b>(
 		}
 	}
 	if let Some(built_global) = file_build_data.built_globals.get(name) {
-		//return built_global.build_load(main_data.int_type, llvm_builder, "load_temp");
 		return built_global.clone();
 	}
 	BuiltRValue::Value(file_build_data.built_global_function_signatures[name].build_ptr_to_int(llvm_builder, main_data.int_type, "fn_ptr_to_int_temp"))
