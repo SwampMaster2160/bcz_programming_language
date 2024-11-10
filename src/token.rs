@@ -272,13 +272,22 @@ fn escaped_char_value(sequence: &str) -> Result<(char, usize), Error> {
 impl Token {
 	/// Takes in a string slice `line_content` and tokenizes the first token in the string.
 	/// Returns the tokenized token and the input string slice with the tokenized chars removed.
-	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: NonZeroUsize, column_number: NonZeroUsize)
-		-> Result<(Option<Self>, &'a str), Error> {
+	pub fn tokenize_from_line<'a>(main_data: &mut MainData, line_content: &'a str, line_number: NonZeroUsize, column_number: NonZeroUsize, starts_with_block_comment: bool)
+	-> Result<(Option<Self>, &'a str, bool), Error> {
+		// If we are in a block comment, try find the end
+		if starts_with_block_comment {
+			return Ok(match line_content.find("*/") {
+				// Skip comment if we do
+				Some(index) => (None, &line_content[index + 2..], false),
+				// Skip entire line if we don't and continue to look for end
+				None => (None, "", true),
+			});
+		}
 		// Get the token varient descriminant and length in bytes
 		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next()
 			.expect("Function input should not be empty") {
-			_ if line_content.starts_with("//") => return Ok((None, "")),
-			_ if line_content.starts_with("/*") => return Err(Error::FeatureNotYetImplemented("Block comments".into())),
+			_ if line_content.starts_with("//") => return Ok((None, "", false)),
+			_ if line_content.starts_with("/*") => return Ok((None, &line_content[2..], true)),//return Err(Error::FeatureNotYetImplemented("Block comments".into())),
 			first_char if first_char.is_ascii_alphabetic() || first_char == '_' => (
 				TokenVariantDiscriminants::Identifier,
 				line_content.find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()),
@@ -417,7 +426,7 @@ impl Token {
 						variant: TokenVariant::Operator(None, OperatorType::UnsignedLogicalNotShortCircuit, true, true),
 						start: (line_number, column_number),
 						end: (line_number, column_number.saturating_add(2)),
-					}), string_without_token));
+					}), string_without_token, false));
 				}
 				// Get operator type
 				let operator_type = main_data.char_to_operator_type_mapping.get(&first_char);
@@ -459,6 +468,6 @@ impl Token {
 			start: (line_number, column_number),
 			end: (line_number, column_number.saturating_add(token_string.chars().count())),
 		};
-		Ok((Some(token), string_without_token))
+		Ok((Some(token), string_without_token, false))
 	}
 }

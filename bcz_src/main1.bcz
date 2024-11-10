@@ -19,29 +19,29 @@
 
 //a = (a, b) a + b;
 
-main = @entry_point () {
+//main = @entry_point () {
 //	x = 0;
 //	@loop {
 //		x > 9? @break: {};
 //		Beep(500, 1000);
 //		x = x + 1;
 //	}
-	utf_16_str = @stack(3, 2);
-	@write(utf_16_str, 2, 'H');
-	@write(utf_16_str + 2, 2, 'i');
-	@write(utf_16_str + 4, 2, '\n');
-	handle = GetStdHandle(-11);
-	Beep(500, 1000);
-	{
-		result = 0;
-		WriteConsoleW(handle, utf_16_str, 3, &result, 0);
-	};
-	Beep(600, 1000);
-	//main();
-	a = 1 + 2 + 3;
-	b = {2 == 2};
-	a * 2 + b
-};
+	//utf_16_str = @stack(3, 2);
+	//@write(utf_16_str, 2, 'H');
+	//@write(utf_16_str + 2, 2, 'i');
+	//@write(utf_16_str + 4, 2, '\n');
+	//handle = GetStdHandle(-11);
+	//Beep(500, 1000);
+	//{
+	//	result = 0;
+	//	WriteConsoleW(handle, utf_16_str, 3, &result, 0);
+	//};
+	//Beep(600, 1000);
+	////main();
+	//a = 1 + 2 + 3;
+	//b = {2 == 2};
+	//a * 2 + b
+//};
 //
 //// user32.dll
 //
