@@ -84,7 +84,7 @@ impl<'a> MainData<'a> {
 		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>,
 		int_type: Type<'a>, int_8_type: Type<'a>,
 	) -> Self {
-		let standard_library_path = compiler_arguments_data.compiler_working_directory.join("std");
+		let standard_library_path = compiler_arguments_data.compiler_working_directory.join("std").canonicalize().unwrap();
 		Self {
 			llvm_context: context,
 			do_link: compiler_arguments_data.do_link,
@@ -200,7 +200,7 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 		}
 		command.arg("-o");
 		command.arg(primary_output_file_path);
-		command.output().ok();
+		command.output().unwrap();
 	}
 	Ok(())
 }

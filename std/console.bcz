@@ -1,0 +1,9 @@
+//NULL = @import("constant.bcz", "NULL"); // Bug
+
+WriteConsoleA = @import("windows_raw.bcz", "WriteConsoleA");
+
+/// Prints a ASCII encoded string with a length of up to 0xFFFFFFFF chars to a writable console.
+/// Using a length of more than 0xFFFFFFFF, a string with non-ASCII chars or an unwritable or invalid console is undefined behaviour.
+@export print_ascii_sized = (console, string, length) {
+	WriteConsoleA(console, string, length, 0, 0)
+}

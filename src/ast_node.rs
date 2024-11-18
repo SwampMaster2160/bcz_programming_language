@@ -302,12 +302,10 @@ impl AstNode {
 						)?;
 					}
 					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, is_l_value)?,
-					Keyword::Link => {
-						for argument in arguments {
-							argument.get_variable_dependencies(
-								main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
-							)?;
-						}
+					Keyword::Link | Keyword::SystemConstant => for argument in arguments {
+						argument.get_variable_dependencies(
+							main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
+						)?;
 					}
 					Keyword::Export => unreachable!(),
 					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?,
@@ -1165,6 +1163,7 @@ impl AstNode {
 						};
 						BuiltRValue::ImportedConstant(llvm_module.add_global(main_data.int_type, &format!("__export__{hash}__{global_variable_name}")))
 					}
+					Keyword::SystemConstant => unreachable!(),
 				}
 			}
 			// Build strings
@@ -1224,6 +1223,7 @@ impl AstNode {
 					Keyword::Loop => return Err((Error::FeatureNotYetImplemented("L-value loop".into()), self.start)),
 					Keyword::Break => return Err((Error::FeatureNotYetImplemented("L-value break".into()), self.start)),
 					Keyword::Continue => return Err((Error::FeatureNotYetImplemented("L-value continue".into()), self.start)),
+					Keyword::SystemConstant => unreachable!(),
 				}
 			}
 			AstNodeVariant::Block(..) => return Err((Error::FeatureNotYetImplemented("L-value blocks".into()), self.start)),
@@ -1337,6 +1337,7 @@ impl AstNode {
 		local_variables: &mut Vec<HashMap<Box<str>, Option<u64>>>,
 		is_link_function: bool,
 		is_l_value: bool,
+		is_standard_library: bool,
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
@@ -1351,9 +1352,9 @@ impl AstNode {
 				match operator {
 					Operator::Assignment => {
 						operands[0]
-							.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true)?;
+							.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true, is_standard_library)?;
 						operands[1]
-							.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
+							.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false, is_standard_library)?;
 					}
 					Operator::Augmented(..) => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), *start)),
 					Operator::LValueAssignment => return Err((Error::FeatureNotYetImplemented("Augmented assignments".into()), *start)),
@@ -1372,21 +1373,21 @@ impl AstNode {
 						Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
 							for operand in operands.iter_mut() {
 								operand.const_evaluate(
-									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false
+									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false, is_standard_library
 								)?;
 							}
 						}
 						Operation::Read | Operation::TakeReference => {
 							for operand in operands.iter_mut() {
 								operand.const_evaluate(
-									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true
+									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true, is_standard_library
 								)?;
 							}
 						}
 						Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
-							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false)?;
-							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
-							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false, is_standard_library)?;
+							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
+							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
 						}
 					}
 				}
@@ -1463,7 +1464,7 @@ impl AstNode {
 						Operation::Read => {
 							if let AstNode { variant: AstNodeVariant::Identifier(name), .. } = &mut operands[0] {
 								*self = AstNode { variant: AstNodeVariant::Identifier(take(name)), start: *start, end: *end };
-								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+								self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
 							}
 						}
 						Operation::NotShortCircuitTernary => {
@@ -1536,7 +1537,7 @@ impl AstNode {
 										*operator = Operator::Normal(Operation::BitwiseNot);
 										*operands = Box::new([operands[1].clone()]);
 										self.const_evaluate(
-											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value
+											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library
 										)?;
 									}
 								}
@@ -1554,7 +1555,7 @@ impl AstNode {
 										*operator = Operator::Normal(Operation::BitwiseNot);
 										*operands = Box::new([operands[0].clone()]);
 										self.const_evaluate(
-											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value
+											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library
 										)?;
 									}
 								}
@@ -1586,7 +1587,7 @@ impl AstNode {
 										*operator = Operator::Normal(Operation::IntegerNegate);
 										*operands = Box::new([operands[1].clone()]);
 										self.const_evaluate(
-											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value
+											main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library
 										)?;
 									}
 								}
@@ -1727,7 +1728,7 @@ impl AstNode {
 										}
 										_ => unreachable!(),
 									}
-									self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+									self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
 								}
 							}
 							else if let AstNode { variant: AstNodeVariant::Constant(right_value), .. } = operands[1] {
@@ -1742,7 +1743,7 @@ impl AstNode {
 										}
 										_ => unreachable!(),
 									}
-									self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?;
+									self.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
 								}
 								
 							}
@@ -1775,12 +1776,12 @@ impl AstNode {
 					}
 				}
 				body.const_evaluate(
-					main_data, const_evaluated_globals, variable_dependencies, &mut inner_local_variables, false, false
+					main_data, const_evaluated_globals, variable_dependencies, &mut inner_local_variables, false, false, is_standard_library
 				)?;
 				if is_link_function {
 					for parameter in parameters {
 						parameter.const_evaluate(
-							main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
+							main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library
 						)?;
 					}
 				}
@@ -1792,17 +1793,17 @@ impl AstNode {
 				}
 				for sub_expression in sub_expressions {
 					sub_expression
-						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library)?;
 				}
 				local_variables.pop();
 			}
 			AstNodeVariant::Constant(..) => {}
 			AstNodeVariant::FunctionCall(function_pointer, arguments) => {
 				function_pointer
-					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
+					.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library)?;
 				for argument in arguments {
 					argument
-						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false)?;
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library)?;
 				}
 			}
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
@@ -1810,16 +1811,42 @@ impl AstNode {
 					Keyword::Write | Keyword::Stack | Keyword::Loop | Keyword::Import | Keyword::Link => {
 						for argument in arguments {
 							argument.const_evaluate(
-								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false
+								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library
 							)?;
 						}
 					}
 					Keyword::EntryPoint => child.as_mut().unwrap()
-						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value)?,
+						.const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?,
 					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
 						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
 					}
-					Keyword::Export => unimplemented!(),
+					Keyword::Export => unreachable!(),
+					Keyword::SystemConstant => {
+						if !is_standard_library {
+							return Err((Error::OnlyUsableInStandardLibrary, *start));
+						}
+						match child {
+							Some(child) => return Err((Error::ShouldNotHaveChild, child.start)),
+							None => {}
+						}
+						for argument in arguments.iter_mut() {
+							argument.const_evaluate(
+								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library
+							)?;
+						}
+						if arguments.len() != 1 {
+							return Err((Error::InvalidBuiltInFunctionArgumentCount, *start));
+						}
+						let constant_id = match arguments[0] {
+							AstNode { variant: AstNodeVariant::Constant(value), .. } => value,
+							_ => return Err((Error::ConstValueRequired, arguments[0].start)),
+						};
+						let constant_value = match constant_id {
+							0 => (main_data.int_bit_width / 8) as u64, // T_WORD
+							_ => return Err((Error::InvalidSystemConstant, arguments[0].start)),
+						};
+						self.variant = AstNodeVariant::Constant(constant_value);
+					}
 				}
 			}
 			AstNodeVariant::String(..) => {}

@@ -1,8 +1,13 @@
 count = @import("std/functional.bcz", "count");
 repeat = @import("std/functional.bcz", "repeat");
+Beep = @import("std/windows_raw.bcz", "Beep");
+GetStdHandle = @import("std/windows_raw.bcz", "GetStdHandle");
+print_ascii_sized = @import("std/console.bcz", "print_ascii_sized");
 
 main = @entry_point () {
 	count((num) Beep(num * 100 + 100, 1000), 5);
+	handle = GetStdHandle(-11);
+	print_ascii_sized(handle, "Hello\n", 6);
 	repeat(() Beep(100, 1000), 3);
 };
 
@@ -53,12 +58,3 @@ main = @entry_point () {
 //	b = {2 == 2};
 //	a * 2 + b
 //};
-//
-// user32.dll
-
-BOOL = -4;
-DWORD = 4;
-//
-Beep = @link("Beep", BOOL, DWORD, DWORD);
-GetStdHandle = @link("GetStdHandle", 8, 4);
-WriteConsoleW = @link("WriteConsoleW", BOOL, 8, 8, DWORD, 8, 8);

@@ -64,6 +64,9 @@ pub enum Error {
 	NotUsedInsideLoop,
 	InvalidExport,
 	UnterminatedBlockComment,
+	ShouldNotHaveChild,
+	InvalidSystemConstant,
+	OnlyUsableInStandardLibrary,
 }
 
 impl Display for Error {
@@ -130,6 +133,9 @@ impl Display for Error {
 			Self::NotUsedInsideLoop => write!(f, "Not used inside loop"),
 			Self::InvalidExport => write!(f, "Invalid export"),
 			Self::UnterminatedBlockComment => write!(f, "Unterminated block comment"),
+			Self::ShouldNotHaveChild => write!(f, "Should not have child"),
+			Self::InvalidSystemConstant => write!(f, "Invalid system constant"),
+			Self::OnlyUsableInStandardLibrary => write!(f, "Only usable in standard library"),
 		}
 	}
 }

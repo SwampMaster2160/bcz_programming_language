@@ -59,6 +59,7 @@ pub enum Keyword {
 	Continue,
 	Import,
 	Export,
+	SystemConstant,
 }
 
 impl Keyword {
@@ -73,6 +74,7 @@ impl Keyword {
 			Self::Continue => "continue",
 			Self::Import => "import",
 			Self::Export => "export",
+			Self::SystemConstant => "_system_constant",
 		}
 	}
 

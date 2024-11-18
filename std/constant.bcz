@@ -1,0 +1,4 @@
+@export T_WORD = @_system_constant(0);
+@export T_PTR = T_WORD;
+
+@export NULL = 0;

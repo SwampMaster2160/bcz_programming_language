@@ -16,6 +16,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		Err(_) => &filepath_stem,
 	});
 	output_filepath.set_extension("o");
+	// Get if we are in the standard library
+	let is_in_standard_library = filepath.starts_with(&main_data.standard_library_path);
 	// Skip if this file is already compiled
 	if main_data.object_files_to_link.contains(&output_filepath) {
 		return Ok(());
@@ -126,7 +128,8 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 			let mut new_variable_dependencies = variable_dependencies.clone();
 			new_global.const_evaluate(
 				main_data, &globals_and_dependencies_after_const_evaluate,
-				&mut new_variable_dependencies, &mut Vec::new(), false, false
+				&mut new_variable_dependencies, &mut Vec::new(), false, false,
+				is_in_standard_library
 			).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 			// Add to list
 			globals_and_dependencies_after_const_evaluate.insert(name.clone(), (new_global, *is_exported, new_variable_dependencies));
