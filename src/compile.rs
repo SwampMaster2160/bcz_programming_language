@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, hash::{DefaultHasher, Hash, Hasher}, io::{BufRead, BufReader}, num::NonZeroUsize, path::PathBuf};
+use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, hash::{DefaultHasher, Hash, Hasher}, io::{BufRead, BufReader}, num::NonZeroUsize, path::{Path, PathBuf}};
 
 use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, parse::parse_tokens, token::Token, MainData};
 use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module};
@@ -21,6 +21,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		return Ok(());
 	}
 	// Open file
+	println!("{}", filepath.to_str().unwrap());
 	let file = File::open(filepath)
 		.map_err(|error| (Error::CouldNotOpenFile(error), Some((filepath.clone(), None))))?;
 	let mut file_reader = BufReader::new(file);
@@ -76,7 +77,7 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	for (name, (expression, is_exported)) in globals.into_iter() {
 		let mut variable_dependencies = HashSet::new();
 		expression.get_variable_dependencies(
-			&mut variable_dependencies, &mut import_dependencies, &mut Vec::new(), false/*, false*/
+			main_data, filepath, &mut variable_dependencies, &mut import_dependencies, &mut Vec::new(), false
 		).map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
 		globals_and_dependencies.insert(name, (expression, is_exported, variable_dependencies));
 	}
@@ -92,13 +93,12 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 		}
 		println!("Import dependencies of {}:", filepath.display());
 		for import_dependency in import_dependencies.iter() {
-			println!("{import_dependency}");
+			println!("{}", import_dependency.display());
 		}
 	}
 	// Compile imports
-	for import_dependency in import_dependencies.iter() {
-		let dependency_filepath = filepath.parent().unwrap().join(&**import_dependency);
-		compile_file(main_data, &dependency_filepath)?;
+	for import_dependency_filepath in import_dependencies.iter() {
+		compile_file(main_data, import_dependency_filepath)?;
 	}
 	// Const evaluate globals
 	let mut global_function_list = HashSet::new();
@@ -289,4 +289,20 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		llvm_module.dump();
 	}
 	Ok(())
+}
+
+pub fn relative_filepath_to_absolute(main_data: &MainData, current_filepath: &PathBuf, relative_filepath: &str) -> Result<PathBuf, Error> {
+	let relative_filepath_path = Path::new(relative_filepath);
+	if relative_filepath_path.starts_with("std") {
+		let mut result = main_data.standard_library_path.clone();
+		for item in relative_filepath_path.iter() {
+			if item == "std" {
+				continue;
+			}
+			result = result.join(item);
+		}
+		return Ok(result.canonicalize().unwrap())
+	}
+	let result = current_filepath.parent().unwrap().join(relative_filepath).canonicalize().unwrap();
+	Ok(result)
 }

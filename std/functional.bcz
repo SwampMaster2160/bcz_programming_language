@@ -1,0 +1,17 @@
+@export count = (function, call_times) {
+	number = 0;
+	@loop {
+		call_times? {}: @break;
+		function(number);
+		number = number + 1;
+		call_times = call_times - 1;
+	};
+};
+
+@export repeat = (function, call_times) {
+	@loop {
+		call_times? {}: @break;
+		function();
+		call_times = call_times - 1;
+	};
+};

@@ -75,6 +75,8 @@ pub struct MainData<'a> {
 	llvm_target_machine: &'a TargetMachine,
 	/// A list of object files that have been outputted as a result of compiling that should be linked to create a primary output file.
 	object_files_to_link: Vec<PathBuf>,
+	/// The path to the BCZ standard library.
+	standard_library_path: PathBuf,
 }
 
 impl<'a> MainData<'a> {
@@ -82,6 +84,7 @@ impl<'a> MainData<'a> {
 		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>,
 		int_type: Type<'a>, int_8_type: Type<'a>,
 	) -> Self {
+		let standard_library_path = compiler_arguments_data.compiler_working_directory.join("std");
 		Self {
 			llvm_context: context,
 			do_link: compiler_arguments_data.do_link,
@@ -111,6 +114,7 @@ impl<'a> MainData<'a> {
 			llvm_target_machine: target_machine,
 			object_files_to_link: Vec::new(),
 			int_8_type,
+			standard_library_path,
 		}
 	}
 
@@ -179,7 +183,7 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	main_data.int_power_width = (main_data.int_bit_width / 8).ilog2() as u8;
 	// Compile
 	for filepath in take(&mut main_data.filepaths_to_compile).iter() {
-		let absolute_filepath = main_data.source_path.join(filepath);
+		let absolute_filepath = main_data.source_path.join(filepath).canonicalize().unwrap();
 		compile_file(&mut main_data, &absolute_filepath)?;
 	}
 	// Link

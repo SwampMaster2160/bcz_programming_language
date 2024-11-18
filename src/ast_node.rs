@@ -1,8 +1,8 @@
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, hash::{DefaultHasher, Hash, Hasher}, iter::{repeat, repeat_n}, mem::{swap, take}, num::NonZeroUsize};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, hash::{DefaultHasher, Hash, Hasher}, iter::{repeat, repeat_n}, mem::{swap, take}, num::NonZeroUsize, path::PathBuf};
 
 use strum_macros::EnumDiscriminants;
 
-use crate::{built_value::{BuiltLValue, BuiltRValue}, error::Error, file_build_data::FileBuildData, function_building_data::{BlockLevel, FunctionBuildData}, token::Keyword, MainData};
+use crate::{built_value::{BuiltLValue, BuiltRValue}, compile::relative_filepath_to_absolute, error::Error, file_build_data::FileBuildData, function_building_data::{BlockLevel, FunctionBuildData}, token::Keyword, MainData};
 use llvm_nhb::{builder::Builder, enums::{CallingConvention, Comparison, Linkage}, module::Module, types::Type, value::Value};
 
 #[derive(Debug, Clone)]
@@ -251,8 +251,10 @@ impl AstNode {
 	/// Appends the name of global variables that need to be compiled before this global variable to `variable_dependencies`.
 	pub fn get_variable_dependencies(
 		&self,
+		main_data: &MainData,
+		filepath: &PathBuf,
 		variable_dependencies: &mut HashSet<Box<str>>,
-		import_dependencies: &mut HashSet<Box<str>>,
+		import_dependencies: &mut HashSet<PathBuf>,
 		local_variables: &mut Vec<HashSet<Box<str>>>,
 		is_l_value: bool,
 	) -> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
@@ -270,7 +272,7 @@ impl AstNode {
 					false => {
 						local_variables.push(HashSet::new());
 						for expression in sub_expressions {
-							expression.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+							expression.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 						}
 						local_variables.pop();
 					}
@@ -285,10 +287,10 @@ impl AstNode {
 					return Err((Error::LValueFunctionCall, *start));
 				}
 				function
-					.get_variable_dependencies(variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
+					.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, &mut local_variables.clone(), false)?;
 				for argument in arguments {
 					argument.get_variable_dependencies(
-						variable_dependencies, import_dependencies, local_variables, false
+						main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
 					)?;
 				}
 			}
@@ -296,33 +298,35 @@ impl AstNode {
 				match keyword {
 					Keyword::Write | Keyword::Stack => for argument in arguments {
 						argument.get_variable_dependencies(
-							variable_dependencies, import_dependencies, local_variables, false
+							main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
 						)?;
 					}
-					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?,
+					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, is_l_value)?,
 					Keyword::Link => {
 						for argument in arguments {
 							argument.get_variable_dependencies(
-								variable_dependencies, import_dependencies, local_variables, false
+								main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
 							)?;
 						}
 					}
 					Keyword::Export => unreachable!(),
-					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?,
+					Keyword::Loop => child.as_ref().unwrap().get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?,
 					Keyword::Break | Keyword::Continue => if !arguments.is_empty() {
 						return Err((Error::FeatureNotYetImplemented("Arguments for @break and @continue".into()), *start));
 					}
 					Keyword::Import => {
 						for argument in arguments {
-							argument.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+							argument.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 						}
-						let import_name = &arguments[0];
-						let import_name = match &import_name.variant {
+						let import_name_node = &arguments[0];
+						let import_name = match &import_name_node.variant {
 							AstNodeVariant::Identifier(import_name) => &**import_name,
 							AstNodeVariant::String(import_name) => &**import_name,
-							_ => return Err((Error::ExpectedIdentifier, import_name.start)),
+							_ => return Err((Error::ExpectedIdentifier, import_name_node.start)),
 						};
-						import_dependencies.insert(import_name.into());
+						let absolute_filepath = relative_filepath_to_absolute(main_data, filepath, import_name)
+							.map_err(|error| (error, import_name_node.start))?;
+						import_dependencies.insert(absolute_filepath);
 					}
 				}
 			}
@@ -341,7 +345,7 @@ impl AstNode {
 				}
 				let mut local_variables = vec![local_variables_top];
 				body.get_variable_dependencies(
-					variable_dependencies, import_dependencies, &mut local_variables, false
+					main_data, filepath, variable_dependencies, import_dependencies, &mut local_variables, false
 				)?;
 			}
 			AstNodeVariant::Identifier(name) => match is_l_value {
@@ -368,8 +372,8 @@ impl AstNode {
 			AstNodeVariant::Operator(operator, operands) => match operator {
 				// For an assignment, we search the the l-value and r-value
 				Operator::Assignment => {
-					operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
-					operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+					operands[0].get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, true)?;
+					operands[1].get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 				}
 				// For an augmented assignment, we search the the l-value and r-value
 				Operator::Augmented(operation) => match operation {
@@ -384,9 +388,9 @@ impl AstNode {
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
 					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
 						operands[0]
-							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+							.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, true)?;
 						operands[1]
-							.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+							.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 					}
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read | Operation::TakeReference |
 					Operation::BitwiseNot | Operation::LogicalNot
@@ -410,22 +414,22 @@ impl AstNode {
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
 					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan
 						 => for operand in operands {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
+						operand.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 					}
 					// Operators that only have l-values as operands
 					Operation::Read => for operand in operands {
-						operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+						operand.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, true)?;
 					}
 					// Ternary operator
 					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
-						operands[0].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, false)?;
-						operands[1].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?;
-						operands[2].get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, is_l_value)?;
+						operands[0].get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
+						operands[1].get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, is_l_value)?;
+						operands[2].get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, is_l_value)?;
 					}
 				}
 				// For l-value assignments, we search the operands
 				Operator::LValueAssignment => for operand in operands {
-					operand.get_variable_dependencies(variable_dependencies, import_dependencies, local_variables, true)?;
+					operand.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, true)?;
 				}
 			}
 			// Strings, just like constants, can't have dependencies
@@ -1148,7 +1152,8 @@ impl AstNode {
 							AstNodeVariant::Identifier(filepath) => &**filepath,
 							_ => return Err((Error::ConstValueRequired, filepath.start)),
 						};
-						let filepath_buff = file_build_data.filepath.parent().unwrap().join(filepath);
+						let filepath_buff = relative_filepath_to_absolute(main_data, file_build_data.filepath, filepath)
+							.map_err(|error| (error, *start))?;
 						let mut hasher = DefaultHasher::new();
 						filepath_buff.hash(&mut hasher);
 						let hash = hasher.finish();

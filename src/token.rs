@@ -287,7 +287,7 @@ impl Token {
 		let (token_varient_descriminant, length_in_bytes) = match line_content.chars().next()
 			.expect("Function input should not be empty") {
 			_ if line_content.starts_with("//") => return Ok((None, "", false)),
-			_ if line_content.starts_with("/*") => return Ok((None, &line_content[2..], true)),//return Err(Error::FeatureNotYetImplemented("Block comments".into())),
+			_ if line_content.starts_with("/*") => return Ok((None, &line_content[2..], true)),
 			first_char if first_char.is_ascii_alphabetic() || first_char == '_' => (
 				TokenVariantDiscriminants::Identifier,
 				line_content.find(|chr: char| !(chr.is_ascii_alphanumeric() || chr == '_')).unwrap_or_else(|| line_content.len()),

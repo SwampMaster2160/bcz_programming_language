@@ -1,3 +1,11 @@
+count = @import("std/functional.bcz", "count");
+repeat = @import("std/functional.bcz", "repeat");
+
+main = @entry_point () {
+	count((num) Beep(num * 100 + 100, 1000), 5);
+	repeat(() Beep(100, 1000), 3);
+};
+
 //a = @import("main.bcz", "myFn");
 //MY_VAR = @import("main.bcz", "MY_VAR");
 //b = () 1;
@@ -19,33 +27,33 @@
 
 //a = (a, b) a + b;
 
-T_VAR = @import("a/t.bcz", "T_VAR");
-A_VAR = @import("main1.bcz", "A_VAR");
+//T_VAR = @import("a/t.bcz", "T_VAR");
+//A_VAR = @import("main1.bcz", "A_VAR");
 
-main = @entry_point () {
-	/*x = 0;
-	@loop {
-		x > 9? @break: {};
-		Beep(500, 1000);
-		x = x + 1;
-	};*/
-	utf_16_str = @stack(3, 2);
-	@write(utf_16_str, 2, 'H');
-	@write(utf_16_str + 2, 2, 'i');
-	@write(utf_16_str + 4, 2, '\n');
-	handle = GetStdHandle(-11);
-	Beep(500, 1000);
-	{
-		result = 0;
-		WriteConsoleW(handle, utf_16_str, 3, &result, 0);
-	};
-	Beep(600, 1000);
-	//main();
-	a = 1 + 2 + 3;
-	b = {2 == 2};
-	a * 2 + b
-};
-
+//main = @entry_point () {
+//	/*x = 0;
+//	@loop {
+//		x > 9? @break: {};
+//		Beep(500, 1000);
+//		x = x + 1;
+//	};*/
+//	utf_16_str = @stack(3, 2);
+//	@write(utf_16_str, 2, 'H');
+//	@write(utf_16_str + 2, 2, 'i');
+//	@write(utf_16_str + 4, 2, '\n');
+//	handle = GetStdHandle(-11);
+//	Beep(500, 1000);
+//	{
+//		result = 0;
+//		WriteConsoleW(handle, utf_16_str, 3, &result, 0);
+//	};
+//	Beep(600, 1000);
+//	//main();
+//	a = 1 + 2 + 3;
+//	b = {2 == 2};
+//	a * 2 + b
+//};
+//
 // user32.dll
 
 BOOL = -4;
@@ -54,8 +62,3 @@ DWORD = 4;
 Beep = @link("Beep", BOOL, DWORD, DWORD);
 GetStdHandle = @link("GetStdHandle", 8, 4);
 WriteConsoleW = @link("WriteConsoleW", BOOL, 8, 8, DWORD, 8, 8);
-//Beep = @link (DWORD, DWORD) BOOL;
-//GetStdHandle = @link (4) 8;
-//WriteConsoleW = @link (8, 8, DWORD, 8, 8) BOOL;
-//
-////a = 0;
