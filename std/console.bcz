@@ -1,9 +1,15 @@
-NULL = @import("constant.bcz", "NULL"); // Bug
+NULL = @import("constant.bcz", "NULL");
 
 WriteConsoleA = @import("windows_raw.bcz", "WriteConsoleA");
+GetStdHandle = @import("windows_raw.bcz", "GetStdHandle");
 
-/// Prints a ASCII encoded string with a length of up to 0xFFFFFFFF chars to a writable console.
-/// Using a length of more than 0xFFFFFFFF, a string with non-ASCII chars or an unwritable or invalid console is undefined behaviour.
-@export print_ascii_sized = (console, string, length) {
+/// Get the standard output console buffer.
+@export getStandardOutput = () {
+	GetStdHandle(-11)
+};
+
+/// Prints a ASCII encoded string with a length of up to 0xFFFFFFFF chars to a writable console buffer.
+/// Using a length of more than 0xFFFFFFFF, a string with non-ASCII chars or an unwritable or invalid console buffer is undefined behaviour.
+@export printAsciiSized = (console, string, length) {
 	WriteConsoleA(console, string, length, NULL, NULL)
-}
+};
