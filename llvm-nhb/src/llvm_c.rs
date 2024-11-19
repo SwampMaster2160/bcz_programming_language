@@ -61,6 +61,7 @@ unsafe extern "C" {
 	pub unsafe fn LLVMAddGlobal(M: LLVMModuleRef, Ty: LLVMTypeRef, Name: *const c_char) -> LLVMValueRef;
 	pub unsafe fn LLVMSetInitializer(GlobalVar: LLVMValueRef, ConstantVal: LLVMValueRef) -> c_void;
 	pub unsafe fn LLVMGetInitializer(GlobalVar: LLVMValueRef) -> LLVMValueRef;
+	pub unsafe fn LLVMSetGlobalConstant(GlobalVar: LLVMValueRef, IsConstant: LLVMBool) -> c_void;
 	// Core/Values/Constants/Composite Constants
 	pub unsafe fn LLVMConstStringInContext(C: LLVMContextRef, Str: *const c_char, Length: c_uint, DontNullTerminate: LLVMBool) -> LLVMValueRef;
 	// Core/Values/Constants/Function values

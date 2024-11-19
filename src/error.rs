@@ -67,6 +67,7 @@ pub enum Error {
 	ShouldNotHaveChild,
 	InvalidSystemConstant,
 	OnlyUsableInStandardLibrary,
+	InvalidFilepath,
 }
 
 impl Display for Error {
@@ -136,6 +137,7 @@ impl Display for Error {
 			Self::ShouldNotHaveChild => write!(f, "Should not have child"),
 			Self::InvalidSystemConstant => write!(f, "Invalid system constant"),
 			Self::OnlyUsableInStandardLibrary => write!(f, "Only usable in standard library"),
+			Self::InvalidFilepath => write!(f, "Invalid filepath"),
 		}
 	}
 }

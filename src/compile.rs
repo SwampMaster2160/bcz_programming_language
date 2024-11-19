@@ -304,8 +304,9 @@ pub fn relative_filepath_to_absolute(main_data: &MainData, current_filepath: &Pa
 			}
 			result = result.join(item);
 		}
-		return Ok(result.canonicalize().unwrap())
+		return Ok(result.canonicalize().map_err(|_| Error::InvalidFilepath)?)
 	}
-	let result = current_filepath.parent().unwrap().join(relative_filepath).canonicalize().unwrap();
+	let result = current_filepath.parent().ok_or(Error::InvalidFilepath)?
+		.join(relative_filepath).canonicalize().map_err(|_| Error::InvalidFilepath)?;
 	Ok(result)
 }

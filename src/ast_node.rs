@@ -460,6 +460,7 @@ impl AstNode {
 				let function_type = main_data.int_type.function_type(&*parameter_types, false);
 				// Build function value
 				let function = llvm_module.add_function(function_type, &*name);
+				function.set_linkage(Linkage::Internal);
 				// Return
 				Ok(function)
 			}
@@ -508,7 +509,9 @@ impl AstNode {
 				let parameter_types: Box<[Type]> = repeat(main_data.int_type).take(parameters.len()).collect();
 				let function_type = main_data.int_type.function_type(&*parameter_types, false);
 				// Build function value
-				llvm_module.add_function(function_type, &*name)
+				let function = llvm_module.add_function(function_type, &*name);
+				function.set_linkage(Linkage::Internal);
+				function
 			}
 		};
 		// Build function body
@@ -1029,6 +1032,7 @@ impl AstNode {
 						let wrapper_function_type = main_data.int_type.function_type(&wrapper_function_parameter_types, false);
 						// Create wrapper function
 						let wrapper_function = llvm_module.add_function(wrapper_function_type, &format!("__link__{wrapped_function_name}"));
+						wrapper_function.set_linkage(Linkage::Internal);
 						// Build casts
 						let basic_block = wrapper_function.append_basic_block(&main_data.llvm_context, "entry");
 						llvm_builder.position_at_end(&basic_block);
@@ -1161,7 +1165,10 @@ impl AstNode {
 							AstNodeVariant::Identifier(global_variable_name) => &**global_variable_name,
 							_ => return Err((Error::ConstValueRequired, global_variable_name.start)),
 						};
-						BuiltRValue::ImportedConstant(llvm_module.add_global(main_data.int_type, &format!("__export__{hash}__{global_variable_name}")))
+						let global = llvm_module.add_global(main_data.int_type, &format!("__export__{hash}__{global_variable_name}"));
+						global.set_linkage(Linkage::External);
+						global.set_is_constant(true);
+						BuiltRValue::ImportedConstant(global)
 					}
 					Keyword::SystemConstant => unreachable!(),
 				}
@@ -1169,6 +1176,8 @@ impl AstNode {
 			// Build strings
 			AstNodeVariant::String(text) => {
 				let string = llvm_module.add_global(main_data.int_8_type.array_type(text.len() + 1), "string");
+				string.set_linkage(Linkage::Internal);
+				string.set_is_constant(true);
 				string.set_initializer(&main_data.llvm_context.const_string(text, true));
 				BuiltRValue::Value(string.build_ptr_to_int(llvm_builder, main_data.int_type, "str_ptr_to_int"))
 			}
@@ -1266,6 +1275,8 @@ impl AstNode {
 			match &r_value {
 				BuiltRValue::Value(value) => {
 					let global = llvm_module.add_global(main_data.int_type, name);
+					global.set_linkage(Linkage::Internal);
+					global.set_is_constant(true);
 					global.set_initializer(value);
 				}
 				BuiltRValue::ImportedConstant(..) => {}
@@ -1279,9 +1290,11 @@ impl AstNode {
 			let global = llvm_module.add_global(main_data.int_type, &format!("__export__{hash}__{name}"));
 			match &r_value {
 				BuiltRValue::Value(value) => {
+					global.set_linkage(Linkage::External);
+					global.set_is_constant(true);
 					global.set_initializer(value);
 				}
-				BuiltRValue::ImportedConstant(..) => return  Err((Error::FeatureNotYetImplemented("Re-exporting".into()), self.start))
+				BuiltRValue::ImportedConstant(..) => return Err((Error::FeatureNotYetImplemented("Re-exporting".into()), self.start))
 			}
 		}
 		// Return

@@ -1,6 +1,7 @@
 #[repr(C)]
 pub enum Linkage {
 	External = 0,
+	Internal = 8,
 	DLLImport = 10,
 }
 

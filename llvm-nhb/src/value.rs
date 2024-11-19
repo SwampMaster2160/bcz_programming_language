@@ -1,7 +1,7 @@
 use core::panic;
 use std::{ffi::{c_int, c_uint, CString}, fmt::{Debug, Formatter, Write}, marker::PhantomData, mem::transmute};
 
-use crate::{enums::Comparison, llvm_c::{LLVMBuildAnd, LLVMBuildCondBr, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor}};
+use crate::{enums::Comparison, llvm_c::{LLVMBool, LLVMBuildAnd, LLVMBuildCondBr, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildNot, LLVMBuildOr, LLVMBuildXor, LLVMSetGlobalConstant}};
 
 use super::{basic_block::BasicBlock, builder::Builder, context::Context, enums::{CallingConvention, Linkage}, module::Module, traits::WrappedReference, types::Type};
 use super::llvm_c::{LLVMAppendBasicBlockInContext, LLVMBuildAdd, LLVMBuildCall2, LLVMBuildIntToPtr, LLVMBuildLoad2, LLVMBuildMul, LLVMBuildNeg, LLVMSetLinkage};
@@ -384,6 +384,15 @@ impl<'c, 'm> Value<'c, 'm> where Value<'c, 'm>: Sized {
 			panic!("Initilize of type {set_to_type:?} to location of type {self_type:?}");
 		}
 		unsafe { LLVMSetInitializer(self.value_ref, set_to.value_ref) };
+	}
+
+	pub fn set_is_constant(&self, is_constant: bool) {
+		let self_type = self.get_type();
+		match (self.value_kind(), self_type.type_kind()) {
+			(LLVMValueKind::LLVMGlobalVariableValueKind, LLVMTypeKind::LLVMPointerTypeKind) => {}
+			_ => panic!("Type mismatch")
+		}
+		unsafe { LLVMSetGlobalConstant(self.value_ref, is_constant as LLVMBool) };
 	}
 
 	pub fn get_parameter(&self, index: usize) -> Self {
