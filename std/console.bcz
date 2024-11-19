@@ -1,6 +1,7 @@
 NULL = @import("constant.bcz", "NULL");
 
 WriteConsoleA = @import("windows_raw.bcz", "WriteConsoleA");
+WriteConsoleW = @import("windows_raw.bcz", "WriteConsoleW");
 GetStdHandle = @import("windows_raw.bcz", "GetStdHandle");
 
 /// Get the standard output console buffer.
@@ -8,8 +9,27 @@ GetStdHandle = @import("windows_raw.bcz", "GetStdHandle");
 	GetStdHandle(-11)
 };
 
-/// Prints a ASCII encoded string with a length of up to 0xFFFFFFFF chars to a writable console buffer.
+/// Prints an ASCII encoded string with a length of up to 0xFFFFFFFF chars to a writable console buffer.
 /// Using a length of more than 0xFFFFFFFF, a string with non-ASCII chars or an unwritable or invalid console buffer is undefined behaviour.
 @export printAsciiSized = (console, string, length) {
 	WriteConsoleA(console, string, length, NULL, NULL)
+};
+
+/// Prints an ASCII char to a writable console buffer.
+/// Using a char with a value larger than 0x7F or an unwritable or invalid console buffer is undefined behaviour.
+@export printAsciiChar = (console, char) {
+	string = @stack(1, 1);
+	@write(string, 1, char);
+	WriteConsoleA(console, string, 1, NULL, NULL)
+};
+
+/// Prints a char (unicode scalar value) to a writable console buffer.
+/// Using a char with a value outside the 0 to 0xD7FF inclusive or 0xE000 to 0x10FFFF inclusive ranges or using an unwritable or invalid console buffer is undefined behaviour.
+@export printChar = (console, char) {
+	string = @stack(2, 2);
+	char <= 0xFFFF? @write(string, 2, char): {
+		@write(string,     2, 0xD800 + {{char - 0x10000} / 0b10000000000});
+		@write(string + 2, 2, 0xDC00 + {{char - 0x10000} ~& 0b1111111111});
+	};
+	WriteConsoleW(console, string, char <= 0xFFFF? 1: 2, NULL, NULL)
 };

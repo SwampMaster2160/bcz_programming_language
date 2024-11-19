@@ -268,17 +268,6 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 				// Build in functions
 				ParseState::Token(Token { start, end: _, variant: TokenVariant::Keyword(keyword) }) => 'a: {
 					let start = *start;
-					// Get built in function
-					//let function = match keyword {
-					//	Keyword::Write | Keyword::Stack => {
-					//		match keyword {
-					//			Keyword::Write => BuiltInFunctionCall::Write,
-					//			Keyword::Stack => BuiltInFunctionCall::Stack,
-					//			_ => unreachable!(),
-					//		}
-					//	}
-					//	Keyword::EntryPoint | Keyword::Link | Keyword::Loop => break 'a,
-					//};
 					let keyword = match keyword {
 						Keyword::EntryPoint/* | Keyword::Link*/ => break 'a,
 						keyword => *keyword

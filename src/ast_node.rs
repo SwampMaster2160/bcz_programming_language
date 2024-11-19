@@ -706,6 +706,7 @@ impl AstNode {
 							};
 							// Get the alloca to write the result to
 							let result_alloca = function_build_data.get_alloca(main_data, llvm_builder, "logical_short_circuit_value");
+							function_build_data.block_stack.last_mut().unwrap().allocas_in_use.insert(result_alloca.clone());
 							result_alloca.build_store(&left_value, llvm_builder);
 							let get_right_value_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "get_right_value");
 							let end_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "skip");
@@ -745,6 +746,7 @@ impl AstNode {
 							let end_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_end");
 							// Build the alloca to write the ternary result to
 							let result_alloca = function_build_data.get_alloca(main_data, llvm_builder, "non_short_circuit_result");
+							function_build_data.block_stack.last_mut().unwrap().allocas_in_use.insert(result_alloca.clone());
 							// Build the conditional branch to the then and else branches depending on the condition
 							condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
 							// Build then case
@@ -776,6 +778,7 @@ impl AstNode {
 							let end_basic_block = function_build_data.function.append_basic_block(&main_data.llvm_context, "ternary_end");
 							// Build the alloca to write the ternary result to
 							let result_alloca = function_build_data.get_alloca(main_data, llvm_builder, "short_circuit_result");
+							function_build_data.block_stack.last_mut().unwrap().allocas_in_use.insert(result_alloca.clone());
 							// Build the conditional branch to the then and else branches depending on the condition
 							condition.build_conditional_branch(&then_basic_block, &else_basic_block, &main_data.llvm_context, llvm_builder);
 							// Build then case
