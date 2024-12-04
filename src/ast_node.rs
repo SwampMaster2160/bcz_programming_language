@@ -40,18 +40,28 @@ pub enum Operation {
 	UnsignedLessThanOrEqualTo,
 	UnsignedGreaterThan,
 	UnsignedGreaterThanOrEqualTo,
+	UnsignedThreeWayCompare,
 	SignedLessThan,
 	SignedLessThanOrEqualTo,
 	SignedGreaterThan,
 	SignedGreaterThanOrEqualTo,
+	SignedThreeWayCompare,
 	FloatEqualTo,
 	FloatNotEqualTo,
 	FloatLessThan,
 	FloatLessThanOrEqualTo,
 	FloatGreaterThan,
 	FloatGreaterThanOrEqualTo,
+	FloatThreeWayCompare,
 	NotShortCircuitTernary,
 	ShortCircuitTernary,
+	PrefixIntegerIncrement,
+	SuffixIntegerIncrement,
+	PrefixIntegerDecrement,
+	SuffixIntegerDecrement,
+	LogicalLeftBitShift,
+	LogicalRightBitShift,
+	ArithmeticRightBitShift,
 }
 
 #[derive(Debug, Clone)]
@@ -380,18 +390,21 @@ impl AstNode {
 					Operation::FloatAdd | Operation::FloatSubtract | Operation::FloatMultiply | Operation::FloatDivide | Operation::FloatTruncatedModulo |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
 					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd | Operation::LogicalShortCircuitOr |
-					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo  | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
+					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
 					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 					Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
-					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
-					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
+					Operation::FloatEqualTo | Operation::FloatNotEqualTo | Operation::FloatLessThanOrEqualTo |
+					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan |
+					Operation::LogicalLeftBitShift | Operation::LogicalRightBitShift | Operation::ArithmeticRightBitShift |
+					Operation::UnsignedThreeWayCompare | Operation::SignedThreeWayCompare | Operation::FloatThreeWayCompare => {
 						operands[0]
 							.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, true)?;
 						operands[1]
 							.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 					}
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate | Operation::Read | Operation::TakeReference |
-					Operation::BitwiseNot | Operation::LogicalNot
+					Operation::BitwiseNot | Operation::LogicalNot | Operation::PrefixIntegerDecrement | Operation::PrefixIntegerIncrement | Operation::SuffixIntegerDecrement |
+					Operation::SuffixIntegerIncrement
 						=> return Err((Error::FeatureNotYetImplemented("Augmented unary operators".into()), *start)),
 					Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => unreachable!(),
 				}
@@ -404,18 +417,19 @@ impl AstNode {
 					Operation::Dereference | Operation::IntegerNegate | Operation::FloatNegate |
 					Operation::BitwiseAnd | Operation::BitwiseOr | Operation::BitwiseXor | Operation::LogicalNotShortCircuitAnd |
 					Operation::LogicalNotShortCircuitOr | Operation::LogicalXor | Operation::LogicalShortCircuitAnd |
-					Operation::LogicalShortCircuitOr | Operation::TakeReference | Operation::BitwiseNot |
-					Operation::LogicalNot |
+					Operation::LogicalShortCircuitOr | Operation::TakeReference | Operation::BitwiseNot | Operation::LogicalNot |
 					Operation::IntegerEqualTo | Operation::IntegerNotEqualTo  | Operation::UnsignedLessThanOrEqualTo | Operation::SignedLessThanOrEqualTo |
 					Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 					Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
 					Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
-					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan
-						 => for operand in operands {
+					Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan |
+					Operation::ArithmeticRightBitShift | Operation::LogicalLeftBitShift | Operation::LogicalRightBitShift |
+					Operation::UnsignedThreeWayCompare | Operation::SignedThreeWayCompare | Operation::FloatThreeWayCompare
+						=> for operand in operands {
 						operand.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, false)?;
 					}
 					// Operators that only have l-values as operands
-					Operation::Read => for operand in operands {
+					Operation::Read | Operation::PrefixIntegerDecrement | Operation::PrefixIntegerIncrement | Operation::SuffixIntegerDecrement | Operation::SuffixIntegerIncrement => for operand in operands {
 						operand.get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, true)?;
 					}
 					// Ternary operator
@@ -1386,14 +1400,17 @@ impl AstNode {
 						Operation::UnsignedGreaterThan | Operation::UnsignedGreaterThanOrEqualTo | Operation::UnsignedLessThan |
 						Operation::SignedGreaterThan | Operation::SignedGreaterThanOrEqualTo | Operation::SignedLessThan |
 						Operation::FloatEqualTo | Operation::FloatNotEqualTo  | Operation::FloatLessThanOrEqualTo |
-						Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan => {
+						Operation::FloatGreaterThan | Operation::FloatGreaterThanOrEqualTo | Operation::FloatLessThan |
+						Operation::ArithmeticRightBitShift | Operation::LogicalRightBitShift | Operation::LogicalLeftBitShift |
+						Operation::UnsignedThreeWayCompare | Operation::SignedThreeWayCompare | Operation::FloatThreeWayCompare => {
 							for operand in operands.iter_mut() {
 								operand.const_evaluate(
 									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false, is_standard_library
 								)?;
 							}
 						}
-						Operation::Read | Operation::TakeReference => {
+						Operation::Read | Operation::TakeReference | Operation::SuffixIntegerIncrement | Operation::SuffixIntegerDecrement |
+						Operation::PrefixIntegerIncrement | Operation::PrefixIntegerDecrement=> {
 							for operand in operands.iter_mut() {
 								operand.const_evaluate(
 									main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, true, is_standard_library

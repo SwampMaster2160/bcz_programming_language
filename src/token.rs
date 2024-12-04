@@ -103,8 +103,13 @@ pub enum OperatorSymbol {
 	LessThanOrEqualTo,
 	GreaterThan,
 	GreaterThanOrEqualTo,
+	ThreeWayCompare,
 	TernaryFirst,
 	TernarySecond,
+	Increment,
+	Decrement,
+	BitwiseLeftShift,
+	BitwiseRightShift,
 }
 
 impl OperatorSymbol {
@@ -125,8 +130,13 @@ impl OperatorSymbol {
 			Self::LessThanOrEqualTo => "<=",
 			Self::GreaterThan => ">",
 			Self::GreaterThanOrEqualTo => ">=",
+			Self::ThreeWayCompare => "<=>",
 			Self::TernaryFirst => "?",
 			Self::TernarySecond => ":",
+			Self::Increment => "++",
+			Self::Decrement => "--",
+			Self::BitwiseLeftShift => "<<",
+			Self::BitwiseRightShift => ">>",
 		}
 	}
 

@@ -91,6 +91,14 @@ const fn binary_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::GreaterThanOrEqualTo, OperatorType::FloatingPointBitwise) => Some(Operation::FloatGreaterThanOrEqualTo),
 		(OperatorSymbol::Not, _) => None,
 		(OperatorSymbol::TernaryFirst | OperatorSymbol::TernarySecond, _) => None,
+		(OperatorSymbol::BitwiseLeftShift, OperatorType::UnsignedLogicalShortCircuit | OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::LogicalLeftBitShift),
+		(OperatorSymbol::BitwiseRightShift, OperatorType::UnsignedLogicalShortCircuit)  => Some(Operation::LogicalRightBitShift),
+		(OperatorSymbol::BitwiseRightShift, OperatorType::SignedLogicalNotShortCircuit)  => Some(Operation::ArithmeticRightBitShift),
+		(OperatorSymbol::BitwiseLeftShift | OperatorSymbol::BitwiseRightShift, OperatorType::FloatingPointBitwise) => None,
+		(OperatorSymbol::ThreeWayCompare, OperatorType::UnsignedLogicalShortCircuit) => Some(Operation::UnsignedThreeWayCompare),
+		(OperatorSymbol::ThreeWayCompare, OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::SignedThreeWayCompare),
+		(OperatorSymbol::ThreeWayCompare, OperatorType::FloatingPointBitwise) => Some(Operation::FloatThreeWayCompare),
+		(OperatorSymbol::Increment | OperatorSymbol::Decrement, _) => None,
 		//_ => None,
 	}
 }
@@ -104,12 +112,16 @@ const fn prefix_operator_from_symbol(symbol: OperatorSymbol, operator_type: Oper
 		(OperatorSymbol::SubtractNegate, OperatorType::FloatingPointBitwise) => Some(Operation::FloatNegate),
 		(OperatorSymbol::Not, OperatorType::FloatingPointBitwise) => Some(Operation::BitwiseNot),
 		(OperatorSymbol::Not, OperatorType::UnsignedLogicalShortCircuit | OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::LogicalNot),
+		(OperatorSymbol::Increment, OperatorType::UnsignedLogicalShortCircuit | OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::PrefixIntegerIncrement),
+		(OperatorSymbol::Decrement, OperatorType::UnsignedLogicalShortCircuit | OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::PrefixIntegerDecrement),
 		_ => None,
 	}
 }
 
 const fn postfix_operator_from_symbol(symbol: OperatorSymbol, operator_type: OperatorType) -> Option<Operation> {
 	match (symbol, operator_type) {
+		(OperatorSymbol::Increment, OperatorType::UnsignedLogicalShortCircuit | OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::SuffixIntegerIncrement),
+		(OperatorSymbol::Decrement, OperatorType::UnsignedLogicalShortCircuit | OperatorType::SignedLogicalNotShortCircuit) => Some(Operation::SuffixIntegerDecrement),
 		_ => None,
 	}
 }
