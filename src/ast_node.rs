@@ -576,7 +576,7 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
 		function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
-	) -> Result<BuiltRValue, (Error, (NonZeroUsize, NonZeroUsize))> {
+	) -> Result<BuiltRValue<'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
 			start,
@@ -1195,7 +1195,7 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder<'a, 'a>,
 		function_build_data: Option<&mut FunctionBuildData<'a, 'b>>,
-	) -> Result<BuiltLValue, (Error, (NonZeroUsize, NonZeroUsize))> {
+	) -> Result<BuiltLValue<'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack
 		let Self {
 			start: _,
@@ -1265,7 +1265,7 @@ impl AstNode {
 	pub fn build_global_assignment<'a>(
 		&'a self, main_data: &'a MainData, llvm_module: &'a Module<'a>, llvm_builder: &'a Builder<'a, 'a>, file_build_data: &mut FileBuildData<'a, 'a>, name: &str,
 		is_exported: bool,
-	) -> Result<BuiltRValue, (Error, (NonZeroUsize, NonZeroUsize))> {
+	) -> Result<BuiltRValue<'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Build r-value/function
 		let r_value = if self.is_function() {
 			let function =
@@ -1317,7 +1317,7 @@ impl AstNode {
 	}
 
 	/// Get a int/void type form a byte width.
-	pub fn type_from_width<'a>(&'a self, main_data: &'a MainData) -> Result<(Type, bool), (Error, (NonZeroUsize, NonZeroUsize))> {
+	pub fn type_from_width<'a>(&'a self, main_data: &'a MainData) -> Result<(Type<'a>, bool), (Error, (NonZeroUsize, NonZeroUsize))> {
 		let Self {
 			start,
 			end: _,

@@ -143,16 +143,16 @@ impl OperatorSymbol {
 
 #[derive(EnumIter, Clone, Copy, Debug)]
 pub enum OperatorType {
-	SignedLogicalShortCircuit,
-	UnsignedLogicalNotShortCircuit,
+	UnsignedLogicalShortCircuit,
+	SignedLogicalNotShortCircuit,
 	FloatingPointBitwise,
 }
 
 impl OperatorType {
 	pub const fn get_symbol(self) -> Option<char> {
 		match self {
-			Self::SignedLogicalShortCircuit => None,
-			Self::UnsignedLogicalNotShortCircuit => Some('$'),
+			Self::UnsignedLogicalShortCircuit => None,
+			Self::SignedLogicalNotShortCircuit => Some('$'),
 			Self::FloatingPointBitwise => Some('~'),
 		}
 	}
@@ -425,7 +425,7 @@ impl Token {
 				// Parse the l-value assignment operator
 				if token_string == "@=" {
 					return Ok((Some(Self {
-						variant: TokenVariant::Operator(None, OperatorType::UnsignedLogicalNotShortCircuit, true, true),
+						variant: TokenVariant::Operator(None, OperatorType::SignedLogicalNotShortCircuit, true, true),
 						start: (line_number, column_number),
 						end: (line_number, column_number.saturating_add(2)),
 					}), string_without_token, false));
@@ -434,7 +434,7 @@ impl Token {
 				let operator_type = main_data.char_to_operator_type_mapping.get(&first_char);
 				let (operator_type, operator_string_without_type) = match operator_type {
 					Some(operator_type) => (*operator_type, &token_string[1..]),
-					None => (OperatorType::SignedLogicalShortCircuit, token_string),
+					None => (OperatorType::UnsignedLogicalShortCircuit, token_string),
 				};
 				// Get if the operator is an assignment
 				let (is_assignment, operator_base_string) =
