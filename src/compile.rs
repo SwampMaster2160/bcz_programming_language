@@ -211,7 +211,7 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: N
 fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)>, filepath: &PathBuf)
 	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
 	// Set up module
-	llvm_module.set_target_triple(main_data.llvm_target_triple.as_str());
+	llvm_module.set_target_triple(&*main_data.llvm_target_triple);
 	llvm_module.set_data_layout(&main_data.llvm_data_layout);
 	// Create data struct for builder
 	let llvm_builder = main_data.llvm_context.new_builder();

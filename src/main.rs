@@ -17,6 +17,11 @@ mod built_value;
 mod file_build_data;
 mod function_building_data;
 
+enum OperatingSystem {
+	Windows = 0,
+	Linux = 1,
+}
+
 /// Info that applies while compiling all files.
 pub struct MainData<'a> {
 	/// Should the compiled .o files be linked to create a primary output file?
@@ -52,7 +57,8 @@ pub struct MainData<'a> {
 	/// The 8-bit integer type for the target machine.
 	int_8_type: Type<'a>,
 	/// A C string that contains info about the target machine.
-	llvm_target_triple: String,
+	llvm_target_triple: Box<str>,
+	//llvm_target_triple: String,
 	/// How many bits width the target machine integer is.
 	int_bit_width: u8,
 	/// How many bytes the target machine integer is wide log 2.
@@ -77,15 +83,34 @@ pub struct MainData<'a> {
 	object_files_to_link: Vec<PathBuf>,
 	/// The path to the BCZ standard library.
 	standard_library_path: PathBuf,
+
+	operating_system: OperatingSystem,
+	//target_triplet: Box<str>,
 }
 
 impl<'a> MainData<'a> {
 	pub fn new(
 		compiler_arguments_data: CompilerArgumentsData<'a>, context: &'a Context, target_machine: &'a TargetMachine, target_data: &'a TargetData<'a>,
 		int_type: Type<'a>, int_8_type: Type<'a>,
-	) -> Self {
+	) -> Result<Self, Error> {
+		// Get standard library path
 		let standard_library_path = compiler_arguments_data.compiler_working_directory.join("std").canonicalize().unwrap();
-		Self {
+		// Parse target triplet
+		let mut target_triplet_parts = compiler_arguments_data.target_triplet.split('-');
+		match target_triplet_parts.next() {
+			Some("x86_64") => {}
+			Some(other) => return Err(Error::UnsupportedCPU(other.into())),
+			None => return Err(Error::InvalidTargetTriplet(compiler_arguments_data.target_triplet.into_string())),
+		}
+		target_triplet_parts.next();
+		let operating_system = match target_triplet_parts.next() {
+			Some("windows") => OperatingSystem::Windows,
+			Some("linux") => OperatingSystem::Linux,
+			Some(other) => return Err(Error::UnsupportedOS(other.into())),
+			None => return Err(Error::InvalidTargetTriplet(compiler_arguments_data.target_triplet.into_string())),
+		};
+		// Pack into struct
+		Ok(Self {
 			llvm_context: context,
 			do_link: compiler_arguments_data.do_link,
 			primary_output_file: compiler_arguments_data.primary_output_file,
@@ -110,12 +135,14 @@ impl<'a> MainData<'a> {
 			str_to_keyword_mapping: Keyword::get_symbols_map(),
 			print_after_analyzer: compiler_arguments_data.print_after_analyzer,
 			dump_llvm_module: compiler_arguments_data.dump_llvm_module,
-			llvm_target_triple: String::default(),
+			llvm_target_triple: compiler_arguments_data.target_triplet,
 			llvm_target_machine: target_machine,
 			object_files_to_link: Vec::new(),
 			int_8_type,
 			standard_library_path,
-		}
+			operating_system,
+			//target_triplet: compiler_arguments_data.target_triplet,
+		})
 	}
 
 	pub fn value_to_signed(&self, value: u64) -> i64 {
@@ -162,16 +189,19 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	process_arguments(&arguments, &mut compiler_arguments_data).map_err(|error| (error, None))?;
 	// Setup LLVM
 	initialize_x86();
-	let llvm_target_triple = "x86_64-pc-windows-msvc";
-	let llvm_target = Target::from_triple(llvm_target_triple).map_err(|llvm_error| (Error::CouldNotGetTarget(llvm_error), None))?;
+	//println!("{}", compiler_arguments_data.target_triplet);
+	//let llvm_target_triple = "x86_64-pc-windows";
+	let llvm_target = Target::from_triple(&compiler_arguments_data.target_triplet).map_err(|llvm_error| (Error::CouldNotGetTarget(llvm_error), None))?;
 	let llvm_target_machine = llvm_target.create_target_machine(
-		llvm_target_triple, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
+		&compiler_arguments_data.target_triplet, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
 	);
+	//println!("{}", llvm_target.);
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
 	let int_type = llvm_data_layout.int_ptr_type(&context);
 	let int_8_type = context.int_8_type();
-	let mut main_data = MainData::new(compiler_arguments_data, &context, &llvm_target_machine, &llvm_data_layout, int_type, int_8_type);
+	let mut main_data = MainData::new(compiler_arguments_data, &context, &llvm_target_machine, &llvm_data_layout, int_type, int_8_type)
+		.map_err(|error| (error, None))?;
 	// Get info about machine being compiled for
 	let int_type_width = main_data.int_type.size_in_bits(&main_data.llvm_data_layout);
 	if int_type_width > 64 {

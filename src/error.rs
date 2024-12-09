@@ -68,6 +68,9 @@ pub enum Error {
 	InvalidSystemConstant,
 	OnlyUsableInStandardLibrary,
 	InvalidFilepath,
+	UnsupportedCPU(String),
+	UnsupportedOS(String),
+	InvalidTargetTriplet(String),
 }
 
 impl Display for Error {
@@ -138,6 +141,9 @@ impl Display for Error {
 			Self::InvalidSystemConstant => write!(f, "Invalid system constant"),
 			Self::OnlyUsableInStandardLibrary => write!(f, "Only usable in standard library"),
 			Self::InvalidFilepath => write!(f, "Invalid filepath"),
+			Self::UnsupportedCPU(cpu) => write!(f, "Unsupported CPU: {cpu}"),
+			Self::UnsupportedOS(os) => write!(f, "Unsupported OS: {os}"),
+			Self::InvalidTargetTriplet(triplet) => write!(f, "Invalid target triplet: {triplet}"),
 		}
 	}
 }

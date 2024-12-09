@@ -1,6 +1,7 @@
 use std::{collections::HashMap, env::current_dir, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use target_triple::TARGET;
 
 use crate::error::Error;
 
@@ -20,6 +21,8 @@ pub struct CompilerArgumentsData<'a> {
 	pub compiler_working_directory: PathBuf,
 	pub source_path: PathBuf,
 	pub binary_path: PathBuf,
+	pub target_triplet: Box<str>,
+	//pub operation_system: OperatingSystem,
 }
 
 impl<'a> CompilerArgumentsData<'a> {
@@ -37,9 +40,16 @@ impl<'a> CompilerArgumentsData<'a> {
 			dump_llvm_module_after_function_signatures_build: false,
 			filepaths_to_compile: Vec::new(),
 			primary_output_file: None,
+			target_triplet: TARGET.into(),
+			//operation_system: OperatingSystem::Windows,
 		}
 	}
 }
+
+//enum OperatingSystem {
+//	Windows = 0,
+//	Linux = 1,
+//}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 /// A program state that is used while processing compiler arguments that allows arguments to continue previous arguments.
@@ -48,6 +58,7 @@ enum ArgumentProcessingState {
 	SetPrimaryOutput,
 	SetSourceHomeFilepath,
 	SetBinaryHomeFilepath,
+	SetTargetTriplet,
 }
 
 #[derive(Clone, Copy, EnumIter)]
@@ -67,6 +78,7 @@ enum CompilerOptionToken {
 	PrintAfterAnalyzer,
 	PrintAfterConstEvaluate,
 	DumpLlvmModule,
+	TargetTriplet,
 }
 
 impl CompilerOptionToken {
@@ -80,6 +92,8 @@ impl CompilerOptionToken {
 			Self::SetPrimaryOutput => Some("o"),
 			Self::SetSourceHomeFilepath => Some("s"),
 			Self::SetBinaryHomeFilepath => Some("b"),
+			//Self::OperatingSystem => None,
+			Self::TargetTriplet => Some("t"),
 			Self::PrintTokens => None,
 			Self::PrintAstNodes => None,
 			Self::PrintAfterAnalyzer => None,
@@ -105,6 +119,7 @@ impl CompilerOptionToken {
 			Self::DumpLlvmModule => Some("dump-llvm-module"),
 			Self::PrintAfterConstEvaluate => Some("print-after-const-evaluate"),
 			Self::PrintAstNodesAfterFunctionSignatureBuild => Some("print-ast-nodes-after-function-signature-build"),
+			Self::TargetTriplet => Some("target-triplet"),
 		}
 	}
 
@@ -124,6 +139,7 @@ impl CompilerOptionToken {
 			Self::DumpLlvmModule => Some("Print the content of the built LLVM module"),
 			Self::PrintAfterConstEvaluate => Some("Print AST nodes after constant evaluation"),
 			Self::PrintAstNodesAfterFunctionSignatureBuild => Some("Print AST nodes after global function signatures have been built"),
+			Self::TargetTriplet => Some("Set the target triplet for the compiler"),
 		}
 	}
 
@@ -217,6 +233,7 @@ pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgum
 					CompilerOptionToken::DumpLlvmModule => data_out.dump_llvm_module = true,
 					CompilerOptionToken::PrintAfterConstEvaluate => data_out.print_after_const_evaluate = true,
 					CompilerOptionToken::PrintAstNodesAfterFunctionSignatureBuild => data_out.dump_llvm_module_after_function_signatures_build = true,
+					CompilerOptionToken::TargetTriplet => argument_processing_state = ArgumentProcessingState::SetTargetTriplet,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {
@@ -229,6 +246,10 @@ pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgum
 			}
 			ArgumentProcessingState::SetBinaryHomeFilepath => {
 				binary_path = Some(data_out.compiler_working_directory.join(argument));
+				argument_processing_state = ArgumentProcessingState::Normal;
+			}
+			ArgumentProcessingState::SetTargetTriplet => {
+				data_out.target_triplet = argument.into();
 				argument_processing_state = ArgumentProcessingState::Normal;
 			}
 		}
