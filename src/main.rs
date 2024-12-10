@@ -17,6 +17,7 @@ mod built_value;
 mod file_build_data;
 mod function_building_data;
 
+#[derive(Debug, PartialEq, Eq)]
 enum OperatingSystem {
 	Windows = 0,
 	Linux = 1,
@@ -97,6 +98,7 @@ impl<'a> MainData<'a> {
 		// Get standard library path
 		let standard_library_path = compiler_arguments_data.compiler_working_directory.join("std").canonicalize().unwrap();
 		// Parse target triplet
+		//println!("{}", compiler_arguments_data.target_triplet);
 		let mut target_triplet_parts = compiler_arguments_data.target_triplet.split('-');
 		match target_triplet_parts.next() {
 			Some("x86_64") => {}
@@ -226,11 +228,17 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 		}),
 		(_, false) => None,
 	};
+	//println!("{:?}", main_data.operating_system);
 	if let Some(primary_output_file) = primary_output_file {
 		let primary_output_file_path = main_data.binary_path.join(primary_output_file);
 		let mut command = Command::new(&*main_data.link_command);
 		for object_file in main_data.object_files_to_link.iter() {
 			command.arg(object_file);
+		}
+		if main_data.operating_system == OperatingSystem::Linux {
+			command.arg("-nostdlib");
+			command.arg("-static");
+			command.arg("-no-pie");
 		}
 		command.arg("-o");
 		command.arg(primary_output_file_path);
