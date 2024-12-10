@@ -22,7 +22,7 @@ pub struct CompilerArgumentsData<'a> {
 	pub source_path: PathBuf,
 	pub binary_path: PathBuf,
 	pub target_triplet: Box<str>,
-	//pub operation_system: OperatingSystem,
+	pub link_command: Box<str>,
 }
 
 impl<'a> CompilerArgumentsData<'a> {
@@ -41,15 +41,10 @@ impl<'a> CompilerArgumentsData<'a> {
 			filepaths_to_compile: Vec::new(),
 			primary_output_file: None,
 			target_triplet: TARGET.into(),
-			//operation_system: OperatingSystem::Windows,
+			link_command: "gcc".into(),
 		}
 	}
 }
-
-//enum OperatingSystem {
-//	Windows = 0,
-//	Linux = 1,
-//}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 /// A program state that is used while processing compiler arguments that allows arguments to continue previous arguments.
@@ -59,6 +54,7 @@ enum ArgumentProcessingState {
 	SetSourceHomeFilepath,
 	SetBinaryHomeFilepath,
 	SetTargetTriplet,
+	SetLinkCommand,
 }
 
 #[derive(Clone, Copy, EnumIter)]
@@ -79,6 +75,7 @@ enum CompilerOptionToken {
 	PrintAfterConstEvaluate,
 	DumpLlvmModule,
 	TargetTriplet,
+	LinkCommand,
 }
 
 impl CompilerOptionToken {
@@ -92,6 +89,7 @@ impl CompilerOptionToken {
 			Self::SetPrimaryOutput => Some("o"),
 			Self::SetSourceHomeFilepath => Some("s"),
 			Self::SetBinaryHomeFilepath => Some("b"),
+			Self::LinkCommand => Some("l"),
 			//Self::OperatingSystem => None,
 			Self::TargetTriplet => Some("t"),
 			Self::PrintTokens => None,
@@ -120,6 +118,7 @@ impl CompilerOptionToken {
 			Self::PrintAfterConstEvaluate => Some("print-after-const-evaluate"),
 			Self::PrintAstNodesAfterFunctionSignatureBuild => Some("print-ast-nodes-after-function-signature-build"),
 			Self::TargetTriplet => Some("target-triplet"),
+			Self::LinkCommand => Some("link-command"),
 		}
 	}
 
@@ -140,6 +139,7 @@ impl CompilerOptionToken {
 			Self::PrintAfterConstEvaluate => Some("Print AST nodes after constant evaluation"),
 			Self::PrintAstNodesAfterFunctionSignatureBuild => Some("Print AST nodes after global function signatures have been built"),
 			Self::TargetTriplet => Some("Set the target triplet for the compiler"),
+			Self::LinkCommand => Some("Set the link command to use for linking the resulting object files"),
 		}
 	}
 
@@ -234,6 +234,7 @@ pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgum
 					CompilerOptionToken::PrintAfterConstEvaluate => data_out.print_after_const_evaluate = true,
 					CompilerOptionToken::PrintAstNodesAfterFunctionSignatureBuild => data_out.dump_llvm_module_after_function_signatures_build = true,
 					CompilerOptionToken::TargetTriplet => argument_processing_state = ArgumentProcessingState::SetTargetTriplet,
+					CompilerOptionToken::LinkCommand => argument_processing_state = ArgumentProcessingState::SetLinkCommand,
 				}
 			}
 			ArgumentProcessingState::SetPrimaryOutput => {
@@ -250,6 +251,10 @@ pub fn process_arguments<'a>(arguments: &[&'a str], data_out: &mut CompilerArgum
 			}
 			ArgumentProcessingState::SetTargetTriplet => {
 				data_out.target_triplet = argument.into();
+				argument_processing_state = ArgumentProcessingState::Normal;
+			}
+			ArgumentProcessingState::SetLinkCommand => {
+				data_out.link_command = argument.into();
 				argument_processing_state = ArgumentProcessingState::Normal;
 			}
 		}

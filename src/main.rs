@@ -85,7 +85,8 @@ pub struct MainData<'a> {
 	standard_library_path: PathBuf,
 
 	operating_system: OperatingSystem,
-	//target_triplet: Box<str>,
+
+	link_command: Box<str>,
 }
 
 impl<'a> MainData<'a> {
@@ -141,7 +142,7 @@ impl<'a> MainData<'a> {
 			int_8_type,
 			standard_library_path,
 			operating_system,
-			//target_triplet: compiler_arguments_data.target_triplet,
+			link_command: compiler_arguments_data.link_command,
 		})
 	}
 
@@ -219,12 +220,15 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	// Link
 	let primary_output_file = match (main_data.primary_output_file, main_data.do_link) {
 		(Some(primary_output_file), true) => Some(primary_output_file),
-		(None, true) => Some("out.exe"),
+		(None, true) => Some(match main_data.operating_system {
+			OperatingSystem::Windows => "out.exe",
+			OperatingSystem::Linux => "out",
+		}),
 		(_, false) => None,
 	};
 	if let Some(primary_output_file) = primary_output_file {
 		let primary_output_file_path = main_data.binary_path.join(primary_output_file);
-		let mut command = Command::new("gcc");
+		let mut command = Command::new(&*main_data.link_command);
 		for object_file in main_data.object_files_to_link.iter() {
 			command.arg(object_file);
 		}
