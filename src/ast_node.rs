@@ -457,6 +457,7 @@ impl AstNode {
 		llvm_module: &'a Module,
 		llvm_builder: &'a Builder,
 		name: &str,
+		is_entry_point: bool,
 	) -> Result<Value<'a, 'a>, (Error, (NonZeroUsize, NonZeroUsize))> {
 		// Unpack node
 		let Self {
@@ -474,13 +475,16 @@ impl AstNode {
 				let function_type = main_data.int_type.function_type(&*parameter_types, false);
 				// Build function value
 				let function = llvm_module.add_function(function_type, &*name);
-				function.set_linkage(Linkage::Internal);
+				function.set_linkage(match is_entry_point {
+					true => Linkage::External,
+					false => Linkage::Internal,
+				});
 				// Return
 				Ok(function)
 			}
 			AstNodeVariant::Keyword(keyword, _, child_node) => match keyword {
 				Keyword::EntryPoint =>
-					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name),
+					child_node.as_ref().unwrap().build_function_signature(main_data, file_build_data, llvm_module, llvm_builder, name, true),
 				_ => unreachable!(),
 			}
 			_ => unreachable!(),
@@ -572,12 +576,15 @@ impl AstNode {
 		llvm_builder.position_at_end(function_info.block_stack.last().unwrap().last_block());
 		BuiltRValue::Value(function_body_built.get_value(main_data, llvm_builder).build_return(llvm_builder));
 		// Return
+		//if is_entry_point {
+		//	function.set_linkage(Linkage::External);
+		//}
 		let result = function.build_ptr_to_int(llvm_builder, main_data.int_type, "fn_ptr_to_int");
 		if is_entry_point {
 			if file_build_data.entrypoint.is_some() {
 				return Err((Error::MultipleEntryPoints, *start));
 			}
-			file_build_data.entrypoint = Some(result.clone())
+			file_build_data.entrypoint = Some(result.clone());
 		}
 		Ok(result)
 	}

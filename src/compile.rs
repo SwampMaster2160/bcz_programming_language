@@ -226,7 +226,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		if !global.is_function() {
 			continue;
 		}
-		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name/*, false, false*/)?;
+		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name, false)?;
 		file_build_data.built_global_function_signatures.insert(name.clone(), function_signature);
 	}
 	// Dump module if commanded to do so after building function signatures
@@ -266,41 +266,30 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 	}
 	// Build entry point
 	if let Some(wrapped_entry_point) = file_build_data.entrypoint {
-		// Get types of wrapper function
-		let int_32_type = main_data.llvm_context.int_32_type();
-		let return_type = match main_data.operating_system {
-			OperatingSystem::Windows => int_32_type,
-			OperatingSystem::Linux => main_data.llvm_context.void_type(),
-		};
-		let entry_point_function_parameters: Box<[Type]> = match main_data.operating_system {
-			OperatingSystem::Windows => Box::new([main_data.int_type, main_data.int_type, main_data.int_type, int_32_type]),
-			OperatingSystem::Linux => Box::new([]),
-		};
-		let entry_point_function_type = return_type.function_type(&entry_point_function_parameters, false);
-		// Get wrapped function
-		let wrapped_entry_point_function_type = main_data.int_type.function_type(&[], false);
-		let wrapped_entry_point_function_pointer_type = wrapped_entry_point_function_type.pointer_to();
-		let wrapped_entry_point_function_pointer = wrapped_entry_point
-			.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
-		// Build wrapper function
-		// TODO: Non-Windows
-		let entry_point_function = llvm_module.add_function(entry_point_function_type, match main_data.operating_system {
-			OperatingSystem::Windows => "WinMain",
-			OperatingSystem::Linux => "_start",
-		});
-		entry_point_function.set_linkage(Linkage::External);
-		entry_point_function.set_calling_convention(CallingConvention::Win64);
-		let entry_point_function_basic_block = entry_point_function.append_basic_block(&main_data.llvm_context, "entry");
-		llvm_builder.position_at_end(&entry_point_function_basic_block);
-		let built_function_call = wrapped_entry_point_function_pointer
-			.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp");
-		let truncated_result = built_function_call.build_truncate(&llvm_builder, int_32_type, "trunc_cast_temp");
 		match main_data.operating_system {
 			OperatingSystem::Windows => {
+				// Get types of wrapper function
+				let int_32_type = main_data.llvm_context.int_32_type();
+				let entry_point_function_parameters = [main_data.int_type, main_data.int_type, main_data.int_type, int_32_type];
+				let entry_point_function_type = int_32_type.function_type(&entry_point_function_parameters, false);
+				// Get wrapped function
+				let wrapped_entry_point_function_type = main_data.int_type.function_type(&[], false);
+				let wrapped_entry_point_function_pointer_type = wrapped_entry_point_function_type.pointer_to();
+				let wrapped_entry_point_function_pointer = wrapped_entry_point
+					.build_int_to_ptr(&llvm_builder, wrapped_entry_point_function_pointer_type, "int_to_fn_ptr_temp");
+				// Build wrapper function
+				let entry_point_function = llvm_module.add_function(entry_point_function_type, "WinMain");
+				entry_point_function.set_linkage(Linkage::External);
+				entry_point_function.set_calling_convention(CallingConvention::Win64);
+				let entry_point_function_basic_block = entry_point_function.append_basic_block(&main_data.llvm_context, "entry");
+				llvm_builder.position_at_end(&entry_point_function_basic_block);
+				let built_function_call = wrapped_entry_point_function_pointer
+					.build_call(&[], wrapped_entry_point_function_type, &llvm_builder, "function_call_temp");
+				let truncated_result = built_function_call.build_truncate(&llvm_builder, int_32_type, "trunc_cast_temp");
 				truncated_result.build_return(&llvm_builder);
 			}
 			OperatingSystem::Linux => {
-				llvm_builder.build_return_void();
+
 			}
 		}
 	}
