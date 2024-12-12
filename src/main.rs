@@ -235,11 +235,10 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 		for object_file in main_data.object_files_to_link.iter() {
 			command.arg(object_file);
 		}
-		if main_data.operating_system == OperatingSystem::Linux {
-			command.arg("-nostdlib");
-			command.arg("-static");
-			command.arg("-no-pie");
-		}
+		command.arg("-nostdlib");
+		command.arg("-static");
+		command.arg("-no-pie");
+		command.arg("C:/Windows/System32/kernel32.dll");
 		command.arg("-o");
 		command.arg(primary_output_file_path);
 		command.output().unwrap();
