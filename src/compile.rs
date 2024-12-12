@@ -1,7 +1,7 @@
-use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, hash::{DefaultHasher, Hash, Hasher}, io::{BufRead, BufReader}, num::NonZeroUsize, path::{Path, PathBuf}};
+use std::{collections::{HashMap, HashSet}, fs::{create_dir_all, File}, hash::{DefaultHasher, Hash, Hasher}, io::{BufRead, BufReader, Write}, num::NonZeroUsize, path::{Path, PathBuf}};
 
 use crate::{ast_node::AstNode, error::Error, file_build_data::FileBuildData, parse::parse_tokens, token::Token, MainData, OperatingSystem};
-use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module, types::Type};
+use llvm_nhb::{enums::{CallingConvention, CodegenFileType, Linkage}, module::Module};
 
 /// Compiles the file at `filepath`.
 pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUsize, Option<NonZeroUsize>)>)>)> {
@@ -163,7 +163,10 @@ pub fn compile_file(main_data: &mut MainData, filepath: &PathBuf) -> Result<(), 
 	};
 	let llvm_module = main_data.llvm_context.new_module(module_name);
 	build_llvm_module(main_data, &llvm_module, globals_and_dependencies_after_const_evaluate, filepath)
-		.map_err(|(error, (line, column))| (error, Some((filepath.clone(), Some((line, Some(column)))))))?;
+		.map_err(|(error, location)| (error, Some((filepath.clone(), match location {
+			Some((line, column)) => Some((line, Some(column))),
+			None => None,
+		}))))?;
 	// Write .o file
 	let directory: PathBuf = output_filepath.parent().ok_or_else(|| (Error::UnableToWriteObject, Some((filepath.clone(), None))))?.into();
 	if !directory.exists() {
@@ -208,8 +211,8 @@ fn tokenize_line(main_data: &mut MainData, mut line_string: &str, line_number: N
 }
 
 /// Take in a list of global variables and build them into a LLVM module.
-fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)>, filepath: &PathBuf)
-	-> Result<(), (Error, (NonZeroUsize, NonZeroUsize))> {
+fn build_llvm_module(main_data: &mut MainData, llvm_module: &Module, globals_and_dependencies: HashMap<Box<str>, (AstNode, bool, HashSet<Box<str>>)>, filepath: &PathBuf)
+	-> Result<(), (Error, Option<(NonZeroUsize, NonZeroUsize)>)> {
 	// Set up module
 	llvm_module.set_target_triple(&*main_data.llvm_target_triple);
 	llvm_module.set_data_layout(&main_data.llvm_data_layout);
@@ -226,7 +229,8 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		if !global.is_function() {
 			continue;
 		}
-		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name, false)?;
+		let function_signature = global.build_function_signature(main_data, &mut file_build_data, llvm_module, &llvm_builder, name, false)
+			.map_err(|(error, location)| (error, Some(location)))?;
 		file_build_data.built_global_function_signatures.insert(name.clone(), function_signature);
 	}
 	// Dump module if commanded to do so after building function signatures
@@ -250,14 +254,16 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 				}
 			}
 			// Build
-			let built_result = global.build_global_assignment(main_data, llvm_module, &llvm_builder, &mut file_build_data, name, *is_exported)?;
+			let built_result = global.build_global_assignment(main_data, llvm_module, &llvm_builder, &mut file_build_data, name, *is_exported)
+				.map_err(|(error, location)| (error, Some(location)))?;
 			// Add to list
 			file_build_data.built_globals.insert(name.clone(), built_result);
 			globals_built_this_round.insert(name.clone());
 		}
 		// If we did not compile anything this round, there is a cyclic dependency
 		if globals_built_this_round.is_empty() {
-			return Err((Error::InvalidDependency, globals_and_dependencies.iter().next().unwrap().1.0.start));
+			return Err((Error::InvalidDependency, globals_and_dependencies.iter().next().unwrap().1.0.start))
+				.map_err(|(error, location)| (error, Some(location)))?;
 		}
 		// Remove built globals from the to build list
 		for name in globals_built_this_round.iter() {
@@ -265,7 +271,7 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 		}
 	}
 	// Build entry point
-	if let Some(wrapped_entry_point) = file_build_data.entrypoint {
+	if let Some((wrapped_entry_point, wrapped_entry_point_name)) = file_build_data.entrypoint {
 		match main_data.operating_system {
 			OperatingSystem::Windows => {
 				// Get types of wrapper function
@@ -289,7 +295,22 @@ fn build_llvm_module(main_data: &MainData, llvm_module: &Module, globals_and_dep
 				truncated_result.build_return(&llvm_builder);
 			}
 			OperatingSystem::Linux => {
-
+				let mut entry_filepath = main_data.binary_path.clone();
+				entry_filepath.push("entry.s");
+				let mut file = File::create(&entry_filepath)
+					.map_err(|error| (Error::CouldNotOpenFile(error), None))?;
+				let entry_cile_content = format!(
+"	.global _start
+	.weak {wrapped_entry_point_name}
+_start:
+	call {wrapped_entry_point_name}
+	movl %eax, %ebx
+	movl $1, %eax
+	int $0x80
+"				);
+				file.write_all(entry_cile_content.as_bytes()).map_err(|_| (Error::UnableToWriteObject, None))?;
+				file.flush().map_err(|_| (Error::UnableToWriteObject, None))?;
+				main_data.object_files_to_link.push(entry_filepath);
 			}
 		}
 	}

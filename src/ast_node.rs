@@ -584,7 +584,7 @@ impl AstNode {
 			if file_build_data.entrypoint.is_some() {
 				return Err((Error::MultipleEntryPoints, *start));
 			}
-			file_build_data.entrypoint = Some(result.clone());
+			file_build_data.entrypoint = Some((result.clone(), name.into()));
 		}
 		Ok(result)
 	}
