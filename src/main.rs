@@ -17,7 +17,7 @@ mod built_value;
 mod file_build_data;
 mod function_building_data;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum OperatingSystem {
 	Windows = 0,
 	Linux = 1,
@@ -89,7 +89,7 @@ pub struct MainData<'a> {
 
 	link_command: Box<str>,
 
-	libraries_to_link_to: Vec<Box<str>>,
+	libraries_to_link_to: HashSet<Box<str>>,
 }
 
 impl<'a> MainData<'a> {
@@ -147,7 +147,7 @@ impl<'a> MainData<'a> {
 			standard_library_path,
 			operating_system,
 			link_command: compiler_arguments_data.link_command,
-			libraries_to_link_to: Vec::new(),
+			libraries_to_link_to: HashSet::new(),
 		})
 	}
 
@@ -234,12 +234,14 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 		for object_file in main_data.object_files_to_link.iter() {
 			command.arg(object_file);
 		}
-		for library_to_link in main_data.libraries_to_link_to {
-			command.arg(&*library_to_link);
+		for library_to_link_to in main_data.libraries_to_link_to.iter() {
+			command.arg(&**library_to_link_to);
 		}
-		command.arg("-nostdlib");
-		command.arg("-static");
-		command.arg("-no-pie");
+		if main_data.operating_system == OperatingSystem::Linux {
+			command.arg("-nostdlib");
+			command.arg("-static");
+			command.arg("-no-pie");
+		}
 		command.arg("-o");
 		command.arg(primary_output_file_path);
 		let result = command.output().map_err(|_| (Error::ErrorWhileLinking(None), None))?;

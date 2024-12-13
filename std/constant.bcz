@@ -2,3 +2,7 @@
 @export T_PTR = T_WORD;
 
 @export NULL = 0;
+
+@export OPERATING_SYSTEM = @_system_constant(1);
+@export OS_WINDOWS = 0;
+@export OS_LINUX = 1;

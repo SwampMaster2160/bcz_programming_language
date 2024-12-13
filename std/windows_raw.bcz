@@ -1,8 +1,12 @@
 T_PTR = @_system_constant(0);//@import("constant.bcz", "T_PTR");
+@export OPERATING_SYSTEM = @_system_constant(1);
+@export OS_WINDOWS = 0;
+IS_WINDOWS = OPERATING_SYSTEM == OS_WINDOWS;
 
 // Constants
 @export BOOL = -4;
 @export DWORD = 4;
+@export UINT = 4;
 
 @export PVOID = T_PTR;
 @export LPDWORD = T_PTR;
@@ -10,11 +14,11 @@ T_PTR = @_system_constant(0);//@import("constant.bcz", "T_PTR");
 
 @export HANDLE = PVOID;
 
-// Libraries to link to
-a = @library("C:/Windows/System32/kernel32.dll");
+// kernel32.dll
+@export Beep = IS_WINDOWS? @link("Beep", "C:/Windows/System32/kernel32.dll", BOOL, DWORD, DWORD): 0;
+@export GetStdHandle = IS_WINDOWS? @link("GetStdHandle", "C:/Windows/System32/kernel32.dll", HANDLE, DWORD): 0;
+@export WriteConsoleW = IS_WINDOWS? @link("WriteConsoleW", "C:/Windows/System32/kernel32.dll", BOOL, HANDLE, T_PTR, DWORD, LPDWORD, LPVOID): 0;
+@export WriteConsoleA = IS_WINDOWS? @link("WriteConsoleA", "C:/Windows/System32/kernel32.dll", BOOL, HANDLE, T_PTR, DWORD, LPDWORD, LPVOID): 0;
 
 // user32.dll
-@export Beep = @link("Beep", BOOL, DWORD, DWORD);
-@export GetStdHandle = @link("GetStdHandle", HANDLE, DWORD);
-@export WriteConsoleW = @link("WriteConsoleW", BOOL, HANDLE, T_PTR, DWORD, LPDWORD, LPVOID);
-@export WriteConsoleA = @link("WriteConsoleA", BOOL, HANDLE, T_PTR, DWORD, LPDWORD, LPVOID);
+@export MessageBeep = IS_WINDOWS? @link("MessageBeep", "C:/Windows/System32/user32.dll", BOOL, UINT): 0;

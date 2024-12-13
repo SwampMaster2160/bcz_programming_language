@@ -312,7 +312,7 @@ impl AstNode {
 						)?;
 					}
 					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, is_l_value)?,
-					Keyword::Link | Keyword::SystemConstant | Keyword::Library => for argument in arguments {
+					Keyword::Link | Keyword::SystemConstant => for argument in arguments {
 						argument.get_variable_dependencies(
 							main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
 						)?;
@@ -1022,7 +1022,7 @@ impl AstNode {
 						if function_build_data.is_some() {
 							return Err((Error::FeatureNotYetImplemented("Link in function".into()), self.start));
 						}
-						if arguments.len() < 2 {
+						if arguments.len() < 3 {
 							return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start));
 						}
 						if arguments.len() > u16::MAX as usize {
@@ -1036,16 +1036,16 @@ impl AstNode {
 							_ => return Err((Error::ConstValueRequired, wrapped_function_name.start)),
 						};
 						// Create wrapped function type
-						let parameter_count = arguments.len() - 2;
+						let parameter_count = arguments.len() - 3;
 						let mut wrapped_parameter_types = Vec::with_capacity(parameter_count);
-						for parameter in &arguments[2..] {
+						for parameter in &arguments[3..] {
 							let parameter_type = parameter.type_from_width(main_data)?.0;
 							if parameter_type.is_void() {
 								return Err((Error::VoidParameter, self.start));
 							}
 							wrapped_parameter_types.push(parameter_type);
 						}
-						let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = arguments[1].type_from_width(main_data)?;
+						let (wrapped_function_return_type, wrapped_function_return_type_is_signed) = arguments[2].type_from_width(main_data)?;
 						let wrapped_function_type = wrapped_function_return_type.function_type(&*wrapped_parameter_types, false);
 						// Create wrapped function
 						let wrapped_function = llvm_module.add_function(wrapped_function_type, &*wrapped_function_name);
@@ -1061,7 +1061,7 @@ impl AstNode {
 						let basic_block = wrapper_function.append_basic_block(&main_data.llvm_context, "entry");
 						llvm_builder.position_at_end(&basic_block);
 						let mut arguments_converted = Vec::new();
-						for (parameter_index, parameter) in (&arguments[2..]).iter().enumerate() {
+						for (parameter_index, parameter) in (&arguments[3..]).iter().enumerate() {
 							let (parameter_type, is_signed) = parameter.type_from_width(main_data)?;
 							let argument = wrapper_function.get_parameter(parameter_index);
 								let argument_converted = match main_data.int_bit_width
@@ -1194,7 +1194,6 @@ impl AstNode {
 						global.set_is_constant(true);
 						BuiltRValue::ImportedConstant(global)
 					}
-					Keyword::Library => return Err((Error::ConstValueRequired, self.start)),
 					Keyword::SystemConstant => unreachable!(),
 				}
 			}
@@ -1257,7 +1256,6 @@ impl AstNode {
 					Keyword::Loop => return Err((Error::FeatureNotYetImplemented("L-value loop".into()), self.start)),
 					Keyword::Break => return Err((Error::FeatureNotYetImplemented("L-value break".into()), self.start)),
 					Keyword::Continue => return Err((Error::FeatureNotYetImplemented("L-value continue".into()), self.start)),
-					Keyword::Library => return Err((Error::FeatureNotYetImplemented("L-value library".into()), self.start)),
 					Keyword::SystemConstant => unreachable!(),
 				}
 			}
@@ -1428,8 +1426,8 @@ impl AstNode {
 						}
 						Operation::ShortCircuitTernary | Operation::NotShortCircuitTernary => {
 							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, false, is_standard_library)?;
-							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
-							operands[0].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
+							operands[1].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
+							operands[2].const_evaluate(main_data, const_evaluated_globals, variable_dependencies, local_variables, is_link_function, is_l_value, is_standard_library)?;
 						}
 					}
 				}
@@ -1522,14 +1520,10 @@ impl AstNode {
 						Operation::ShortCircuitTernary => {
 							if let AstNode { variant: AstNodeVariant::Constant(left_value), .. } = operands[0] {
 								if left_value != 0 {
-									if let AstNode { variant: AstNodeVariant::Constant(_), .. } = operands[2] {
-										*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
-									}
+									*self = AstNode { variant: operands[1].variant.clone(), start: *start, end: *end };
 								}
 								else {
-									if let AstNode { variant: AstNodeVariant::Constant(_), .. } = operands[1] {
-										*self = AstNode { variant: operands[2].variant.clone(), start: *start, end: *end };
-									}
+									*self = AstNode { variant: operands[2].variant.clone(), start: *start, end: *end };
 								}
 							}
 						}
@@ -1851,10 +1845,25 @@ impl AstNode {
 			AstNodeVariant::Keyword(keyword, arguments, child) => {
 				match keyword {
 					Keyword::Write | Keyword::Stack | Keyword::Loop | Keyword::Import | Keyword::Link => {
-						for argument in arguments {
+						for argument in arguments.iter_mut() {
 							argument.const_evaluate(
 								main_data, const_evaluated_globals, variable_dependencies, local_variables, false, false, is_standard_library
 							)?;
+						}
+						if *keyword == Keyword::Link {
+							if arguments.len() < 2 {
+								return Err((Error::InvalidBuiltInFunctionArgumentCount, *start));
+							}
+							// Get arguments
+							let library_path = &arguments[1];
+							// Get library path
+							let library_path = match &library_path.variant {
+								AstNodeVariant::String(library_path) => &**library_path,
+								AstNodeVariant::Identifier(library_path) => &**library_path,
+								_ => return Err((Error::ConstValueRequired, library_path.start)),
+							};
+							// Add to list of libraries to link to
+							main_data.libraries_to_link_to.insert(library_path.into());
 						}
 					}
 					Keyword::EntryPoint => child.as_mut().unwrap()
@@ -1885,25 +1894,26 @@ impl AstNode {
 						};
 						let constant_value = match constant_id {
 							0 => (main_data.int_bit_width / 8) as u64, // T_WORD
+							1 => main_data.operating_system as u64, // OPERATING_SYSTEM
 							_ => return Err((Error::InvalidSystemConstant, arguments[0].start)),
 						};
 						self.variant = AstNodeVariant::Constant(constant_value);
 					}
-					Keyword::Library => {
-						// Get arguments
-						let library_path = match arguments.len() {
-							1 => &arguments[0],
-							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
-						};
-						// Get library path
-						let library_path = match &library_path.variant {
-							AstNodeVariant::String(library_path) => &**library_path,
-							AstNodeVariant::Identifier(library_path) => &**library_path,
-							_ => return Err((Error::ConstValueRequired, library_path.start)),
-						};
-						main_data.libraries_to_link_to.push(library_path.into());
-						self.variant = AstNodeVariant::Constant(0);
-					}
+					//Keyword::Library => {
+					//	// Get arguments
+					//	let library_path = match arguments.len() {
+					//		1 => &arguments[0],
+					//		_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+					//	};
+					//	// Get library path
+					//	let library_path = match &library_path.variant {
+					//		AstNodeVariant::String(library_path) => &**library_path,
+					//		AstNodeVariant::Identifier(library_path) => &**library_path,
+					//		_ => return Err((Error::ConstValueRequired, library_path.start)),
+					//	};
+					//	main_data.libraries_to_link_to.push(library_path.into());
+					//	self.variant = AstNodeVariant::Constant(0);
+					//}
 				}
 			}
 			AstNodeVariant::String(..) => {}
