@@ -60,6 +60,7 @@ pub enum Keyword {
 	Import,
 	Export,
 	SystemConstant,
+	Library,
 }
 
 impl Keyword {
@@ -75,6 +76,7 @@ impl Keyword {
 			Self::Import => "import",
 			Self::Export => "export",
 			Self::SystemConstant => "_system_constant",
+			Self::Library => "library",
 		}
 	}
 

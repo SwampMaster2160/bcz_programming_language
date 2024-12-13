@@ -312,7 +312,7 @@ impl AstNode {
 						)?;
 					}
 					Keyword::EntryPoint => child.as_ref().unwrap().get_variable_dependencies(main_data, filepath, variable_dependencies, import_dependencies, local_variables, is_l_value)?,
-					Keyword::Link | Keyword::SystemConstant => for argument in arguments {
+					Keyword::Link | Keyword::SystemConstant | Keyword::Library => for argument in arguments {
 						argument.get_variable_dependencies(
 							main_data, filepath, variable_dependencies, import_dependencies, local_variables, false
 						)?;
@@ -1194,6 +1194,7 @@ impl AstNode {
 						global.set_is_constant(true);
 						BuiltRValue::ImportedConstant(global)
 					}
+					Keyword::Library => return Err((Error::ConstValueRequired, self.start)),
 					Keyword::SystemConstant => unreachable!(),
 				}
 			}
@@ -1256,6 +1257,7 @@ impl AstNode {
 					Keyword::Loop => return Err((Error::FeatureNotYetImplemented("L-value loop".into()), self.start)),
 					Keyword::Break => return Err((Error::FeatureNotYetImplemented("L-value break".into()), self.start)),
 					Keyword::Continue => return Err((Error::FeatureNotYetImplemented("L-value continue".into()), self.start)),
+					Keyword::Library => return Err((Error::FeatureNotYetImplemented("L-value library".into()), self.start)),
 					Keyword::SystemConstant => unreachable!(),
 				}
 			}
@@ -1886,6 +1888,21 @@ impl AstNode {
 							_ => return Err((Error::InvalidSystemConstant, arguments[0].start)),
 						};
 						self.variant = AstNodeVariant::Constant(constant_value);
+					}
+					Keyword::Library => {
+						// Get arguments
+						let library_path = match arguments.len() {
+							1 => &arguments[0],
+							_ => return Err((Error::InvalidBuiltInFunctionArgumentCount, self.start)),
+						};
+						// Get library path
+						let library_path = match &library_path.variant {
+							AstNodeVariant::String(library_path) => &**library_path,
+							AstNodeVariant::Identifier(library_path) => &**library_path,
+							_ => return Err((Error::ConstValueRequired, library_path.start)),
+						};
+						main_data.libraries_to_link_to.push(library_path.into());
+						self.variant = AstNodeVariant::Constant(0);
 					}
 				}
 			}

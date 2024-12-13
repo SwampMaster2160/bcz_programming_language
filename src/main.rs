@@ -88,6 +88,8 @@ pub struct MainData<'a> {
 	operating_system: OperatingSystem,
 
 	link_command: Box<str>,
+
+	libraries_to_link_to: Vec<Box<str>>,
 }
 
 impl<'a> MainData<'a> {
@@ -145,6 +147,7 @@ impl<'a> MainData<'a> {
 			standard_library_path,
 			operating_system,
 			link_command: compiler_arguments_data.link_command,
+			libraries_to_link_to: Vec::new(),
 		})
 	}
 
@@ -192,13 +195,10 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 	process_arguments(&arguments, &mut compiler_arguments_data).map_err(|error| (error, None))?;
 	// Setup LLVM
 	initialize_x86();
-	//println!("{}", compiler_arguments_data.target_triplet);
-	//let llvm_target_triple = "x86_64-pc-windows";
 	let llvm_target = Target::from_triple(&compiler_arguments_data.target_triplet).map_err(|llvm_error| (Error::CouldNotGetTarget(llvm_error), None))?;
 	let llvm_target_machine = llvm_target.create_target_machine(
 		&compiler_arguments_data.target_triplet, "generic", "", CodegenOptLevel::Default, RealocMode::Default, CodeModel::Default
 	);
-	//println!("{}", llvm_target.);
 	let llvm_data_layout = llvm_target_machine.get_target_data();
 	let context = Context::new();
 	let int_type = llvm_data_layout.int_ptr_type(&context);
@@ -228,20 +228,24 @@ fn main_error_handled() -> Result<(), (Error, Option<(PathBuf, Option<(NonZeroUs
 		}),
 		(_, false) => None,
 	};
-	//println!("{:?}", main_data.operating_system);
 	if let Some(primary_output_file) = primary_output_file {
 		let primary_output_file_path = main_data.binary_path.join(primary_output_file);
 		let mut command = Command::new(&*main_data.link_command);
 		for object_file in main_data.object_files_to_link.iter() {
 			command.arg(object_file);
 		}
+		for library_to_link in main_data.libraries_to_link_to {
+			command.arg(&*library_to_link);
+		}
 		command.arg("-nostdlib");
 		command.arg("-static");
 		command.arg("-no-pie");
-		command.arg("C:/Windows/System32/kernel32.dll");
 		command.arg("-o");
 		command.arg(primary_output_file_path);
-		command.output().unwrap();
+		let result = command.output().map_err(|_| (Error::ErrorWhileLinking(None), None))?;
+		if !result.status.success() {
+			return Err((Error::ErrorWhileLinking(result.status.code()), None));
+		}
 	}
 	Ok(())
 }

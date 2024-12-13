@@ -1,16 +1,16 @@
-//count = @import("std/functional.bcz", "count");
-//repeat = @import("std/functional.bcz", "repeat");
-//Beep = @import("std/windows_raw.bcz", "Beep");
-//GetStdHandle = @import("std/windows_raw.bcz", "GetStdHandle");
-//printAsciiSized = @import("std/console.bcz", "printAsciiSized");
-//printChar = @import("std/console.bcz", "printChar");
+count = @import("std/functional.bcz", "count");
+repeat = @import("std/functional.bcz", "repeat");
+Beep = @import("std/windows_raw.bcz", "Beep");
+GetStdHandle = @import("std/windows_raw.bcz", "GetStdHandle");
+printAsciiSized = @import("std/console.bcz", "printAsciiSized");
+printChar = @import("std/console.bcz", "printChar");
 getStandardOutput = @import("std/console.bcz", "getStandardOutput");
 
 main = @entry_point () {
 	//count((num) Beep(num * 100 + 100, 1000), 5);
-	//handle = getStandardOutput();
-	//printChar(handle, '€');
+	handle = getStandardOutput();
+	printChar(handle, '€');
 	//printAsciiSized(handle, "Hello\n", 6);
 	//repeat(() Beep(100, 1000), 3);
-	69
+	//69
 };

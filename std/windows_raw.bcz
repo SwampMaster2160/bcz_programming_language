@@ -10,6 +10,9 @@ T_PTR = @_system_constant(0);//@import("constant.bcz", "T_PTR");
 
 @export HANDLE = PVOID;
 
+// Libraries to link to
+a = @library("C:/Windows/System32/kernel32.dll");
+
 // user32.dll
 @export Beep = @link("Beep", BOOL, DWORD, DWORD);
 @export GetStdHandle = @link("GetStdHandle", HANDLE, DWORD);

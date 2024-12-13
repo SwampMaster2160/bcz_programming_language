@@ -71,6 +71,7 @@ pub enum Error {
 	UnsupportedCPU(String),
 	UnsupportedOS(String),
 	InvalidTargetTriplet(String),
+	ErrorWhileLinking(Option<i32>),
 }
 
 impl Display for Error {
@@ -144,6 +145,8 @@ impl Display for Error {
 			Self::UnsupportedCPU(cpu) => write!(f, "Unsupported CPU: {cpu}"),
 			Self::UnsupportedOS(os) => write!(f, "Unsupported OS: {os}"),
 			Self::InvalidTargetTriplet(triplet) => write!(f, "Invalid target triplet: {triplet}"),
+			Self::ErrorWhileLinking(None) => write!(f, "Error while linking"),
+			Self::ErrorWhileLinking(Some(code)) => write!(f, "Error while linking with code {code}"),
 		}
 	}
 }

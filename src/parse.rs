@@ -542,8 +542,10 @@ fn parse_expression(mut items_being_parsed: Vec<ParseState>) -> Result<AstNode, 
 		let (keyword, arguments, child, start, keyword_end) = match &mut items_being_parsed[index] {
 			ParseState::AstNode(AstNode { variant: AstNodeVariant::Keyword(keyword, arguments, child), start, end: keyword_end }) => {
 					match keyword {
+						// Keywords without arguments
 						Keyword::EntryPoint | Keyword::Loop | Keyword::Break | Keyword::Continue | Keyword::Export => {},
-						Keyword::Write | Keyword::Stack | Keyword::Import | Keyword::Link | Keyword::SystemConstant => continue,
+						// Keywords with arguments
+						Keyword::Write | Keyword::Stack | Keyword::Import | Keyword::Link | Keyword::SystemConstant | Keyword::Library => continue,
 					};
 					(*keyword, take(arguments), take(child), *start, *keyword_end)
 				}
